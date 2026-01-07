@@ -1244,6 +1244,32 @@
             state.balance += pnlDollar;
             state.sessionPnL += pnlDollar;
             if (isWin) state.wins++;
+            
+            // CRITICAL: Record test results for ANY exit during test mode
+            if (state.testMode) {
+                const volData = volatilityData.get(trade.symbol);
+                state.testResults.push({
+                    symbol: trade.symbol,
+                    direction: trade.direction,
+                    directionLabel: trade.direction === 'long' ? 'LONG' : 'SHORT',
+                    entryPrice: trade.entryPrice,
+                    exitPrice: exitPrice,
+                    pnl: pnlDollar,
+                    holdTime: holdTime,
+                    exitReason: reason,
+                    beta: volData?.beta || 0,
+                    momentum: volData?.momentum || 0
+                });
+                
+                state.testTradesCompleted++;
+                
+                // Update button
+                const btn = document.getElementById('test-mode-btn');
+                btn.textContent = `🤖 Running Test (${state.testTradesCompleted}/${state.testTradesTarget})`;
+                
+                // Continue to next trade after short delay
+                setTimeout(() => runNextTestTrade(), 1000);
+            }
 
             // Record trade with full analysis data
             const tradeRecord = {
@@ -1858,30 +1884,7 @@
             
             if (shouldExit) {
                 console.log(`🤖 Auto-exiting: ${exitReason}, P&L: $${netPnl.toFixed(2)}`);
-                exitTrade('auto_test');
-                
-                // Record test result
-                state.testResults.push({
-                    symbol: trade.symbol,
-                    direction: trade.direction,
-                    directionLabel: trade.direction === 'long' ? 'LONG' : 'SHORT',
-                    entryPrice: trade.entryPrice,
-                    exitPrice: currentPrice,
-                    pnl: netPnl,
-                    holdTime: elapsed,
-                    exitReason: exitReason,
-                    beta: volData?.beta || 0,
-                    momentum: volData?.momentum || 0
-                });
-                
-                state.testTradesCompleted++;
-                
-                // Update button
-                const btn = document.getElementById('test-mode-btn');
-                btn.textContent = `🤖 Running Test (${state.testTradesCompleted}/${state.testTradesTarget})`;
-                
-                // Continue to next trade
-                setTimeout(() => runNextTestTrade(), 1000);
+                exitTrade(exitReason); // Use specific exit reason, recording happens in exitTrade()
             } else {
                 // Check again VERY soon (10ms for real-time reactions)
                 setTimeout(() => monitorAndExitTrade(), 10);
@@ -1897,8 +1900,8 @@
             const longs = state.testResults.filter(t => t.direction === 'long').length;
             const shorts = state.testResults.filter(t => t.direction === 'short').length;
             const totalPnl = state.testResults.reduce((sum, t) => sum + t.pnl, 0);
-            const avgPnl = totalPnl / state.testResults.length;
-            const winRate = (wins / state.testResults.length) * 100;
+            const avgPnl = state.testResults.length > 0 ? totalPnl / state.testResults.length : 0;
+            const winRate = state.testResults.length > 0 ? (wins / state.testResults.length) * 100 : 0;
             
             // Save to file for AI analysis
             saveTestResultsToFile();
@@ -1950,13 +1953,17 @@
                 console.log('✅ Good win rate!');
             }
             
-            if (avgPnl < 0) {
+            if (state.testResults.length === 0) {
+                console.log('⚠️ No trades completed - cannot assess performance');
+            } else if (avgPnl < 0) {
                 console.log('❌ Losing money on average - Consider:');
                 console.log('  - Taking profits earlier');
                 console.log('  - Cutting losses faster');
                 console.log('  - Only trading EXTREME signals');
-            } else {
+            } else if (avgPnl > 0) {
                 console.log('✅ Profitable on average!');
+            } else {
+                console.log('➖ Breaking even on average');
             }
             
             console.log('\\n=========================\\n');

@@ -1120,9 +1120,10 @@
                 return;
             }
             
-            // TEST #3 WINNING CONFIG: Simple mean reversion
-            // β≥0.05, oversold, momentum≥0, LONG only
-            if (!volData.isOversold || volData.beta < 0.05 || (volData.momentum || 0) < 0) {
+            // DATA-DRIVEN CONFIG (from Test #10 analysis):
+            // Winners avg β=0.29, Losers avg β=0.09
+            // β≥0.10, oversold, momentum≥0, LONG only
+            if (!volData.isOversold || volData.beta < 0.10 || (volData.momentum || 0) < 0) {
                 console.log(`⚠️ ${symbol} doesn't meet entry criteria (oversold=${volData.isOversold}, dev=${(volData.meanDeviation||0).toFixed(3)}%, β=${(volData.beta||0).toFixed(3)}, momentum=${(volData.momentum||0).toFixed(4)})`);
                 state.inTrade = false;
                 return;
@@ -1876,10 +1877,13 @@
                 
                 if (data.prices.length < 5) return; // Need at least 5 REAL price changes
                 
-                // TEST #3 WINNING CONFIG: Simple mean reversion
-                // β≥0.05, oversold, momentum≥0, LONG only
+                // DATA-DRIVEN CONFIG (from Test #10 analysis):
+                // Winners avg β=0.29, Losers avg β=0.09
+                // Raising threshold from 0.05 to 0.10 would have:
+                // - Kept FOGO, @194, @267, LIT (all profitable)
+                // - Filtered @207, @193, @184, @248, MAVIA, PUMP (all losers)
                 const hasStrongSignal = data.isOversold && 
-                                       data.beta >= 0.05 && 
+                                       data.beta >= 0.10 &&  // Raised from 0.05 based on data
                                        (data.momentum || 0) >= 0;
                 
                 if (hasStrongSignal) {
@@ -2195,10 +2199,10 @@
                 
                 // STRATEGY CONFIG - Capture exactly what was used
                 strategyConfig: {
-                    name: 'Simple Mean Reversion',
-                    version: '3.0',
+                    name: 'Data-Driven Mean Reversion',
+                    version: '4.0',
                     entry: {
-                        betaThreshold: 0.05,
+                        betaThreshold: 0.10, // Raised from 0.05 based on Test #10 analysis
                         requireOversold: true,
                         oversoldThreshold: -0.05, // % below mean
                         momentumMin: 0,

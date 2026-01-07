@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+</head>
+<body>
+    <h1>Hyperliquid WebSocket Test</h1>
+    <div id="log"></div>
+    <script>
+        const log = document.getElementById('log');
+        
+        function addLog(msg) {
+            const p = document.createElement('p');
+            p.textContent = new Date().toISOString() + ': ' + msg;
+            log.appendChild(p);
+            console.log(msg);
+        }
+        
+        addLog('Connecting to wss://api.hyperliquid.xyz/ws');
+        const ws = new WebSocket('wss://api.hyperliquid.xyz/ws');
+        
+        ws.onopen = () => {
+            addLog('✅ Connected!');
+            const msg = JSON.stringify({
+                method: 'subscribe',
+                subscription: { type: 'allMids' }
+            });
+            addLog('Sending: ' + msg);
+            ws.send(msg);
+        };
+        
+        ws.onmessage = (event) => {
+            addLog('📥 Message: ' + event.data.substring(0, 200));
+            try {
+                const data = JSON.parse(event.data);
+                addLog('Parsed: ' + JSON.stringify(data).substring(0, 200));
+            } catch (e) {
+                addLog('Parse error: ' + e.message);
+            }
+        };
+        
+        ws.onerror = (error) => {
+            addLog('❌ Error: ' + error);
+        };
+        
+        ws.onclose = () => {
+            addLog('Connection closed');
+        };
+    </script>
+</body>
+</html>

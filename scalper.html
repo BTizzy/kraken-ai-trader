@@ -771,14 +771,15 @@
         // STATE & CONFIG
         // =============================================
         const config = {
-            tradeWindowSeconds: 30,  // More time to catch the move
-            positionSize: 100,
+            tradeWindowSeconds: 120,  // 2 minutes - realistic for 0.3%+ moves
+            positionSize: 100,    // Bigger size = costs are smaller % of trade
             
-            // UPGRADED VOLATILITY THRESHOLDS - Need bigger moves to profit!
-            // With 0.12% costs, we need 0.3%+ moves to make money
-            minVolatilityForHot: 0.07,      // Show more options (lowered)
-            minVolatilityForSpike: 0.12,    // These are tradeable (lowered)
-            minVolatilityForExtreme: 0.18,  // 🔥 HIGH PROBABILITY trades (lowered)
+            // REALISTIC SCALPING THRESHOLDS
+            // With 0.12% costs on $50, we need 0.15%+ moves to profit
+            // Strategy: Mean reversion + momentum continuation
+            minVolatilityForHot: 0.02,      // 2% shows activity
+            minVolatilityForSpike: 0.05,    // 5% is tradeable  
+            minVolatilityForExtreme: 0.10,  // 10%+ is high probability
 
             // Momentum thresholds
             minMomentumForEntry: 0.035,     // Need price moving in a direction (lowered)
@@ -949,6 +950,21 @@
                 const recentPrices = data.prices.slice(-5);
                 data.momentum = (recentPrices[recentPrices.length-1] - recentPrices[0]) / recentPrices[0] * 100;
                 
+                // MEAN REVERSION: Detect oversold/overbought for reversal trades
+                if (data.prices.length >= 20) {
+                    const longPrices = data.prices.slice(-20);
+                    const mean = longPrices.reduce((a,b) => a+b) / longPrices.length;
+                    const currentPrice = recentPrices[recentPrices.length-1];
+                    data.meanDeviation = ((currentPrice - mean) / mean) * 100; // % from mean
+                    // Oversold = negative deviation (more sensitive now)
+                    data.isOversold = data.meanDeviation < -0.05; // 0.05% below mean (was 0.1%, too strict)
+                    data.isOverbought = data.meanDeviation > 0.05;  // 0.05% above mean
+                } else {
+                    data.meanDeviation = 0;
+                    data.isOversold = false;
+                    data.isOverbought = false;
+                }
+                
                 // DEBUG: Log first symbol to see typical values
                 if (symbol === 'BTC' && data.prices.length % 50 === 0) {
                     console.log(`[DEBUG ${symbol}] beta=${data.beta.toFixed(6)}, momentum=${data.momentum.toFixed(6)}%, prices=${data.prices.length}, recent returns:`, returns.slice(-5).map(r => r.toFixed(6)));
@@ -989,7 +1005,7 @@
             const items = [];
             
             volatilityData.forEach((data, symbol) => {
-                if (data.prices.length < 10) return; // Need more data
+                if (data.prices.length < 5) return; // Need at least 5 price points
                 
                 // Match actual volatility: beta ~0.001
                 const isExtreme = data.beta >= 0.002;
@@ -1060,8 +1076,8 @@
                 
                 return `
                     <div class="scan-item ${itemClass}" 
-                         onclick="enterTrade('${item.symbol}', ${item.price}, ${item.trendDirection})"
-                         title="Click to trade ${item.symbol} ${item.trendDirection > 0 ? 'LONG 📈' : 'SHORT 📉'}">
+                         onclick="enterTrade('${item.symbol}', ${item.price})"
+                         title="Click to trade ${item.symbol} - Bot will decide direction">
                         <span class="symbol">${item.symbol} ${signalBadge}</span>
                         <span class="price">$${formatPrice(item.price)}</span>
                         <div class="volatility-bar">
@@ -1079,7 +1095,7 @@
         // =============================================
         // TRADING LOGIC
         // =============================================
-        function enterTrade(symbol, price, suggestedDirection = 0) {
+        function enterTrade(symbol, price) {
             if (state.inTrade) {
                 console.log('⚠️ Already in a trade, cannot enter new position');
                 return;
@@ -1087,34 +1103,56 @@
 
             state.inTrade = true;
             
-            // Auto-detect direction if not provided
-            let direction;
-            if (suggestedDirection !== 0) {
-                direction = suggestedDirection > 0 ? 'long' : 'short';
-            } else {
-                // Check momentum to auto-detect
-                const volData = volatilityData.get(symbol);
-                if (volData && volData.momentum) {
-                    direction = volData.momentum > 0 ? 'long' : 'short';
-                    console.log(`🎯 Auto-detected ${direction.toUpperCase()} based on momentum: ${volData.momentum.toFixed(3)}%`);
-                } else {
-                    direction = 'long'; // default
-                }
+            // BOT DECIDES DIRECTION using strategies
+            const volData = volatilityData.get(symbol);
+            let direction, strategyType, confidence;
+            
+            if (!volData || volData.prices.length < 5) {
+                console.log('⚠️ Not enough data for', symbol);
+                state.inTrade = false;
+                return;
             }
             
-            // Get current volatility data for this symbol
-            const currentVolData = volatilityData.get(symbol);
+            // STRICT STRATEGY: β≥0.06 AND oversold (flagged by isOversold) AND non-negative momentum
+            // isOversold = meanDeviation < -0.05% (price below 20-tick average)
+            if (!volData.isOversold || volData.beta < 0.06 || (volData.momentum || 0) < 0) {
+                console.log(`⚠️ ${symbol} doesn't meet entry criteria (oversold=${volData.isOversold}, dev=${(volData.meanDeviation||0).toFixed(3)}%, β=${(volData.beta||0).toFixed(3)}, momentum=${(volData.momentum||0).toFixed(4)})`);
+                state.inTrade = false;
+                return;
+            }
+            
+            // ONLY LONG mean reversion
+            direction = 'long';
+            strategyType = 'reversion';
+            confidence = Math.min(0.95, 0.6 + Math.abs(volData.meanDeviation || 0) * 1.5);
+            
+            // DYNAMIC POSITION SIZING: Increase size for high-quality setups
+            // β≥0.15 = $150 (proven winners from data)
+            // β≥0.10 = $125 (good setups)
+            // β<0.10 = $100 (baseline)
+            let positionSize = config.positionSize;
+            if (volData.beta >= 0.15) {
+                positionSize = 150;
+                console.log(`💰 HIGH BETA (${volData.beta.toFixed(3)}) - Increasing position to $150`);
+            } else if (volData.beta >= 0.10) {
+                positionSize = 125;
+                console.log(`💵 GOOD BETA (${volData.beta.toFixed(3)}) - Increasing position to $125`);
+            }
+            
+            console.log(`🔄 MEAN REVERSION: LONG (oversold by ${Math.abs(volData.meanDeviation || 0).toFixed(3)}%, β=${volData.beta.toFixed(3)})`);
             
             state.currentTrade = {
                 symbol,
                 entryPrice: price,
                 entryTime: Date.now(),
-                size: config.positionSize,
+                size: positionSize,
                 direction: direction,
-                suggestedDirection: suggestedDirection,
-                beta: currentVolData?.beta || 0,
-                momentum: currentVolData?.momentum || 0,
-                directionConfidence: 0.5, // Will be updated if called from findBestTradeOpportunity
+                strategyType: strategyType,
+                directionConfidence: confidence,
+                beta: volData.beta || 0,
+                momentum: volData.momentum || 0,
+                meanDeviation: volData.meanDeviation || 0,
+                straddleCandidate: volData.beta >= 0.03 && (volData.trendStrength || 1) < 0.4,
                 priceHistory: [{ price, time: Date.now() }]
             };
             state.tradeStartTime = Date.now();
@@ -1130,20 +1168,26 @@
             el.tradePanel.style.display = 'block';
             el.activeTrade.classList.add('in-trade');
             
-            const directionHint = suggestedDirection > 0 ? ' 🚀' : (suggestedDirection < 0 ? ' 📉' : '');
+            const directionHint = direction === 'long' ? ' 🚀' : ' 📉';
             el.tradeSymbol.textContent = symbol + directionHint;
             el.entryPrice.textContent = `$${formatPrice(price)}`;
-            el.positionSize.textContent = `$${config.positionSize}`;
+            el.positionSize.textContent = `$${positionSize}`; // Use actual position size, not config
             
             updateTradeDisplay();
             
-            // Log entry details with confidence
-            const confidence = state.currentTrade.directionConfidence || 0.5;
+            // Log entry details with confidence and strategy
             const confidenceLabel = confidence > 0.7 ? 'HIGH' : confidence > 0.5 ? 'MEDIUM' : 'LOW';
-            console.log(`⚡ Entered ${symbol} @ $${formatPrice(price)} (${direction.toUpperCase()} - ${confidenceLabel} confidence ${(confidence*100).toFixed(0)}%)`);
+            const strategyEmoji = strategyType === 'reversion' ? '🔄' : strategyType === 'momentum' ? '📈' : '🎯';
+            console.log(`${strategyEmoji} ${strategyType.toUpperCase()}: ${symbol} @ $${formatPrice(price)} (${direction.toUpperCase()} - ${confidenceLabel} ${(confidence*100).toFixed(0)}%)`);
             
             if (state.currentTrade.straddleCandidate) {
                 console.log(`💡 Note: High volatility (β=${state.currentTrade.beta.toFixed(4)}) + weak trend - could trade both directions`);
+            }
+            
+            // Start monitoring if NOT in test mode (test mode handles its own monitoring)
+            if (!state.testMode) {
+                console.log('👆 Manual trade - monitoring started (press SPACE or click SELL to exit)');
+                monitorManualTrade();
             }
         }
 
@@ -1199,8 +1243,11 @@
 
             // Detect momentum reversal - SELL signal
             const volData = volatilityData.get(trade.symbol);
-            const momentumReversing = volData && trade.suggestedDirection !== 0 && 
-                                      Math.sign(volData.momentum) !== trade.suggestedDirection;
+            // Check for momentum reversal (price moving against our trade direction)
+            const momentumReversing = volData && 
+                                      Math.abs(volData.momentum) > 0.1 && // Needs significant movement
+                                      ((trade.direction === 'long' && volData.momentum < -0.1) || 
+                                       (trade.direction === 'short' && volData.momentum > 0.1));
 
             // Update sell button - always enabled, different styling
             el.sellButton.disabled = false;
@@ -1266,17 +1313,57 @@
             // CRITICAL: Record test results for ANY exit during test mode
             if (state.testMode) {
                 const volData = volatilityData.get(trade.symbol);
+                // Get entry vs exit data for analysis
+                const entryVolData = {
+                    beta: trade.beta || 0,
+                    momentum: trade.momentum || 0,
+                    confidence: trade.directionConfidence || 0.5,
+                    trendStrength: volatilityData.get(trade.symbol)?.trendStrength || 0
+                };
+                const exitVolData = {
+                    beta: volData?.beta || 0,
+                    momentum: volData?.momentum || 0,
+                    trendStrength: volData?.trendStrength || 0
+                };
+                
                 state.testResults.push({
                     symbol: trade.symbol,
                     direction: trade.direction,
                     directionLabel: trade.direction === 'long' ? 'LONG' : 'SHORT',
+                    strategy: trade.strategyType || 'unknown',
                     entryPrice: trade.entryPrice,
                     exitPrice: exitPrice,
+                    grossPnl: grossPnlDollar,
+                    costs: costs.total,
                     pnl: pnlDollar,
+                    pnlPercent: pnlPercent,
+                    pnlMultiple: pnlDollar / costs.total, // How many costs we made/lost
                     holdTime: holdTime,
                     exitReason: reason,
-                    beta: volData?.beta || 0,
-                    momentum: volData?.momentum || 0
+                    // Entry conditions
+                    entryBeta: entryVolData.beta,
+                    entryMomentum: entryVolData.momentum,
+                    entryConfidence: entryVolData.confidence,
+                    entryTrend: entryVolData.trendStrength,
+                    entryMeanDev: volData?.meanDeviation || 0,
+                    // Exit conditions
+                    exitBeta: exitVolData.beta,
+                    exitMomentum: exitVolData.momentum,
+                    exitTrend: exitVolData.trendStrength,
+                    exitMeanDev: volData?.meanDeviation || 0,
+                    // Changes
+                    betaChange: exitVolData.beta - entryVolData.beta,
+                    momentumChange: exitVolData.momentum - entryVolData.momentum,
+                    meanDevChange: (volData?.meanDeviation || 0) - (volData?.meanDeviation || 0),
+                    // Price action
+                    priceChange: exitPrice - trade.entryPrice,
+                    priceChangePercent: ((exitPrice - trade.entryPrice) / trade.entryPrice) * 100,
+                    // Trade quality
+                    wasHighBeta: entryVolData.beta >= 0.02,
+                    wasHighConfidence: entryVolData.confidence >= 0.7,
+                    hadMomentumReversal: Math.sign(entryVolData.momentum) !== Math.sign(exitVolData.momentum),
+                    wasProfitable: pnlDollar > 0,
+                    timestamp: Date.now()
                 });
                 
                 state.testTradesCompleted++;
@@ -1731,7 +1818,7 @@
             
             volatilityData.forEach((data, symbol) => {
                 // Log high-beta opportunities even if we don't trade them
-                if (data.beta >= 0.01 && data.prices.length >= 3) {
+                if (data.beta >= 0.06 && data.prices.length >= 3) {
                     highBetaOpportunities.push({
                         symbol,
                         beta: data.beta,
@@ -1743,28 +1830,19 @@
                 
                 if (data.prices.length < 5) return; // Need at least 5 REAL price changes
                 
-                // Real-time WebSocket thresholds - crypto moves in tiny increments
-                // With actual price changes only, beta ~0.001-0.01 is normal
-                const hasStrongSignal = Math.abs(data.momentum) > 0.02 && // 0.02% is significant with real-time data
-                                       data.beta >= 0.005 && // 0.5% volatility is strong for real-time
-                                       (data.trendStrength || 0) > 0.5; // Directional consistency
+                // STRICT: Only trade STRONG mean reversion with HIGH volatility
+                // isOversold flag is set when price < -0.05% from 20-tick mean
+                const hasStrongReversion = data.isOversold && 
+                                          data.beta >= 0.06 && // Good beta (was 0.08 = too strict, 0.05 = BIO failures)
+                                          (data.momentum || 0) >= 0; // Require non-negative momentum
+                
+                const hasStrongSignal = hasStrongReversion;
                 
                 if (hasStrongSignal) {
-                    // IMPROVED: Multi-signal direction detection
-                    // 1. Trend direction (up/down move consistency)
-                    // 2. Momentum (recent price change)
-                    // 3. Price action (last 3 moves)
-                    const recentPrices = data.prices.slice(-3);
-                    const recentDirection = recentPrices.length >= 2 ? 
-                        (recentPrices[recentPrices.length - 1] > recentPrices[0] ? 1 : -1) : 0;
-                    
-                    // Weight: 50% trend, 30% momentum, 20% recent
-                    const directionSignal = 
-                        (data.trendDirection || 0) * 0.5 + 
-                        Math.sign(data.momentum || 0) * 0.3 + 
-                        recentDirection * 0.2;
-                    
-                    const direction = directionSignal > 0 ? 1 : -1;
+                    // ONLY LONG mean reversion (data shows SHORT loses money)
+                    direction = 1; // Always long
+                    strategyType = 'reversion';
+                    confidence = Math.min(0.95, 0.6 + Math.abs(data.meanDeviation) * 1.5);
                     
                     // Check if volatility is extreme enough for straddle (both directions)
                     const straddleCandidate = data.beta >= 0.03 && data.trendStrength < 0.4;
@@ -1774,12 +1852,14 @@
                         price: data.lastPrice,
                         beta: data.beta,
                         momentum: data.momentum,
+                        meanDeviation: data.meanDeviation || 0,
                         trendStrength: data.trendStrength || 0.5,
                         direction: direction,
                         directionLabel: direction > 0 ? 'LONG' : 'SHORT',
-                        score: data.beta * Math.abs(data.momentum) * (data.trendStrength || 0.5),
+                        strategyType: strategyType,
+                        directionConfidence: confidence,
                         straddleCandidate: straddleCandidate,
-                        directionConfidence: Math.abs(directionSignal)
+                        score: (data.beta * 1000) * confidence // Score by vol × confidence
                     });
                 }
             });
@@ -1787,54 +1867,8 @@
             console.log(`📊 Found ${opportunities.length} STRONG opportunities`);
             
             if (opportunities.length === 0) {
-                // If no strong signals, look for moderate signals
-                volatilityData.forEach((data, symbol) => {
-                    if (data.prices.length < 5) return;
-                    
-                    const hasModerateSignal = Math.abs(data.momentum) > 0.01 && 
-                                              data.beta >= 0.003 &&
-                                              (data.trendStrength || 0) > 0.3;
-                    
-                    if (hasModerateSignal) {
-                        const direction = data.trendDirection || (data.momentum > 0 ? 1 : -1);
-                        opportunities.push({
-                            symbol,
-                            price: data.lastPrice,
-                            beta: data.beta,
-                            momentum: data.momentum,
-                            trendStrength: data.trendStrength || 0.5,
-                            direction: direction,
-                            directionLabel: direction > 0 ? 'LONG' : 'SHORT',
-                            score: data.beta * Math.abs(data.momentum) * (data.trendStrength || 0.5)
-                        });
-                    }
-                });
-                console.log(`📊 Found ${opportunities.length} moderate opportunities`);
-            }
-            
-            if (opportunities.length === 0) {
-                // Fallback: Take any symbol with price movement
-                volatilityData.forEach((data, symbol) => {
-                    if (data.prices.length >= 3 && data.beta >= 0.0005) { // Tiny threshold
-                        const direction = (data.momentum || 0) >= 0 ? 1 : -1;
-                        opportunities.push({
-                            symbol,
-                            price: data.lastPrice,
-                            beta: data.beta,
-                            momentum: data.momentum || 0,
-                            trendStrength: data.trendStrength || 0.5,
-                            direction: direction,
-                            directionLabel: direction > 0 ? 'LONG' : 'SHORT',
-                            score: data.beta * 1000
-                        });
-                    }
-                });
-                console.log(`📊 Fallback: Taking from ${opportunities.length} symbols`);
-            }
-            
-            if (opportunities.length === 0) {
-                console.log('❌ No price data available');
-                return null;
+                console.log('⚠️ No STRONG signals - skipping trade');
+                return null; // Don't trade weak signals!
             }
             
             // Sort by score (highest first)
@@ -1882,6 +1916,25 @@
             return opportunities[0];
         }
 
+        function monitorManualTrade() {
+            // Manual trade monitoring - just timeout, user exits manually
+            if (!state.inTrade) return;
+            
+            const trade = state.currentTrade;
+            const elapsed = Date.now() - state.tradeStartTime;
+            const remaining = Math.max(0, (config.tradeWindowSeconds * 1000) - elapsed);
+            
+            // Auto-exit on timeout
+            if (remaining <= 0) {
+                console.log('⏱️ Manual trade timeout - auto-exiting');
+                exitTrade('timeout');
+                return;
+            }
+            
+            // Keep monitoring
+            setTimeout(() => monitorManualTrade(), 100);
+        }
+        
         function monitorAndExitTrade() {
             if (!state.inTrade || !state.testMode) return;
             
@@ -1907,33 +1960,53 @@
             
             // Get current volatility data
             const volData = volatilityData.get(trade.symbol);
-            // Only call it a reversal if momentum actually changed significantly AND reversed direction
+            // Check for momentum reversal - price moving against our position
             const momentumReversing = volData && 
-                                      trade.suggestedDirection !== 0 && 
                                       Math.abs(volData.momentum) > 0.1 && // Needs 0.1% movement minimum
-                                      Math.sign(volData.momentum) !== Math.sign(trade.suggestedDirection);
+                                      ((trade.direction === 'long' && volData.momentum < -0.1) || 
+                                       (trade.direction === 'short' && volData.momentum > 0.1));
             
             // EXIT CONDITIONS - DYNAMIC based on entry beta and current volatility
             let shouldExit = false;
             let exitReason = '';
             
-            // Get entry beta for dynamic targets
+            // Get entry beta and strategy for dynamic targets
             const entryBeta = trade.beta || 0.005;
-            const isHighBetaTrade = entryBeta >= 0.02;
+            const strategy = trade.strategyType || 'multi';
+            const isHighConfidence = (trade.directionConfidence || 0.5) >= 0.7;
             
-            // 1. DYNAMIC PROFIT TARGET - Higher beta = higher target (it can move more!)
-            const profitMultiplier = isHighBetaTrade ? 2.5 : 1.5; // High beta: $0.30, normal: $0.18
-            if (netPnl > costs.total * profitMultiplier) {
+            // SCALPING EXITS: Take profits FAST, cut losses FASTER  
+            // Data shows: Winners exit quick (<10s), losers hold too long
+            // 1. INSTANT WIN - Any profit after 5s (don't wait!)
+            if (netPnl > costs.total * 0.2 && elapsed > 5000) {
+                shouldExit = true;
+                exitReason = 'quick_profit';
+            }
+            // 2. SMALL WIN - 1x costs
+            else if (netPnl > costs.total * 1.0) {
                 shouldExit = true;
                 exitReason = 'profit_target';
             }
-            // 2. QUICK PROFIT on strong reversal - don't get greedy
-            else if (netPnl > costs.total * 0.75 && volData && momentumReversing && Math.abs(volData.momentum) > 0.2) {
+            // 3. BIG WIN - 3x costs
+            else if (netPnl > costs.total * 3.0) {
                 shouldExit = true;
-                exitReason = 'profit_reversal';
+                exitReason = 'big_profit';
             }
-            // 3. TAKE SMALL WIN if trend weakening (momentum dropped by 50%+)
-            else if (netPnl > costs.total * 0.5 && volData && elapsed > 3000) {
+            // 4. MEAN REVERSION COMPLETE - Price bounced back
+            else if (strategy === 'reversion' && volData && Math.abs(volData.meanDeviation || 0) < 0.05) {
+                // Price returned close to mean
+                if (netPnl > -costs.total * 0.5) { // Exit even with small loss
+                    shouldExit = true;
+                    exitReason = 'reversion_complete';
+                }
+            }
+            // 5. IMMEDIATE STOP - Cut losses at -1x costs (not -2x!)
+            else if (netPnl < -costs.total * 1.0) {
+                shouldExit = true;
+                exitReason = 'fast_stop';
+            }
+            // 6. TAKE SMALL WIN if weakening
+            else if (netPnl > costs.total * 0.2 && volData && elapsed > 10000) {
                 const entryMomentum = trade.momentum || 0.01;
                 const momentumDrop = Math.abs(volData.momentum) < Math.abs(entryMomentum) * 0.5;
                 if (momentumDrop) {
@@ -1941,35 +2014,20 @@
                     exitReason = 'momentum_fade';
                 }
             }
-            // 4. DYNAMIC STOP LOSS - Tighter for weak signals, wider for strong
-            const directionConfidence = trade.directionConfidence || 0.5;
-            const stopMultiplier = directionConfidence > 0.7 ? 6.0 : // High confidence: -$0.72
-                                   directionConfidence > 0.5 ? 4.0 : // Medium: -$0.48  
-                                   3.0; // Low confidence: -$0.36
-            
-            if (netPnl < -costs.total * stopMultiplier) {
-                shouldExit = true;
-                exitReason = 'stop_loss';
-            }
-            // 4. Exit if near end of window and losing badly
-            else if (remaining < 5000 && netPnl < -costs.total * 3.0) {
+            // 7. Exit if near end of window and losing
+            else if (remaining < 10000 && netPnl < -costs.total * 0.5) {
                 shouldExit = true;
                 exitReason = 'time_exit';
             }
-            // 5. Strong momentum reversal while losing
-            else if (volData && momentumReversing && netPnl < -costs.total && Math.abs(volData.momentum) > 0.25) {
-                shouldExit = true;
-                exitReason = 'momentum_reversal';
-            }
-            // 6. Take ANY profit near end of window
-            else if (remaining < 5000 && netPnl > 0) {
+            // 8. Take ANY profit near end of window
+            else if (remaining < 10000 && netPnl > 0) {
                 shouldExit = true;
                 exitReason = 'time_profit';
             }
-            // 7. Exit at end if NO MOVEMENT detected (price stuck = bad trade)
-            else if (remaining < 15000 && volData && Math.abs(volData.momentum) < 0.01 && netPnl < -costs.total * 0.5) {
+            // 9. Final timeout - exit no matter what
+            else if (remaining <= 0) {
                 shouldExit = true;
-                exitReason = 'time_loss';
+                exitReason = 'timeout';
             }
             
             if (shouldExit) {

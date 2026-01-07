@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 Crypto AI Trader - Real Money Ready</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
+            color: #e4e4e4;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        h1 {
+            font-size: 1.8em;
+            background: linear-gradient(135deg, #00d4ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 30px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ff4444;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.connected {
+            background: #00ff88;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Stats Bar */
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+        }
+
+        .stat-card .label {
+            font-size: 0.85em;
+            color: #888;
+            margin-bottom: 5px;
+        }
+
+        .stat-card .value {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        .stat-card .value.positive { color: #00ff88; }
+        .stat-card .value.negative { color: #ff4444; }
+
+        /* Markets Grid */
+        .markets-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .section-header h2 {
+            font-size: 1.3em;
+        }
+
+        .markets-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+        }
+
+        .market-card {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .market-card:hover {
+            transform: translateY(-5px);
+            border-color: #00d4ff;
+            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.2);
+        }
+
+        .market-card .symbol {
+            font-size: 1.4em;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .market-card .price {
+            font-size: 1.8em;
+            font-weight: bold;
+            margin: 15px 0;
+        }
+
+        .market-card .change {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .market-card .change.positive {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+        }
+
+        .market-card .change.negative {
+            background: rgba(255, 68, 68, 0.2);
+            color: #ff4444;
+        }
+
+        .market-card .stats {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+            font-size: 0.85em;
+            color: #888;
+        }
+
+        /* Trading Panel */
+        .trading-panel {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .trading-panel.active {
+            display: block;
+        }
+
+        .trade-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: #1a1a2e;
+            border-radius: 16px;
+            padding: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .trade-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .trade-header h2 {
+            font-size: 1.5em;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 1.5em;
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+
+        .close-btn:hover {
+            color: #ff4444;
+        }
+
+        .current-price {
+            text-align: center;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .current-price .price {
+            font-size: 2.5em;
+            font-weight: bold;
+        }
+
+        .current-price .change {
+            font-size: 1.2em;
+            margin-top: 5px;
+        }
+
+        /* Trade Form */
+        .trade-form {
+            display: grid;
+            gap: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #888;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: white;
+            font-size: 1em;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #00d4ff;
+        }
+
+        .trade-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-buy {
+            background: linear-gradient(135deg, #00c853, #00ff88);
+            color: #000;
+        }
+
+        .btn-sell {
+            background: linear-gradient(135deg, #ff1744, #ff4444);
+            color: white;
+        }
+
+        .btn:hover {
+            transform: scale(1.05);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Fee Calculator */
+        .fee-display {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+
+        .fee-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .fee-row:last-child {
+            border-bottom: none;
+            font-weight: bold;
+            color: #00d4ff;
+        }
+
+        /* Signals Panel */
+        .signals-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .signal-card {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            margin-bottom: 10px;
+        }
+
+        .signal-badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+
+        .signal-badge.buy {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+        }
+
+        .signal-badge.sell {
+            background: rgba(255, 68, 68, 0.2);
+            color: #ff4444;
+        }
+
+        .signal-badge.hold {
+            background: rgba(255, 255, 255, 0.1);
+            color: #888;
+        }
+
+        .confidence-bar {
+            width: 100px;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
+            transition: width 0.3s ease;
+        }
+
+        /* Trade Log */
+        .trade-log {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .log-entry {
+            display: grid;
+            grid-template-columns: 100px 80px 1fr 100px 100px;
+            gap: 15px;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+        }
+
+        .log-entry.win { border-left: 3px solid #00ff88; }
+        .log-entry.loss { border-left: 3px solid #ff4444; }
+
+        /* Wallet Section */
+        .wallet-section {
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(0, 255, 136, 0.1));
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            text-align: center;
+        }
+
+        .wallet-section h3 {
+            margin-bottom: 15px;
+        }
+
+        .btn-connect {
+            background: linear-gradient(135deg, #00d4ff, #00ff88);
+            color: #000;
+            padding: 15px 40px;
+            font-size: 1.1em;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .stats-bar {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .markets-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .log-entry {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #888;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #00d4ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Mode Toggle */
+        .mode-toggle {
+            display: flex;
+            gap: 10px;
+            padding: 5px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 30px;
+        }
+
+        .mode-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 20px;
+            background: transparent;
+            color: #888;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .mode-btn.active {
+            background: linear-gradient(135deg, #00d4ff, #00ff88);
+            color: #000;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>🚀 Crypto AI Trader</h1>
+            <div class="mode-toggle">
+                <button class="mode-btn active" id="paper-mode">📝 Paper</button>
+                <button class="mode-btn" id="live-mode">💰 Live</button>
+            </div>
+            <div class="connection-status">
+                <span class="status-dot" id="ws-status"></span>
+                <span id="connection-text">Connecting...</span>
+            </div>
+        </header>
+
+        <!-- Stats Bar -->
+        <div class="stats-bar">
+            <div class="stat-card">
+                <div class="label">Balance</div>
+                <div class="value" id="balance">$1,000.00</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Today's P&L</div>
+                <div class="value positive" id="daily-pnl">$0.00</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Win Rate</div>
+                <div class="value" id="win-rate">0%</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Total Trades</div>
+                <div class="value" id="trade-count">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Open Positions</div>
+                <div class="value" id="open-positions">0</div>
+            </div>
+        </div>
+
+        <!-- Wallet Connect -->
+        <div class="wallet-section" id="wallet-section">
+            <h3>🔗 Connect Wallet to Trade Live</h3>
+            <p style="margin-bottom: 15px; color: #888;">Paper trading active. Connect wallet for real trades.</p>
+            <button class="btn btn-connect" id="connect-wallet">Connect Wallet</button>
+        </div>
+
+        <!-- AI Signals -->
+        <div class="signals-section">
+            <div class="section-header">
+                <h2>🤖 AI Trading Signals</h2>
+                <span style="color: #888;">Real-time analysis</span>
+            </div>
+            <div id="signals-container">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    Connecting to price feed...
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Markets -->
+        <div class="markets-section">
+            <div class="section-header">
+                <h2>📈 Live Markets</h2>
+                <span id="last-update" style="color: #888;">Waiting for data...</span>
+            </div>
+            <div class="markets-grid" id="markets-grid">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    Loading markets...
+                </div>
+            </div>
+        </div>
+
+        <!-- Trade Log -->
+        <div class="trade-log">
+            <div class="section-header">
+                <h2>📋 Trade History</h2>
+            </div>
+            <div id="trade-log-container">
+                <p style="color: #888; text-align: center; padding: 20px;">No trades yet. Click a market to start trading!</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trading Panel -->
+    <div class="trading-panel" id="trading-panel">
+        <div class="trade-container">
+            <div class="trade-header">
+                <h2 id="trade-symbol">BTC</h2>
+                <button class="close-btn" id="close-trade">✕</button>
+            </div>
+
+            <div class="current-price">
+                <div class="price" id="trade-price">$0.00</div>
+                <div class="change positive" id="trade-change">+0.00%</div>
+            </div>
+
+            <div class="trade-form">
+                <div class="form-group">
+                    <label>Trade Type</label>
+                    <select id="trade-type">
+                        <option value="market">Market Order</option>
+                        <option value="limit">Limit Order</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Amount ($)</label>
+                    <input type="number" id="trade-amount" value="100" min="10" max="1000" step="10">
+                </div>
+
+                <div class="form-group">
+                    <label>Leverage</label>
+                    <select id="leverage">
+                        <option value="1">1x (No Leverage)</option>
+                        <option value="2">2x</option>
+                        <option value="5" selected>5x</option>
+                        <option value="10">10x</option>
+                        <option value="20">20x</option>
+                    </select>
+                </div>
+
+                <div class="fee-display">
+                    <div class="fee-row">
+                        <span>Position Size</span>
+                        <span id="position-size">$500.00</span>
+                    </div>
+                    <div class="fee-row">
+                        <span>Trading Fee (0.035%)</span>
+                        <span id="trading-fee">$0.18</span>
+                    </div>
+                    <div class="fee-row">
+                        <span>Liquidation Price</span>
+                        <span id="liq-price">$0.00</span>
+                    </div>
+                    <div class="fee-row">
+                        <span>Break-even Move</span>
+                        <span id="break-even">0.07%</span>
+                    </div>
+                </div>
+
+                <div class="trade-buttons">
+                    <button class="btn btn-buy" id="btn-long">📈 LONG</button>
+                    <button class="btn btn-sell" id="btn-short">📉 SHORT</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="hyperliquid.js"></script>
+    <script>
+        // State
+        const state = {
+            connected: false,
+            balance: 1000,
+            dailyPnL: 0,
+            totalTrades: 0,
+            wins: 0,
+            openPositions: [],
+            tradeHistory: [],
+            selectedSymbol: null,
+            isPaperMode: true
+        };
+
+        // DOM Elements
+        const elements = {
+            wsStatus: document.getElementById('ws-status'),
+            connectionText: document.getElementById('connection-text'),
+            balance: document.getElementById('balance'),
+            dailyPnL: document.getElementById('daily-pnl'),
+            winRate: document.getElementById('win-rate'),
+            tradeCount: document.getElementById('trade-count'),
+            openPositions: document.getElementById('open-positions'),
+            marketsGrid: document.getElementById('markets-grid'),
+            signalsContainer: document.getElementById('signals-container'),
+            lastUpdate: document.getElementById('last-update'),
+            tradingPanel: document.getElementById('trading-panel'),
+            tradeSymbol: document.getElementById('trade-symbol'),
+            tradePrice: document.getElementById('trade-price'),
+            tradeChange: document.getElementById('trade-change'),
+            tradeAmount: document.getElementById('trade-amount'),
+            leverage: document.getElementById('leverage'),
+            positionSize: document.getElementById('position-size'),
+            tradingFee: document.getElementById('trading-fee'),
+            liqPrice: document.getElementById('liq-price'),
+            breakEven: document.getElementById('break-even'),
+            tradeLogContainer: document.getElementById('trade-log-container')
+        };
+
+        // Initialize
+        async function init() {
+            loadState();
+            updateUI();
+            setupEventListeners();
+            await connectPriceFeed();
+        }
+
+        // Connect to Hyperliquid price feed
+        async function connectPriceFeed() {
+            try {
+                console.log('🔄 Attempting to connect to Hyperliquid...');
+                elements.connectionText.textContent = 'Connecting...';
+                
+                await hyperliquidPriceFeed.connect();
+                state.connected = true;
+                elements.wsStatus.classList.add('connected');
+                elements.connectionText.textContent = 'Connected to Hyperliquid';
+                
+                // Wait a moment for initial data
+                await new Promise(r => setTimeout(r, 1500));
+                
+                // Render initial markets
+                renderMarkets();
+                renderTradeHistory();
+                
+                // Start price update loop
+                setInterval(updatePrices, 500);
+                setInterval(updateSignals, 2000);
+                
+                console.log('✅ Successfully connected!');
+                
+            } catch (error) {
+                console.error('Connection failed:', error);
+                elements.connectionText.textContent = 'Connection failed - Retrying...';
+                elements.marketsGrid.innerHTML = `
+                    <div class="loading">
+                        <p style="color: #ff4444;">Connection Error: ${error.message}</p>
+                        <p style="margin-top: 10px;">Retrying in 5 seconds...</p>
+                    </div>
+                `;
+                setTimeout(connectPriceFeed, 5000);
+            }
+        }
+
+        // Update prices on UI
+        function updatePrices() {
+            const prices = hyperliquidPriceFeed.getAllPrices();
+            
+            if (Object.keys(prices).length === 0) return;
+            
+            elements.lastUpdate.textContent = `Last update: ${new Date().toLocaleTimeString()}`;
+            renderMarkets();
+            
+            // Update trading panel if open
+            if (state.selectedSymbol) {
+                updateTradingPanel();
+            }
+            
+            // Check positions for P&L
+            checkPositions();
+        }
+
+        // Render markets grid
+        function renderMarkets() {
+            const prices = hyperliquidPriceFeed.getAllPrices();
+            
+            if (Object.keys(prices).length === 0) {
+                elements.marketsGrid.innerHTML = `
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        Waiting for price data...
+                    </div>
+                `;
+                return;
+            }
+
+            const marketHTML = Object.entries(prices)
+                .slice(0, 12) // Show top 12 markets
+                .map(([symbol, price]) => {
+                    const stats = hyperliquidPriceFeed.getPriceStats(symbol);
+                    const changePercent = stats?.changePercent || 0;
+                    const isPositive = changePercent >= 0;
+                    
+                    return `
+                        <div class="market-card" onclick="openTradePanel('${symbol}')">
+                            <div class="symbol">
+                                <span>${symbol}</span>
+                                <span class="change ${isPositive ? 'positive' : 'negative'}">
+                                    ${isPositive ? '+' : ''}${changePercent.toFixed(2)}%
+                                </span>
+                            </div>
+                            <div class="price">$${formatPrice(price)}</div>
+                            <div class="stats">
+                                <span>Vol: ${stats?.volatility?.toFixed(2) || '0'}%</span>
+                                <span>Mom: ${stats?.momentum || 0}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+            elements.marketsGrid.innerHTML = marketHTML;
+        }
+
+        // Update AI signals
+        function updateSignals() {
+            const opportunities = tradingStrategy.getOpportunities();
+            
+            if (opportunities.length === 0) {
+                elements.signalsContainer.innerHTML = `
+                    <div class="signal-card">
+                        <span class="signal-badge hold">HOLD</span>
+                        <div>
+                            <strong>No strong signals</strong>
+                            <p style="color: #888; font-size: 0.9em;">Waiting for better opportunities...</p>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            elements.signalsContainer.innerHTML = opportunities.slice(0, 3).map(opp => `
+                <div class="signal-card">
+                    <span class="signal-badge ${opp.signal.toLowerCase()}">${opp.signal}</span>
+                    <div style="flex: 1;">
+                        <strong>${opp.symbol}</strong> at $${formatPrice(opp.price)}
+                        <p style="color: #888; font-size: 0.9em;">${opp.reason || 'Momentum signal'}</p>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="margin-bottom: 5px;">${opp.confidence}%</div>
+                        <div class="confidence-bar">
+                            <div class="confidence-fill" style="width: ${opp.confidence}%;"></div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Open trade panel
+        function openTradePanel(symbol) {
+            state.selectedSymbol = symbol;
+            elements.tradeSymbol.textContent = symbol;
+            elements.tradingPanel.classList.add('active');
+            updateTradingPanel();
+        }
+
+        // Update trading panel
+        function updateTradingPanel() {
+            const price = hyperliquidPriceFeed.getPrice(state.selectedSymbol);
+            const stats = hyperliquidPriceFeed.getPriceStats(state.selectedSymbol);
+            
+            if (!price) return;
+
+            elements.tradePrice.textContent = `$${formatPrice(price)}`;
+            
+            const changePercent = stats?.changePercent || 0;
+            const isPositive = changePercent >= 0;
+            elements.tradeChange.textContent = `${isPositive ? '+' : ''}${changePercent.toFixed(2)}%`;
+            elements.tradeChange.className = `change ${isPositive ? 'positive' : 'negative'}`;
+            
+            // Update fee calculations
+            updateFeeCalculations();
+        }
+
+        // Update fee calculations
+        function updateFeeCalculations() {
+            const amount = parseFloat(elements.tradeAmount.value) || 100;
+            const leverage = parseInt(elements.leverage.value) || 1;
+            const price = hyperliquidPriceFeed.getPrice(state.selectedSymbol) || 0;
+            
+            const positionSize = amount * leverage;
+            const fees = hyperliquidFees.calculateRoundTripFees(positionSize);
+            
+            elements.positionSize.textContent = `$${positionSize.toFixed(2)}`;
+            elements.tradingFee.textContent = `$${fees.entry.toFixed(4)}`;
+            elements.breakEven.textContent = `${fees.breakEvenMove.toFixed(3)}%`;
+            
+            // Calculate liquidation price (simplified)
+            const liqMove = (1 / leverage) * 100;
+            elements.liqPrice.textContent = leverage > 1 ? `${liqMove.toFixed(1)}% move` : 'N/A';
+        }
+
+        // Execute trade
+        function executeTrade(direction) {
+            const symbol = state.selectedSymbol;
+            const price = hyperliquidPriceFeed.getPrice(symbol);
+            const amount = parseFloat(elements.tradeAmount.value);
+            const leverage = parseInt(elements.leverage.value);
+            
+            if (!price || amount > state.balance) {
+                alert('Invalid trade parameters');
+                return;
+            }
+
+            const positionSize = amount * leverage;
+            const fees = hyperliquidFees.calculateRoundTripFees(positionSize);
+            
+            // Create position
+            const position = {
+                id: Date.now(),
+                symbol: symbol,
+                direction: direction,
+                entryPrice: price,
+                amount: amount,
+                leverage: leverage,
+                positionSize: positionSize,
+                entryFee: fees.entry,
+                timestamp: new Date().toISOString()
+            };
+
+            state.openPositions.push(position);
+            state.balance -= amount;
+            state.totalTrades++;
+            
+            updateUI();
+            saveState();
+            
+            // Close panel
+            elements.tradingPanel.classList.remove('active');
+            
+            // Log trade
+            console.log(`📈 Opened ${direction} ${symbol} @ $${formatPrice(price)}, Size: $${positionSize}`);
+            
+            // Auto-close after random time (10-60 seconds) for paper trading
+            if (state.isPaperMode) {
+                setTimeout(() => closePosition(position), Math.random() * 50000 + 10000);
+            }
+        }
+
+        // Close position
+        function closePosition(position) {
+            const currentPrice = hyperliquidPriceFeed.getPrice(position.symbol);
+            if (!currentPrice) return;
+
+            const priceChange = (currentPrice - position.entryPrice) / position.entryPrice;
+            const directionMultiplier = position.direction === 'LONG' ? 1 : -1;
+            
+            const grossPnL = position.positionSize * priceChange * directionMultiplier;
+            const fees = hyperliquidFees.calculateRoundTripFees(position.positionSize);
+            const netPnL = grossPnL - fees.total;
+            
+            // Update state
+            state.balance += position.amount + netPnL;
+            state.dailyPnL += netPnL;
+            
+            if (netPnL > 0) state.wins++;
+            
+            // Remove from open positions
+            state.openPositions = state.openPositions.filter(p => p.id !== position.id);
+            
+            // Add to history
+            const tradeResult = {
+                ...position,
+                exitPrice: currentPrice,
+                grossPnL: grossPnL,
+                netPnL: netPnL,
+                fees: fees.total,
+                closedAt: new Date().toISOString()
+            };
+            
+            state.tradeHistory.unshift(tradeResult);
+            
+            updateUI();
+            saveState();
+            renderTradeHistory();
+            
+            console.log(`✅ Closed ${position.symbol}: ${netPnL >= 0 ? '+' : ''}$${netPnL.toFixed(2)}`);
+        }
+
+        // Check positions
+        function checkPositions() {
+            // Update P&L display for open positions
+            elements.openPositions.textContent = state.openPositions.length;
+        }
+
+        // Render trade history
+        function renderTradeHistory() {
+            if (state.tradeHistory.length === 0) {
+                elements.tradeLogContainer.innerHTML = `
+                    <p style="color: #888; text-align: center; padding: 20px;">No trades yet</p>
+                `;
+                return;
+            }
+
+            elements.tradeLogContainer.innerHTML = state.tradeHistory.slice(0, 20).map(trade => `
+                <div class="log-entry ${trade.netPnL >= 0 ? 'win' : 'loss'}">
+                    <span>${trade.symbol}</span>
+                    <span>${trade.direction}</span>
+                    <span>Entry: $${formatPrice(trade.entryPrice)} → Exit: $${formatPrice(trade.exitPrice)}</span>
+                    <span>${trade.leverage}x</span>
+                    <span style="color: ${trade.netPnL >= 0 ? '#00ff88' : '#ff4444'}">
+                        ${trade.netPnL >= 0 ? '+' : ''}$${trade.netPnL.toFixed(2)}
+                    </span>
+                </div>
+            `).join('');
+        }
+
+        // Update UI
+        function updateUI() {
+            elements.balance.textContent = `$${state.balance.toFixed(2)}`;
+            
+            elements.dailyPnL.textContent = `${state.dailyPnL >= 0 ? '+' : ''}$${state.dailyPnL.toFixed(2)}`;
+            elements.dailyPnL.className = `value ${state.dailyPnL >= 0 ? 'positive' : 'negative'}`;
+            
+            const winRate = state.totalTrades > 0 ? (state.wins / state.totalTrades * 100) : 0;
+            elements.winRate.textContent = `${winRate.toFixed(1)}%`;
+            
+            elements.tradeCount.textContent = state.totalTrades;
+            elements.openPositions.textContent = state.openPositions.length;
+        }
+
+        // Format price
+        function formatPrice(price) {
+            if (price >= 1000) return price.toLocaleString('en-US', { maximumFractionDigits: 2 });
+            if (price >= 1) return price.toFixed(2);
+            return price.toFixed(4);
+        }
+
+        // Save state
+        function saveState() {
+            localStorage.setItem('cryptoTraderState', JSON.stringify({
+                balance: state.balance,
+                dailyPnL: state.dailyPnL,
+                totalTrades: state.totalTrades,
+                wins: state.wins,
+                tradeHistory: state.tradeHistory.slice(0, 100)
+            }));
+        }
+
+        // Load state
+        function loadState() {
+            const saved = localStorage.getItem('cryptoTraderState');
+            if (saved) {
+                const data = JSON.parse(saved);
+                state.balance = data.balance || 1000;
+                state.dailyPnL = data.dailyPnL || 0;
+                state.totalTrades = data.totalTrades || 0;
+                state.wins = data.wins || 0;
+                state.tradeHistory = data.tradeHistory || [];
+            }
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            document.getElementById('close-trade').addEventListener('click', () => {
+                elements.tradingPanel.classList.remove('active');
+            });
+
+            document.getElementById('btn-long').addEventListener('click', () => executeTrade('LONG'));
+            document.getElementById('btn-short').addEventListener('click', () => executeTrade('SHORT'));
+
+            elements.tradeAmount.addEventListener('input', updateFeeCalculations);
+            elements.leverage.addEventListener('change', updateFeeCalculations);
+
+            document.getElementById('paper-mode').addEventListener('click', () => {
+                state.isPaperMode = true;
+                document.getElementById('paper-mode').classList.add('active');
+                document.getElementById('live-mode').classList.remove('active');
+            });
+
+            document.getElementById('live-mode').addEventListener('click', () => {
+                alert('💡 Live trading requires wallet connection.\nComing soon with Hyperliquid SDK integration!');
+            });
+
+            document.getElementById('connect-wallet').addEventListener('click', () => {
+                alert('🔗 Wallet connection coming soon!\n\nThis will integrate with:\n• MetaMask\n• WalletConnect\n• Coinbase Wallet\n\nFor now, practice with paper trading!');
+            });
+
+            // Keyboard shortcuts
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    elements.tradingPanel.classList.remove('active');
+                }
+            });
+        }
+
+        // Start
+        init();
+    </script>
+</body>
+</html>

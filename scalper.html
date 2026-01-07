@@ -1059,7 +1059,9 @@
                 const trendBar = item.trendStrength > 0.5 ? '████' : (item.trendStrength > 0.3 ? '███' : '██');
                 
                 return `
-                    <div class="scan-item ${itemClass}" onclick="enterTrade('${item.symbol}', ${item.price}, ${item.trendDirection})">
+                    <div class="scan-item ${itemClass}" 
+                         onclick="enterTrade('${item.symbol}', ${item.price}, ${item.trendDirection})"
+                         title="Click to trade ${item.symbol} ${item.trendDirection > 0 ? 'LONG 📈' : 'SHORT 📉'}">
                         <span class="symbol">${item.symbol} ${signalBadge}</span>
                         <span class="price">$${formatPrice(item.price)}</span>
                         <div class="volatility-bar">
@@ -1078,7 +1080,10 @@
         // TRADING LOGIC
         // =============================================
         function enterTrade(symbol, price, suggestedDirection = 0) {
-            if (state.inTrade) return;
+            if (state.inTrade) {
+                console.log('⚠️ Already in a trade, cannot enter new position');
+                return;
+            }
 
             state.inTrade = true;
             
@@ -1097,6 +1102,9 @@
                 }
             }
             
+            // Get current volatility data for this symbol
+            const currentVolData = volatilityData.get(symbol);
+            
             state.currentTrade = {
                 symbol,
                 entryPrice: price,
@@ -1104,6 +1112,9 @@
                 size: config.positionSize,
                 direction: direction,
                 suggestedDirection: suggestedDirection,
+                beta: currentVolData?.beta || 0,
+                momentum: currentVolData?.momentum || 0,
+                directionConfidence: 0.5, // Will be updated if called from findBestTradeOpportunity
                 priceHistory: [{ price, time: Date.now() }]
             };
             state.tradeStartTime = Date.now();
@@ -1126,7 +1137,14 @@
             
             updateTradeDisplay();
             
-            console.log(`⚡ Entered ${symbol} @ $${formatPrice(price)} (Direction hint: ${suggestedDirection > 0 ? 'LONG' : suggestedDirection < 0 ? 'SHORT' : 'NEUTRAL'})`);
+            // Log entry details with confidence
+            const confidence = state.currentTrade.directionConfidence || 0.5;
+            const confidenceLabel = confidence > 0.7 ? 'HIGH' : confidence > 0.5 ? 'MEDIUM' : 'LOW';
+            console.log(`⚡ Entered ${symbol} @ $${formatPrice(price)} (${direction.toUpperCase()} - ${confidenceLabel} confidence ${(confidence*100).toFixed(0)}%)`);
+            
+            if (state.currentTrade.straddleCandidate) {
+                console.log(`💡 Note: High volatility (β=${state.currentTrade.beta.toFixed(4)}) + weak trend - could trade both directions`);
+            }
         }
 
         function updateTradeDisplay() {
@@ -1688,7 +1706,12 @@
             console.log(`🎯 ENTERING ${bestTrade.directionLabel}: ${bestTrade.symbol} @ $${bestTrade.price.toFixed(2)} ${directionEmoji}`);
             
             try {
-                enterTrade(bestTrade.symbol, bestTrade.price, bestTrade.direction);
+                // Store trade metadata for exit decisions
+                const tradeData = enterTrade(bestTrade.symbol, bestTrade.price, bestTrade.direction);
+                if (state.currentTrade) {
+                    state.currentTrade.directionConfidence = bestTrade.directionConfidence || 0.5;
+                    state.currentTrade.straddleCandidate = bestTrade.straddleCandidate || false;
+                }
                 
                 // Monitor and auto-exit
                 monitorAndExitTrade();
@@ -1702,10 +1725,22 @@
         function findBestTradeOpportunity() {
             // Get all viable trade opportunities
             const opportunities = [];
+            const highBetaOpportunities = []; // Track ALL high beta for analysis
             
             console.log(`🔍 Scanning ${volatilityData.size} symbols for trade opportunities...`);
             
             volatilityData.forEach((data, symbol) => {
+                // Log high-beta opportunities even if we don't trade them
+                if (data.beta >= 0.01 && data.prices.length >= 3) {
+                    highBetaOpportunities.push({
+                        symbol,
+                        beta: data.beta,
+                        momentum: data.momentum || 0,
+                        trendStrength: data.trendStrength || 0,
+                        prices: data.prices.length
+                    });
+                }
+                
                 if (data.prices.length < 5) return; // Need at least 5 REAL price changes
                 
                 // Real-time WebSocket thresholds - crypto moves in tiny increments
@@ -1715,7 +1750,25 @@
                                        (data.trendStrength || 0) > 0.5; // Directional consistency
                 
                 if (hasStrongSignal) {
-                    const direction = data.trendDirection || (data.momentum > 0 ? 1 : -1);
+                    // IMPROVED: Multi-signal direction detection
+                    // 1. Trend direction (up/down move consistency)
+                    // 2. Momentum (recent price change)
+                    // 3. Price action (last 3 moves)
+                    const recentPrices = data.prices.slice(-3);
+                    const recentDirection = recentPrices.length >= 2 ? 
+                        (recentPrices[recentPrices.length - 1] > recentPrices[0] ? 1 : -1) : 0;
+                    
+                    // Weight: 50% trend, 30% momentum, 20% recent
+                    const directionSignal = 
+                        (data.trendDirection || 0) * 0.5 + 
+                        Math.sign(data.momentum || 0) * 0.3 + 
+                        recentDirection * 0.2;
+                    
+                    const direction = directionSignal > 0 ? 1 : -1;
+                    
+                    // Check if volatility is extreme enough for straddle (both directions)
+                    const straddleCandidate = data.beta >= 0.03 && data.trendStrength < 0.4;
+                    
                     opportunities.push({
                         symbol,
                         price: data.lastPrice,
@@ -1724,7 +1777,9 @@
                         trendStrength: data.trendStrength || 0.5,
                         direction: direction,
                         directionLabel: direction > 0 ? 'LONG' : 'SHORT',
-                        score: data.beta * Math.abs(data.momentum) * (data.trendStrength || 0.5)
+                        score: data.beta * Math.abs(data.momentum) * (data.trendStrength || 0.5),
+                        straddleCandidate: straddleCandidate,
+                        directionConfidence: Math.abs(directionSignal)
                     });
                 }
             });
@@ -1785,6 +1840,22 @@
             // Sort by score (highest first)
             opportunities.sort((a, b) => b.score - a.score);
             
+            // LOG: High-beta opportunities for analysis
+            if (highBetaOpportunities.length > 0) {
+                highBetaOpportunities.sort((a, b) => b.beta - a.beta);
+                const top3 = highBetaOpportunities.slice(0, 3);
+                console.log('🔥 High-Beta Opportunities (β≥0.01):', 
+                    top3.map(o => `${o.symbol}(β=${o.beta.toFixed(4)} mom=${o.momentum.toFixed(3)}%)`).join(', '));
+            }
+            
+            // LOG: Straddle candidates
+            const straddleCandidates = opportunities.filter(o => o.straddleCandidate);
+            if (straddleCandidates.length > 0) {
+                console.log('⚡ STRADDLE Candidates (high β, weak trend):', 
+                    straddleCandidates.slice(0, 2).map(o => 
+                        `${o.symbol}(β=${o.beta.toFixed(4)} trend=${o.trendStrength.toFixed(2)})`).join(', '));
+            }
+            
             // Penalize recently traded symbols for diversity
             if (state.testResults && state.testResults.length > 0) {
                 const recentSymbols = state.testResults.slice(-10).map(t => t.symbol); // Check last 10 trades
@@ -1842,22 +1913,41 @@
                                       Math.abs(volData.momentum) > 0.1 && // Needs 0.1% movement minimum
                                       Math.sign(volData.momentum) !== Math.sign(trade.suggestedDirection);
             
-            // EXIT CONDITIONS - AGGRESSIVE profit taking for fast scalps
+            // EXIT CONDITIONS - DYNAMIC based on entry beta and current volatility
             let shouldExit = false;
             let exitReason = '';
             
-            // 1. Take profit FAST - grab any decent win (1.5x costs = $0.18 profit)
-            if (netPnl > costs.total * 1.5) { // Lowered from 2x to 1.5x to capture visual profits
+            // Get entry beta for dynamic targets
+            const entryBeta = trade.beta || 0.005;
+            const isHighBetaTrade = entryBeta >= 0.02;
+            
+            // 1. DYNAMIC PROFIT TARGET - Higher beta = higher target (it can move more!)
+            const profitMultiplier = isHighBetaTrade ? 2.5 : 1.5; // High beta: $0.30, normal: $0.18
+            if (netPnl > costs.total * profitMultiplier) {
                 shouldExit = true;
                 exitReason = 'profit_target';
             }
-            // 2. Take ANY profit if we have it and momentum reversing
-            else if (netPnl > costs.total * 0.5 && volData && momentumReversing && Math.abs(volData.momentum) > 0.15) {
+            // 2. QUICK PROFIT on strong reversal - don't get greedy
+            else if (netPnl > costs.total * 0.75 && volData && momentumReversing && Math.abs(volData.momentum) > 0.2) {
                 shouldExit = true;
                 exitReason = 'profit_reversal';
             }
-            // 3. MUCH WIDER stop loss - let trades breathe
-            else if (netPnl < -costs.total * 5.0) {
+            // 3. TAKE SMALL WIN if trend weakening (momentum dropped by 50%+)
+            else if (netPnl > costs.total * 0.5 && volData && elapsed > 3000) {
+                const entryMomentum = trade.momentum || 0.01;
+                const momentumDrop = Math.abs(volData.momentum) < Math.abs(entryMomentum) * 0.5;
+                if (momentumDrop) {
+                    shouldExit = true;
+                    exitReason = 'momentum_fade';
+                }
+            }
+            // 4. DYNAMIC STOP LOSS - Tighter for weak signals, wider for strong
+            const directionConfidence = trade.directionConfidence || 0.5;
+            const stopMultiplier = directionConfidence > 0.7 ? 6.0 : // High confidence: -$0.72
+                                   directionConfidence > 0.5 ? 4.0 : // Medium: -$0.48  
+                                   3.0; // Low confidence: -$0.36
+            
+            if (netPnl < -costs.total * stopMultiplier) {
                 shouldExit = true;
                 exitReason = 'stop_loss';
             }

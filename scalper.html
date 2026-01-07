@@ -956,9 +956,9 @@
                     const mean = longPrices.reduce((a,b) => a+b) / longPrices.length;
                     const currentPrice = recentPrices[recentPrices.length-1];
                     data.meanDeviation = ((currentPrice - mean) / mean) * 100; // % from mean
-                    // Oversold = negative deviation (more sensitive now)
-                    data.isOversold = data.meanDeviation < -0.05; // 0.05% below mean (was 0.1%, too strict)
-                    data.isOverbought = data.meanDeviation > 0.05;  // 0.05% above mean
+                    // Oversold = negative deviation (deeper threshold for quality)
+                    data.isOversold = data.meanDeviation < -0.10; // 0.10% below mean (was 0.05%, too sensitive)
+                    data.isOverbought = data.meanDeviation > 0.10;  // 0.10% above mean
                 } else {
                     data.meanDeviation = 0;
                     data.isOversold = false;
@@ -1831,10 +1831,11 @@
                 if (data.prices.length < 5) return; // Need at least 5 REAL price changes
                 
                 // STRICT: Only trade STRONG mean reversion with HIGH volatility
-                // isOversold flag is set when price < -0.05% from 20-tick mean
+                // Deep oversold flag is set when price < -0.10% from 20-tick mean
+                // Positive momentum = bounce starting, not just sideways
                 const hasStrongReversion = data.isOversold && 
-                                          data.beta >= 0.06 && // Good beta (was 0.08 = too strict, 0.05 = BIO failures)
-                                          (data.momentum || 0) >= 0; // Require non-negative momentum
+                                          data.beta >= 0.06 && 
+                                          (data.momentum || 0) > 0; // Strictly positive, no sideways
                 
                 const hasStrongSignal = hasStrongReversion;
                 
@@ -2014,8 +2015,8 @@
                     exitReason = 'reversion_complete';
                 }
             }
-            // 6. IMMEDIATE STOP - Cut losses at -1x costs
-            else if (netPnl < -costs.total * 1.0) {
+            // 6. STOP LOSS - Cut losses at -2x costs (wider than before for reversal room)
+            else if (netPnl < -costs.total * 2.0) {
                 shouldExit = true;
                 exitReason = 'fast_stop';
             }

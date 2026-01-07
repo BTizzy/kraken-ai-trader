@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AI-powered Polymarket trading game with real-time price updates and paper trading">
+    <title>Polymarket AI Trading Game - Get Started</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .setup-container {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 600px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 16px;
+        }
+
+        .step {
+            background: #f7fafc;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .step h3 {
+            color: #2d3748;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        .step p {
+            color: #4a5568;
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+
+        .step code {
+            background: #e2e8f0;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+
+        .step a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .step a:hover {
+            text-decoration: underline;
+        }
+
+        .cta-button {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 15px 30px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 18px;
+            margin-top: 20px;
+            transition: all 0.3s;
+        }
+
+        .cta-button:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .note {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            color: #856404;
+        }
+
+        .note strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        li {
+            margin-bottom: 8px;
+            color: #4a5568;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="setup-container">
+        <h1>🎯 Polymarket AI Trading Game</h1>
+        <p class="subtitle">Setup Guide - Get Started in 2 Minutes</p>
+
+        <div class="step">
+            <h3>📋 Step 1: Get Your Groq API Key (Free)</h3>
+            <p>You need a free Groq API key to power the AI predictions:</p>
+            <ul>
+                <li>Visit <a href="https://console.groq.com" target="_blank">console.groq.com</a></li>
+                <li>Create a free account (no credit card required)</li>
+                <li>Go to "API Keys" and click "Create API Key"</li>
+                <li>Copy your API key</li>
+            </ul>
+            <p style="margin-top: 15px;"><strong>Free tier includes:</strong> 30 requests/minute, perfect for this game!</p>
+        </div>
+
+        <div class="step">
+            <h3>🎮 Step 2: Configure the Game</h3>
+            <p>Once you open the game:</p>
+            <ul>
+                <li>Click the <strong>"Settings"</strong> button</li>
+                <li>Paste your Groq API key</li>
+                <li>Click <strong>"Save"</strong></li>
+                <li>Adjust AI threshold and timer settings if desired</li>
+                <li>Close settings</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>🚀 Step 3: Start Trading!</h3>
+            <p>You're ready to play:</p>
+            <ul>
+                <li>Click <strong>"Start Session"</strong></li>
+                <li>Wait for markets to load (10-20 seconds)</li>
+                <li>Click on any green/yellow/red square to enter a trade</li>
+                <li>Watch the live P&L and click <strong>"Sell Now"</strong> when profitable!</li>
+            </ul>
+        </div>
+
+        <div class="note">
+            <strong>⚠️ Important Notes:</strong>
+            <ul>
+                <li>This uses <strong>paper money only</strong> ($1,000 starting balance)</li>
+                <li>Prices are simulated for demo purposes</li>
+                <li>Real Polymarket integration coming in Phase 5</li>
+                <li>Your API key is stored locally and never shared</li>
+            </ul>
+        </div>
+
+        <div style="text-align: center;">
+            <a href="index.html" class="cta-button">Launch Game →</a>
+        </div>
+
+        <div style="margin-top: 30px; text-align: center; color: #666; font-size: 14px;">
+            <p>Built by <a href="https://github.com/BTizzy" style="color: #667eea;">@BTizzy</a> | 
+            <a href="https://github.com/BTizzy/polymarket-ai-trader" style="color: #667eea;">View on GitHub</a></p>
+        </div>
+    </div>
+</body>
+</html>

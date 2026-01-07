@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polymarket AI Trading Game</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>🎯 Polymarket AI Trading Game</h1>
+            <div class="header-stats">
+                <div class="stat">
+                    <span class="label">Bankroll:</span>
+                    <span class="value" id="bankroll">$1,000.00</span>
+                </div>
+                <div class="stat">
+                    <span class="label">P&L:</span>
+                    <span class="value" id="total-pnl">$0.00</span>
+                </div>
+                <div class="stat">
+                    <span class="label">Win Rate:</span>
+                    <span class="value" id="win-rate">0%</span>
+                </div>
+                <div class="stat">
+                    <span class="label">Trades:</span>
+                    <span class="value" id="trade-count">0</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Settings Panel -->
+        <div class="settings-panel" id="settings-panel">
+            <h2>⚙️ Settings</h2>
+            <div class="settings-group">
+                <label for="groq-api-key">Groq API Key:</label>
+                <input type="password" id="groq-api-key" placeholder="Enter your Groq API key">
+                <button id="save-api-key">Save</button>
+            </div>
+            <div class="settings-group">
+                <label for="ai-threshold">AI Win Threshold (%):</label>
+                <input type="number" id="ai-threshold" value="75" min="51" max="99">
+            </div>
+            <div class="settings-group">
+                <label for="timer-duration">Timer Duration (seconds):</label>
+                <select id="timer-duration">
+                    <option value="10">10s (High Volatility)</option>
+                    <option value="15">15s (High Volatility)</option>
+                    <option value="20" selected>20s (Standard)</option>
+                    <option value="30">30s (Standard)</option>
+                </select>
+            </div>
+            <div class="settings-group">
+                <label for="realistic-mode">
+                    <input type="checkbox" id="realistic-mode"> 
+                    <strong>Realistic Mode</strong> - Include fees (2%), slippage & spread costs
+                </label>
+                <p class="settings-hint">Enable for accurate profit simulation. Disabled = "fun mode" with easier wins.</p>
+            </div>
+            <div class="settings-group">
+                <label for="ai-bias">
+                    <input type="checkbox" id="ai-bias" checked> 
+                    <strong>AI Confidence Bias</strong> - High-confidence trades trend upward
+                </label>
+                <p class="settings-hint">Disable for random market simulation (harder).</p>
+            </div>
+            <button id="close-settings">Close Settings</button>
+        </div>
+
+        <!-- Risk Warning Banner -->
+        <div class="risk-warning" id="risk-warning">
+            <div class="risk-warning-content">
+                <span class="warning-icon">⚠️</span>
+                <div class="warning-text">
+                    <strong>PAPER TRADING MODE</strong> - No real money at risk
+                    <br>
+                    <small id="price-source-indicator">Price source: <span id="price-source-label">Checking...</span></small>
+                </div>
+                <button id="check-live-readiness" class="btn-small">Check Live Readiness</button>
+            </div>
+        </div>
+
+        <!-- Live Readiness Modal -->
+        <div class="modal" id="readiness-modal">
+            <div class="modal-content">
+                <h2>📊 Live Trading Readiness Check</h2>
+                <div id="readiness-results"></div>
+                <button id="close-readiness-modal" class="btn-secondary">Close</button>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls">
+            <button id="start-session" class="btn-primary">Start Session</button>
+            <button id="end-session" class="btn-secondary" disabled>End Session</button>
+            <button id="show-settings" class="btn-secondary">Settings</button>
+            <button id="refresh-markets" class="btn-secondary" disabled>Refresh Markets</button>
+            <button id="export-trades" class="btn-secondary">📤 Export Trades</button>
+        </div>
+
+        <!-- Status Message -->
+        <div class="status-message" id="status-message"></div>
+
+        <!-- Market Grid -->
+        <div class="market-grid" id="market-grid">
+            <div class="loading">Loading markets...</div>
+        </div>
+
+        <!-- Active Trade Panel -->
+        <div class="active-trade-panel" id="active-trade-panel">
+            <div class="trade-header">
+                <h3 id="trade-question">Market Question</h3>
+                <button id="close-trade" class="close-btn">✕</button>
+            </div>
+            <div class="trade-info">
+                <div class="info-row">
+                    <span class="label">Entry Price:</span>
+                    <span class="value" id="entry-price">$0.00</span>
+                </div>
+                <div class="info-row">
+                    <span class="label">Current Price:</span>
+                    <span class="value" id="current-price">$0.00</span>
+                </div>
+                <div class="info-row">
+                    <span class="label">Position Size:</span>
+                    <span class="value" id="position-size">0 shares</span>
+                </div>
+                <div class="info-row">
+                    <span class="label">Momentum:</span>
+                    <span class="value" id="momentum-indicator">⏸️ Neutral</span>
+                </div>
+            </div>
+            <div class="pnl-display" id="pnl-display">$0.00</div>
+            <div class="trade-targets" id="trade-targets">
+                <span class="target-label">🎯 TP: <span id="take-profit-target">+$0</span></span>
+                <span class="target-label">⛔ SL: <span id="stop-loss-target">-$0</span></span>
+            </div>
+            <div class="timer-display" id="timer-display">20s</div>
+            <div class="trade-controls">
+                <button id="start-trade" class="btn-start">Start Trade <span class="shortcut-hint">Enter</span></button>
+                <button id="sell-now" class="btn-sell">Sell Now <span class="shortcut-hint">Space</span></button>
+            </div>
+        </div>
+
+        <!-- Session Report -->
+        <div class="session-report" id="session-report">
+            <h2>📊 Session Report</h2>
+            <div class="report-stats">
+                <div class="report-stat">
+                    <span class="label">Total P&L:</span>
+                    <span class="value" id="report-pnl">$0.00</span>
+                </div>
+                <div class="report-stat">
+                    <span class="label">Win Rate:</span>
+                    <span class="value" id="report-win-rate">0%</span>
+                </div>
+                <div class="report-stat">
+                    <span class="label">Total Trades:</span>
+                    <span class="value" id="report-trades">0</span>
+                </div>
+                <div class="report-stat">
+                    <span class="label">Best Trade:</span>
+                    <span class="value" id="report-best">$0.00</span>
+                </div>
+                <div class="report-stat">
+                    <span class="label">Worst Trade:</span>
+                    <span class="value" id="report-worst">$0.00</span>
+                </div>
+            </div>
+            <div class="trade-history">
+                <h3>Trade History</h3>
+                <div id="trade-history-list"></div>
+            </div>
+            <button id="new-session" class="btn-primary">Start New Session</button>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="api.js"></script>
+    <script src="save-logs.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>

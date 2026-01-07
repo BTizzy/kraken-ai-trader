@@ -1,0 +1,18 @@
+{
+  "generatedAt": "2026-01-07T15:58:45.364Z",
+  "sourceFiles": 0,
+  "stats": {
+    "totalTrades": 0,
+    "wins": 0,
+    "losses": 0,
+    "winRate": "0%",
+    "totalNetPnl": "0.00",
+    "totalFeesPaid": "0.00",
+    "profitFactor": "N/A",
+    "avgWinAmount": "0",
+    "avgLossAmount": "0",
+    "maxDrawdown": "0.0%",
+    "sharpeRatio": "0.00"
+  },
+  "allTrades": []
+}

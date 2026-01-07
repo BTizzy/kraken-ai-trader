@@ -21,6 +21,19 @@ This document tracks all strategy iterations, test results, and learnings to pre
 
 ---
 
+## 📈 Data-Driven Improvement (after Test #10)
+
+**Analysis of Test #10 data:**
+- Winners (11 trades): avg β = 0.29
+- Losers (14 trades): avg β = 0.09
+- All trades with β < 0.10 lost money
+
+**Change for Test #11:** Raised betaThreshold from 0.05 → **0.10**
+
+This would have filtered out 6 losing trades (-$3.14) while keeping all winners.
+
+---
+
 ## 🏆 Best Performing Configuration (Test #3)
 
 **Win Rate: 68% | P&L: +$2.14**

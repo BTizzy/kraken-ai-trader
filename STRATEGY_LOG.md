@@ -15,6 +15,7 @@ This document tracks all strategy iterations, test results, and learnings to pre
 | 5 | 2026-01-07 | 24% | -$5.10 | Strict oversold + bounce confirmation | Too many fast_stops (52%), trailing stop issues |
 | 6 | 2026-01-07 | 44% | -$6.31 | Deep oversold + wide stop (-2x) | MEGA disaster (-$4.20), wide stops = bigger losses |
 | 7 | 2026-01-07 | 40% | -$3.93 | Hybrid momentum + reversion | Still struggling, @174 big loss, BABY fast_stops |
+| 8 | 2026-01-07 | **8%** | **-$15.93** | Aggressive sizing ($150-250) | ❌ **WORST RUN** - Bigger positions = bigger losses |
 
 ---
 

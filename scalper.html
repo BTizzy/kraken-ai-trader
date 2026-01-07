@@ -1830,20 +1830,26 @@
                 
                 if (data.prices.length < 5) return; // Need at least 5 REAL price changes
                 
-                // STRICT: Only trade STRONG mean reversion with HIGH volatility
-                // Deep oversold flag is set when price < -0.10% from 20-tick mean
-                // Positive momentum = bounce starting, not just sideways
-                const hasStrongReversion = data.isOversold && 
-                                          data.beta >= 0.06 && 
-                                          (data.momentum || 0) > 0; // Strictly positive, no sideways
+                // HYBRID STRATEGY: Momentum breakout OR selective mean reversion
+                // Path 1: MOMENTUM - Strong upward move with clear trend
+                const hasMomentumBreakout = data.beta >= 0.06 && 
+                                           (data.momentum || 0) > 0.05 && 
+                                           (data.trendStrength || 0) > 0.6;
                 
-                const hasStrongSignal = hasStrongReversion;
+                // Path 2: REVERSION - Deep oversold + bounce + weak trend only
+                const hasReversionSetup = data.isOversold && 
+                                         data.beta >= 0.08 && 
+                                         (data.momentum || 0) > 0 && 
+                                         (data.trendStrength || 0) < 0.5;
+                
+                const hasStrongSignal = hasMomentumBreakout || hasReversionSetup;
                 
                 if (hasStrongSignal) {
-                    // ONLY LONG mean reversion (data shows SHORT loses money)
                     direction = 1; // Always long
-                    strategyType = 'reversion';
-                    confidence = Math.min(0.95, 0.6 + Math.abs(data.meanDeviation) * 1.5);
+                    strategyType = hasMomentumBreakout ? 'momentum' : 'reversion';
+                    confidence = hasMomentumBreakout ? 
+                                Math.min(0.95, 0.7 + (data.momentum || 0) * 2) : 
+                                Math.min(0.95, 0.6 + Math.abs(data.meanDeviation || 0) * 1.5);
                     
                     // Check if volatility is extreme enough for straddle (both directions)
                     const straddleCandidate = data.beta >= 0.03 && data.trendStrength < 0.4;
@@ -2015,8 +2021,8 @@
                     exitReason = 'reversion_complete';
                 }
             }
-            // 6. STOP LOSS - Cut losses at -2x costs (wider than before for reversal room)
-            else if (netPnl < -costs.total * 2.0) {
+            // 6. STOP LOSS - Cut losses at -1.5x costs (tighter than -2x, wider than -1x)
+            else if (netPnl < -costs.total * 1.5) {
                 shouldExit = true;
                 exitReason = 'fast_stop';
             }

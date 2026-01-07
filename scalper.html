@@ -1121,6 +1121,17 @@
                 return;
             }
             
+            // CHECK RECENT PERFORMANCE: Avoid symbols with 2+ recent fast_stops
+            if (state.testMode && state.testResults.length > 0) {
+                const recentTrades = state.testResults.slice(-10); // Last 10 trades
+                const symbolFastStops = recentTrades.filter(t => t.symbol === symbol && t.exitReason === 'fast_stop').length;
+                if (symbolFastStops >= 2) {
+                    console.log(`⚠️ ${symbol} has ${symbolFastStops} recent fast_stops - skipping`);
+                    state.inTrade = false;
+                    return;
+                }
+            }
+            
             // ONLY LONG mean reversion
             direction = 'long';
             strategyType = 'reversion';
@@ -1977,22 +1988,36 @@
             
             // SCALPING EXITS: Take profits FAST, cut losses FASTER  
             // Data shows: Winners exit quick (<10s), losers hold too long
-            // 1. INSTANT WIN - Any profit after 5s (don't wait!)
-            if (netPnl > costs.total * 0.2 && elapsed > 5000) {
+            // Track peak profit for trailing stop
+            if (!trade.peakPnl) trade.peakPnl = netPnl;
+            if (netPnl > trade.peakPnl) trade.peakPnl = netPnl;
+            
+            // 1. TRAILING STOP - Let winners run but protect profit
+            // If we're up 2x costs or more, trail with 50% stop (lock in half)
+            if (trade.peakPnl > costs.total * 2.0) {
+                const trailStop = trade.peakPnl * 0.5; // Protect 50% of peak
+                if (netPnl < trailStop) {
+                    shouldExit = true;
+                    exitReason = 'trailing_stop';
+                    console.log(`📉 Trailing stop: Peak $${trade.peakPnl.toFixed(2)} → Current $${netPnl.toFixed(2)}`);
+                }
+            }
+            // 2. INSTANT WIN - Any profit after 5s (quick scalp)
+            else if (netPnl > costs.total * 0.2 && elapsed > 5000) {
                 shouldExit = true;
                 exitReason = 'quick_profit';
             }
-            // 2. SMALL WIN - 1x costs
-            else if (netPnl > costs.total * 1.0) {
+            // 3. SMALL WIN - 1.5x costs (was 1x, letting it breathe a bit)
+            else if (netPnl > costs.total * 1.5 && elapsed > 1000) {
                 shouldExit = true;
                 exitReason = 'profit_target';
             }
-            // 3. BIG WIN - 3x costs
-            else if (netPnl > costs.total * 3.0) {
+            // 4. BIG WIN - 4x costs (lock in big gains)
+            else if (netPnl > costs.total * 4.0) {
                 shouldExit = true;
                 exitReason = 'big_profit';
             }
-            // 4. MEAN REVERSION COMPLETE - Price bounced back
+            // 5. MEAN REVERSION COMPLETE - Price bounced back
             else if (strategy === 'reversion' && volData && Math.abs(volData.meanDeviation || 0) < 0.05) {
                 // Price returned close to mean
                 if (netPnl > -costs.total * 0.5) { // Exit even with small loss
@@ -2000,13 +2025,13 @@
                     exitReason = 'reversion_complete';
                 }
             }
-            // 5. IMMEDIATE STOP - Cut losses at -1x costs (not -2x!)
+            // 6. IMMEDIATE STOP - Cut losses at -1x costs
             else if (netPnl < -costs.total * 1.0) {
                 shouldExit = true;
                 exitReason = 'fast_stop';
             }
-            // 6. TAKE SMALL WIN if weakening
-            else if (netPnl > costs.total * 0.2 && volData && elapsed > 10000) {
+            // 7. TAKE SMALL WIN if momentum weakening
+            else if (netPnl > costs.total * 0.3 && volData && elapsed > 10000) {
                 const entryMomentum = trade.momentum || 0.01;
                 const momentumDrop = Math.abs(volData.momentum) < Math.abs(entryMomentum) * 0.5;
                 if (momentumDrop) {
@@ -2014,17 +2039,17 @@
                     exitReason = 'momentum_fade';
                 }
             }
-            // 7. Exit if near end of window and losing
+            // 8. Exit if near end of window and losing
             else if (remaining < 10000 && netPnl < -costs.total * 0.5) {
                 shouldExit = true;
                 exitReason = 'time_exit';
             }
-            // 8. Take ANY profit near end of window
+            // 9. Take ANY profit near end of window
             else if (remaining < 10000 && netPnl > 0) {
                 shouldExit = true;
                 exitReason = 'time_profit';
             }
-            // 9. Final timeout - exit no matter what
+            // 10. Final timeout - exit no matter what
             else if (remaining <= 0) {
                 shouldExit = true;
                 exitReason = 'timeout';

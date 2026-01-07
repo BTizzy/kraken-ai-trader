@@ -856,7 +856,11 @@
             testResults: [],
             
             // Test tracking - persists across sessions
-            testNumber: parseInt(localStorage.getItem('scalperTestNumber')) || 9
+            testNumber: parseInt(localStorage.getItem('scalperTestNumber')) || 9,
+            
+            // Symbol cooldown after repeated fast_stops
+            symbolCooldowns: new Map(), // symbol -> { fastStops: count, cooldownUntil: timestamp }
+            consecutiveFastStops: new Map() // symbol -> count of consecutive fast_stops
         };
 
         // =============================================
@@ -1360,12 +1364,55 @@
                 
                 state.testTradesCompleted++;
                 
+                // TRACK SYMBOL COOLDOWNS FOR REPEATED FAST_STOPS
+                if (reason === 'fast_stop') {
+                    const currentCount = (state.consecutiveFastStops.get(trade.symbol) || 0) + 1;
+                    state.consecutiveFastStops.set(trade.symbol, currentCount);
+                    
+                    // After 2 consecutive fast_stops on same symbol, put it on cooldown
+                    if (currentCount >= 2) {
+                        const cooldownDuration = 30000 * currentCount; // 60s for 2, 90s for 3, etc
+                        state.symbolCooldowns.set(trade.symbol, {
+                            fastStops: currentCount,
+                            cooldownUntil: Date.now() + cooldownDuration
+                        });
+                        console.log(`⛔ ${trade.symbol} on ${cooldownDuration/1000}s cooldown after ${currentCount} fast_stops`);
+                    }
+                } else {
+                    // Reset consecutive count on any non-fast_stop exit
+                    state.consecutiveFastStops.set(trade.symbol, 0);
+                    // Clear cooldown if we get a successful trade
+                    if (pnlDollar > 0) {
+                        state.symbolCooldowns.delete(trade.symbol);
+                    }
+                }
+                
                 // Update button
                 const btn = document.getElementById('test-mode-btn');
                 btn.textContent = `🤖 Running Test (${state.testTradesCompleted}/${state.testTradesTarget})`;
                 
                 // Continue to next trade after short delay
                 setTimeout(() => runNextTestTrade(), 1000);
+            } else {
+                // NON-TEST MODE: Also track cooldowns for manual/auto trades
+                if (reason === 'fast_stop') {
+                    const currentCount = (state.consecutiveFastStops.get(trade.symbol) || 0) + 1;
+                    state.consecutiveFastStops.set(trade.symbol, currentCount);
+                    
+                    if (currentCount >= 2) {
+                        const cooldownDuration = 30000 * currentCount;
+                        state.symbolCooldowns.set(trade.symbol, {
+                            fastStops: currentCount,
+                            cooldownUntil: Date.now() + cooldownDuration
+                        });
+                        console.log(`⛔ ${trade.symbol} on ${cooldownDuration/1000}s cooldown after ${currentCount} fast_stops`);
+                    }
+                } else {
+                    state.consecutiveFastStops.set(trade.symbol, 0);
+                    if (pnlDollar > 0) {
+                        state.symbolCooldowns.delete(trade.symbol);
+                    }
+                }
             }
 
             // Record trade with full analysis data
@@ -1809,6 +1856,13 @@
             console.log(`🔍 Scanning ${volatilityData.size} symbols for trade opportunities...`);
             
             volatilityData.forEach((data, symbol) => {
+                // CHECK SYMBOL COOLDOWN - Skip symbols with repeated fast_stops
+                const cooldown = state.symbolCooldowns.get(symbol);
+                if (cooldown && Date.now() < cooldown.cooldownUntil) {
+                    console.log(`⏸️ ${symbol} on cooldown (${cooldown.fastStops} fast_stops) - ${((cooldown.cooldownUntil - Date.now())/1000).toFixed(0)}s left`);
+                    return; // Skip this symbol
+                }
+                
                 // Log high-beta opportunities even if we don't trade them
                 if (data.beta >= 0.06 && data.prices.length >= 3) {
                     highBetaOpportunities.push({

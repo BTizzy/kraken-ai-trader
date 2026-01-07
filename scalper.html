@@ -1113,18 +1113,37 @@
                 return;
             }
             
-            // STRICT STRATEGY: β≥0.06 AND oversold (flagged by isOversold) AND non-negative momentum
-            // isOversold = meanDeviation < -0.05% (price below 20-tick average)
-            if (!volData.isOversold || volData.beta < 0.06 || (volData.momentum || 0) < 0) {
-                console.log(`⚠️ ${symbol} doesn't meet entry criteria (oversold=${volData.isOversold}, dev=${(volData.meanDeviation||0).toFixed(3)}%, β=${(volData.beta||0).toFixed(3)}, momentum=${(volData.momentum||0).toFixed(4)})`);
+            // HYBRID STRATEGY: Momentum breakout (primary) + selective mean reversion (secondary)
+            // Path 1: MOMENTUM BREAKOUT - Trade WITH strong moves
+            const hasMomentumBreakout = volData.beta >= 0.06 && 
+                                       (volData.momentum || 0) > 0.05 && // Strong upward momentum (0.05% = 5 basis points)
+                                       (volData.trendStrength || 0) > 0.6; // Clear trend direction
+            
+            // Path 2: MEAN REVERSION - Only if oversold + bounce confirmed + NOT in downtrend
+            const hasMeanReversionSetup = volData.isOversold && 
+                                         volData.beta >= 0.08 && // Higher beta for reversions (riskier)
+                                         (volData.momentum || 0) > 0 && // Turning positive
+                                         (volData.trendStrength || 0) < 0.5; // NOT in strong trend
+            
+            if (!hasMomentumBreakout && !hasMeanReversionSetup) {
+                console.log(`⚠️ ${symbol} doesn't meet entry criteria (momentum=${(volData.momentum||0).toFixed(4)}%, β=${(volData.beta||0).toFixed(3)}, trend=${(volData.trendStrength||0).toFixed(2)}, oversold=${volData.isOversold})`);
                 state.inTrade = false;
                 return;
             }
             
-            // ONLY LONG mean reversion
-            direction = 'long';
-            strategyType = 'reversion';
-            confidence = Math.min(0.95, 0.6 + Math.abs(volData.meanDeviation || 0) * 1.5);
+            // Determine strategy type
+            if (hasMomentumBreakout) {
+                direction = 'long';
+                strategyType = 'momentum';
+                confidence = Math.min(0.95, 0.7 + (volData.momentum || 0) * 2);
+                console.log(`📈 MOMENTUM BREAKOUT: LONG (momentum=${(volData.momentum||0).toFixed(4)}%, β=${volData.beta.toFixed(3)}, trend=${(volData.trendStrength||0).toFixed(2)})`);
+            } else {
+                // Mean reversion path
+                direction = 'long';
+                strategyType = 'reversion';
+                confidence = Math.min(0.95, 0.6 + Math.abs(volData.meanDeviation || 0) * 1.5);
+                console.log(`🔄 MEAN REVERSION: LONG (oversold by ${Math.abs(volData.meanDeviation || 0).toFixed(3)}%, β=${volData.beta.toFixed(3)})`);
+            }
             
             // DYNAMIC POSITION SIZING: Increase size for high-quality setups
             // β≥0.15 = $150 (proven winners from data)

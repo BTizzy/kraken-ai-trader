@@ -13,11 +13,16 @@ const GAME_CONFIG = {
     priceSource: 'real',
     
     // Fallback to simulation if real prices fail
-    // DISABLED - we do NOT trade on fake data
+    // DISABLED - Real prices only for production trading
     fallbackToSimulation: false,
     
     // Block trading entirely if real prices unavailable
+    // TRUE = production mode, no fake data ever
     requireRealPrices: true,
+    
+    // Use REST API polling when WebSocket fails (still real data)
+    useRestApiFallback: true,
+    restApiPollInterval: 2000,  // Poll every 2 seconds
     
     // ============================================
     // RISK WARNINGS - READ CAREFULLY
@@ -98,7 +103,8 @@ const GAME_CONFIG = {
     
     // Groq API
     groqAPI: 'https://api.groq.com/openai/v1/chat/completions',
-    groqModel: 'llama-3.1-70b-versatile',
+    groqModel: 'llama-3.3-70b-versatile',  // Updated Jan 2026
+    groqModelFallback: 'llama-3.1-8b-instant',  // Backup model
     
     // ============================================
     // POLYMARKET API ENDPOINTS

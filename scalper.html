@@ -1121,17 +1121,6 @@
                 return;
             }
             
-            // CHECK RECENT PERFORMANCE: Avoid symbols with 2+ recent fast_stops
-            if (state.testMode && state.testResults.length > 0) {
-                const recentTrades = state.testResults.slice(-10); // Last 10 trades
-                const symbolFastStops = recentTrades.filter(t => t.symbol === symbol && t.exitReason === 'fast_stop').length;
-                if (symbolFastStops >= 2) {
-                    console.log(`⚠️ ${symbol} has ${symbolFastStops} recent fast_stops - skipping`);
-                    state.inTrade = false;
-                    return;
-                }
-            }
-            
             // ONLY LONG mean reversion
             direction = 'long';
             strategyType = 'reversion';

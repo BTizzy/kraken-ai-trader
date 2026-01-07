@@ -88,14 +88,17 @@ class PolymarketTradingGame {
     updatePriceSourceIndicator() {
         const label = document.getElementById('price-source-label');
         if (label) {
-            if (this.state.priceSource === 'real') {
-                label.textContent = '🟢 Real-Time';
+            if (this.state.priceSource === 'real-ws') {
+                label.textContent = '🟢 Real-Time (WebSocket)';
+                label.className = 'real';
+            } else if (this.state.priceSource === 'real-rest') {
+                label.textContent = '🟢 Real-Time (REST API)';
                 label.className = 'real';
             } else if (this.state.priceSource === 'unavailable') {
-                label.textContent = '🔴 BLOCKED';
+                label.textContent = '🔴 BLOCKED - No Real Data';
                 label.className = 'blocked';
             } else {
-                label.textContent = '🟡 Simulated';
+                label.textContent = '⛔ Simulated (DISABLED)';
                 label.className = 'simulated';
             }
         }
@@ -199,42 +202,66 @@ class PolymarketTradingGame {
      */
     async initializePriceFeed() {
         if (GAME_CONFIG.priceSource === 'real') {
+            // Try WebSocket first
             try {
                 await realTimePriceFeed.connect();
                 this.state.wsConnected = true;
-                this.state.priceSource = 'real';
+                this.state.priceSource = 'real-ws';
+                this.state.priceFeedType = 'websocket';
                 this.state.tradingEnabled = true;
-                console.log('✅ Connected to real-time price feed');
+                console.log('✅ Connected to real-time WebSocket price feed');
                 this.updatePriceSourceIndicator();
-            } catch (error) {
-                console.error('❌ Could not connect to real-time prices:', error.message);
+                return;
+            } catch (wsError) {
+                console.warn('⚠️ WebSocket failed:', wsError.message);
+                
+                // Try REST API fallback (still real data!)
+                if (GAME_CONFIG.useRestApiFallback) {
+                    try {
+                        await restApiPriceFeed.connect();
+                        this.state.wsConnected = false;
+                        this.state.priceSource = 'real-rest';
+                        this.state.priceFeedType = 'rest';
+                        this.state.tradingEnabled = true;
+                        console.log('✅ Connected to REST API price feed (real data)');
+                        this.showStatus('📊 Using REST API for real prices (WebSocket unavailable)', 'info');
+                        this.updatePriceSourceIndicator();
+                        return;
+                    } catch (restError) {
+                        console.error('❌ REST API also failed:', restError.message);
+                    }
+                }
+                
+                // Both failed - block trading
                 this.state.wsConnected = false;
                 this.state.priceSource = 'unavailable';
-                
-                // DO NOT fallback to simulation - block trading instead
-                if (GAME_CONFIG.requireRealPrices) {
-                    this.state.tradingEnabled = false;
-                    this.showStatus('❌ TRADING BLOCKED: Cannot connect to real price feed. No simulated data allowed.', 'error');
-                    console.error('🚫 Trading disabled - real prices required but unavailable');
-                } else if (GAME_CONFIG.fallbackToSimulation) {
-                    // Only if explicitly allowed (which is now false by default)
-                    this.state.priceSource = 'simulated';
-                    this.state.tradingEnabled = true;
-                    console.warn('⚠️ Falling back to simulated prices (NOT RECOMMENDED)');
-                    this.showStatus('⚠️ WARNING: Using simulated prices - NOT REAL DATA', 'error');
-                }
+                this.state.tradingEnabled = false;
+                this.showStatus('❌ TRADING BLOCKED: Cannot get real prices from any source', 'error');
+                console.error('🚫 Trading disabled - no real price source available');
                 this.updatePriceSourceIndicator();
             }
         } else {
-            // Simulated mode - warn user
+            // Config set to simulated - block if real prices required
             this.state.priceSource = 'simulated';
             this.state.tradingEnabled = !GAME_CONFIG.requireRealPrices;
             this.updatePriceSourceIndicator();
             
             if (GAME_CONFIG.requireRealPrices) {
-                this.showStatus('❌ TRADING BLOCKED: Real prices required. Change config to enable simulation.', 'error');
+                this.showStatus('❌ TRADING BLOCKED: Real prices required. Change priceSource in config.', 'error');
             }
         }
+    }
+
+    /**
+     * Get current price feed (WebSocket or REST)
+     */
+    getPriceFeed() {
+        if (this.state.priceFeedType === 'websocket') {
+            return realTimePriceFeed;
+        } else if (this.state.priceFeedType === 'rest') {
+            return restApiPriceFeed;
+        }
+        return null;
     }
 
     /**
@@ -847,14 +874,15 @@ class PolymarketTradingGame {
             entryValidation: entryValidation
         };
 
-        // Initialize price simulation with AI confidence for bias
-        if (GAME_CONFIG.enablePriceSimulation) {
-            priceSimulator.initializePrice(
-                market.id, 
-                market.yesPrice, 
-                market.volatilityLevel,
-                market.aiProbability || 75
-            );
+        // Subscribe to real price updates for this market
+        const priceFeed = this.getPriceFeed();
+        if (priceFeed) {
+            priceFeed.subscribe(market.id, (price, data) => {
+                if (this.state.activeTrade && this.state.activeTrade.market.id === market.id) {
+                    this.state.activeTrade.currentPrice = price;
+                }
+            });
+            console.log(`📊 Subscribed to real price updates for market ${market.id}`);
         }
 
         // Deduct from bankroll
@@ -1023,7 +1051,7 @@ class PolymarketTradingGame {
             }
         }, 1000);
 
-        // Price update timer - use REAL or simulated based on connection
+        // Price update timer - use real price feed (WebSocket or REST)
         this.priceUpdateTimer = setInterval(() => {
             if (!this.state.activeTrade) {
                 return;
@@ -1031,15 +1059,21 @@ class PolymarketTradingGame {
             
             let newPrice;
             let priceStats;
+            const priceFeed = this.getPriceFeed();
             
-            if (this.state.priceSource === 'real' && this.state.wsConnected) {
-                // Use real WebSocket prices
-                newPrice = realTimePriceFeed.getPrice(this.state.activeTrade.market.id);
-                priceStats = realTimePriceFeed.getPriceStats(this.state.activeTrade.market.id);
+            if (priceFeed && (this.state.priceSource === 'real-ws' || this.state.priceSource === 'real-rest')) {
+                // Use real prices from WebSocket or REST API
+                newPrice = priceFeed.getPrice(this.state.activeTrade.market.id);
+                priceStats = priceFeed.getPriceStats(this.state.activeTrade.market.id);
+                
+                // If no price yet (REST polling may have delay), keep current
+                if (!newPrice) {
+                    newPrice = this.state.activeTrade.currentPrice;
+                }
             } else {
-                // Fallback to simulation
-                newPrice = priceSimulator.updatePrice(this.state.activeTrade.market.id);
-                priceStats = priceSimulator.getPriceStats(this.state.activeTrade.market.id);
+                // Should not reach here in production - trading should be blocked
+                console.error('🚫 No real price feed available!');
+                return;
             }
             
             if (newPrice) {
@@ -1050,13 +1084,7 @@ class PolymarketTradingGame {
                 // Update momentum indicator using the stats we already fetched
                 if (priceStats) {
                     this.updateMomentumIndicator(priceStats.momentum);
-                    
-                    // Show if using real or simulated data
-                    if (priceStats.isReal) {
-                        this.elements.currentPrice.title = 'Real-time market price';
-                    } else if (priceStats.isSimulated) {
-                        this.elements.currentPrice.title = '⚠️ Simulated price - not real';
-                    }
+                    this.elements.currentPrice.title = `Real market price (${this.state.priceFeedType})`;
                 }
             }
         }, GAME_CONFIG.refreshInterval);

@@ -181,45 +181,67 @@ Respond with ONLY a single number between 0-100 representing the probability tha
 
 Your prediction:`;
 
-            const response = await fetch(this.baseURL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${this.apiKey}`
-                },
-                body: JSON.stringify({
-                    model: this.model,
-                    messages: [
-                        {
-                            role: 'system',
-                            content: 'You are a prediction market expert. Respond with only a number 0-100.'
+            // Try primary model first, then fallback
+            const modelsToTry = [this.model];
+            if (GAME_CONFIG.groqModelFallback) {
+                modelsToTry.push(GAME_CONFIG.groqModelFallback);
+            }
+            
+            let lastError = null;
+            
+            for (const model of modelsToTry) {
+                try {
+                    const response = await fetch(this.baseURL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${this.apiKey}`
                         },
-                        {
-                            role: 'user',
-                            content: prompt
-                        }
-                    ],
-                    temperature: 0.2, // Lower temperature for more consistent predictions
-                    max_tokens: 10
-                })
-            });
+                        body: JSON.stringify({
+                            model: model,
+                            messages: [
+                                {
+                                    role: 'system',
+                                    content: 'You are a prediction market expert. Respond with only a number 0-100.'
+                                },
+                                {
+                                    role: 'user',
+                                    content: prompt
+                                }
+                            ],
+                            temperature: 0.2,
+                            max_tokens: 10
+                        })
+                    });
 
-            if (!response.ok) {
-                const error = await response.text();
-                throw new Error(`Groq API error: ${response.status} - ${error}`);
+                    if (!response.ok) {
+                        const error = await response.text();
+                        lastError = new Error(`Groq API error (${model}): ${response.status} - ${error}`);
+                        console.warn(`Model ${model} failed, trying next...`);
+                        continue;
+                    }
+
+                    const data = await response.json();
+                    const prediction = data.choices[0]?.message?.content?.trim();
+                    
+                    if (!prediction) {
+                        lastError = new Error('No prediction returned');
+                        continue;
+                    }
+
+                    // Extract number from response
+                    const probability = parseFloat(prediction.match(/\d+\.?\d*/)?.[0] || '50');
+                    console.log(`✅ AI prediction from ${model}: ${probability}%`);
+                    
+                    return Math.min(Math.max(probability, 0), 100);
+                } catch (e) {
+                    lastError = e;
+                    console.warn(`Model ${model} error:`, e.message);
+                }
             }
-
-            const data = await response.json();
-            const prediction = data.choices[0]?.message?.content?.trim();
             
-            if (!prediction) {
-                throw new Error('No prediction returned');
-            }
-
-            // Extract number from response
-            const probability = parseFloat(prediction.match(/\d+\.?\d*/)?.[0] || '50');
-            
-            return Math.min(Math.max(probability, 0), 100);
+            // All models failed
+            throw lastError || new Error('All AI models failed');
         } catch (error) {
             console.error('Error getting AI prediction:', error);
             
@@ -371,6 +393,205 @@ class PriceSimulator {
      */
     clear() {
         this.prices.clear();
+    }
+}
+
+// ============================================
+// REST API PRICE FETCHER (Real prices via polling)
+// ============================================
+class RestApiPriceFeed {
+    constructor() {
+        this.prices = new Map();
+        this.priceHistory = new Map();
+        this.callbacks = new Map();
+        this.pollIntervals = new Map();
+        this.connected = false;
+    }
+
+    /**
+     * Initialize the REST API price feed
+     */
+    async connect() {
+        // Test connection by fetching a market
+        try {
+            const response = await fetch(`${GAME_CONFIG.polymarketAPI}?limit=1`);
+            if (response.ok) {
+                this.connected = true;
+                console.log('✅ REST API price feed connected');
+                return true;
+            }
+            throw new Error('API not responding');
+        } catch (error) {
+            console.error('REST API connection failed:', error);
+            this.connected = false;
+            throw error;
+        }
+    }
+
+    /**
+     * Subscribe to price updates for a market via polling
+     */
+    subscribe(marketId, callback) {
+        this.callbacks.set(marketId, callback);
+        
+        // Start polling for this market
+        const pollInterval = setInterval(async () => {
+            await this.fetchPrice(marketId);
+        }, GAME_CONFIG.restApiPollInterval || 2000);
+        
+        this.pollIntervals.set(marketId, pollInterval);
+        
+        // Fetch immediately
+        this.fetchPrice(marketId);
+        
+        return true;
+    }
+
+    /**
+     * Fetch real price from Polymarket API
+     */
+    async fetchPrice(marketId) {
+        try {
+            // Try CLOB API first for real-time orderbook
+            const clobUrl = `https://clob.polymarket.com/book?token_id=${marketId}`;
+            let price = null;
+            
+            try {
+                const clobResponse = await fetch(clobUrl);
+                if (clobResponse.ok) {
+                    const orderbook = await clobResponse.json();
+                    // Get best bid/ask midpoint
+                    if (orderbook.bids?.length && orderbook.asks?.length) {
+                        const bestBid = parseFloat(orderbook.bids[0].price);
+                        const bestAsk = parseFloat(orderbook.asks[0].price);
+                        price = (bestBid + bestAsk) / 2;
+                    }
+                }
+            } catch (e) {
+                // CLOB API failed, try gamma API
+            }
+
+            // Fallback to gamma API
+            if (!price) {
+                const gammaUrl = `${GAME_CONFIG.polymarketGammaAPI}/markets/${marketId}`;
+                const gammaResponse = await fetch(gammaUrl);
+                if (gammaResponse.ok) {
+                    const data = await gammaResponse.json();
+                    price = parseFloat(data.outcomePrices?.[0] || data.bestBid || 0.5);
+                }
+            }
+
+            if (price && !isNaN(price)) {
+                this.updatePrice(marketId, price);
+            }
+        } catch (error) {
+            console.warn(`Failed to fetch price for ${marketId}:`, error.message);
+        }
+    }
+
+    /**
+     * Update stored price and notify callback
+     */
+    updatePrice(marketId, price) {
+        const now = Date.now();
+        const oldPrice = this.prices.get(marketId);
+        
+        this.prices.set(marketId, {
+            price: price,
+            timestamp: now,
+            isReal: true
+        });
+        
+        // Store in history
+        let history = this.priceHistory.get(marketId) || [];
+        history.push({ price, timestamp: now });
+        
+        if (history.length > (GAME_CONFIG.priceHistoryLength || 60)) {
+            history = history.slice(-GAME_CONFIG.priceHistoryLength);
+        }
+        this.priceHistory.set(marketId, history);
+        
+        // Notify callback
+        const callback = this.callbacks.get(marketId);
+        if (callback) {
+            callback(price, {
+                oldPrice: oldPrice?.price,
+                change: oldPrice ? price - oldPrice.price : 0,
+                history: history,
+                isReal: true
+            });
+        }
+    }
+
+    /**
+     * Get current price for market
+     */
+    getPrice(marketId) {
+        const data = this.prices.get(marketId);
+        return data ? data.price : null;
+    }
+
+    /**
+     * Get price statistics
+     */
+    getPriceStats(marketId) {
+        const current = this.prices.get(marketId);
+        const history = this.priceHistory.get(marketId) || [];
+        
+        if (!current || history.length === 0) return null;
+        
+        const prices = history.map(h => h.price);
+        const startPrice = history[0].price;
+        
+        return {
+            current: current.price,
+            start: startPrice,
+            high: Math.max(...prices),
+            low: Math.min(...prices),
+            change: current.price - startPrice,
+            changePercent: ((current.price - startPrice) / startPrice) * 100,
+            momentum: this.calculateMomentum(history),
+            trend: current.price > startPrice ? 1 : -1,
+            isReal: true,
+            sampleCount: history.length
+        };
+    }
+
+    /**
+     * Calculate momentum
+     */
+    calculateMomentum(history) {
+        if (history.length < 3) return 0;
+        let momentum = 0;
+        for (let i = history.length - 1; i > Math.max(0, history.length - 5); i--) {
+            if (history[i].price > history[i-1].price) momentum++;
+            else if (history[i].price < history[i-1].price) momentum--;
+        }
+        return momentum;
+    }
+
+    /**
+     * Unsubscribe from market
+     */
+    unsubscribe(marketId) {
+        const interval = this.pollIntervals.get(marketId);
+        if (interval) {
+            clearInterval(interval);
+            this.pollIntervals.delete(marketId);
+        }
+        this.callbacks.delete(marketId);
+    }
+
+    /**
+     * Disconnect
+     */
+    disconnect() {
+        for (const interval of this.pollIntervals.values()) {
+            clearInterval(interval);
+        }
+        this.pollIntervals.clear();
+        this.callbacks.clear();
+        this.connected = false;
     }
 }
 
@@ -1044,6 +1265,7 @@ const polymarketAPI = new PolymarketAPI();
 const groqAPI = new GroqAPI();
 const priceSimulator = new PriceSimulator();
 const realTimePriceFeed = new RealTimePriceFeed();
+const restApiPriceFeed = new RestApiPriceFeed();
 const feeCalculator = FeeCalculator;
 const tradeValidator = TradeValidator;
 const tradeLogger = new TradeLogger();

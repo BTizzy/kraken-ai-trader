@@ -1636,16 +1636,16 @@
             const bestTrade = findBestTradeOpportunity();
             
             if (!bestTrade) {
-                // No good trade found, wait and try again (but not forever)
-                const maxRetries = 50; // After 25 seconds (50 * 500ms), give up on this iteration
+                // No good trade found, wait and try again
+                const maxRetries = 20; // After 10 seconds (20 * 500ms), force a trade
                 if (!state.testRetryCount) state.testRetryCount = 0;
                 state.testRetryCount++;
                 
                 if (state.testRetryCount > maxRetries) {
-                    console.log('⚠️ Too many retries without finding a trade, moving on...');
+                    console.log('⚠️ Too many retries, forcing a trade with any available data...');
                     state.testRetryCount = 0;
-                    // Try again with next iteration
-                    setTimeout(() => runNextTestTrade(), 2000);
+                    // Try again immediately - next attempt will use fallback logic
+                    setTimeout(() => runNextTestTrade(), 100);
                     return;
                 }
                 
@@ -1680,13 +1680,13 @@
             console.log(`🔍 Scanning ${volatilityData.size} symbols for trade opportunities...`);
             
             volatilityData.forEach((data, symbol) => {
-                if (data.prices.length < 15) return; // Need MORE data for confidence
+                if (data.prices.length < 5) return; // Need at least 5 REAL price changes
                 
-                // STRICTER thresholds - only trade strong signals
-                // Based on test results: 18% win rate with loose criteria, need to be more selective
-                const hasStrongSignal = Math.abs(data.momentum) > 0.08 && // Higher momentum required
-                                       data.beta >= 0.15 && // Higher volatility required
-                                       (data.trendStrength || 0) > 0.6; // Strong trend required
+                // Real-time WebSocket thresholds - crypto moves in tiny increments
+                // With actual price changes only, beta ~0.001-0.01 is normal
+                const hasStrongSignal = Math.abs(data.momentum) > 0.02 && // 0.02% is significant with real-time data
+                                       data.beta >= 0.005 && // 0.5% volatility is strong for real-time
+                                       (data.trendStrength || 0) > 0.5; // Directional consistency
                 
                 if (hasStrongSignal) {
                     const direction = data.trendDirection || (data.momentum > 0 ? 1 : -1);
@@ -1708,11 +1708,11 @@
             if (opportunities.length === 0) {
                 // If no strong signals, look for moderate signals
                 volatilityData.forEach((data, symbol) => {
-                    if (data.prices.length < 10) return;
+                    if (data.prices.length < 5) return;
                     
-                    const hasModerateSignal = Math.abs(data.momentum) > 0.05 && 
-                                              data.beta >= 0.10 &&
-                                              (data.trendStrength || 0) > 0.4;
+                    const hasModerateSignal = Math.abs(data.momentum) > 0.01 && 
+                                              data.beta >= 0.003 &&
+                                              (data.trendStrength || 0) > 0.3;
                     
                     if (hasModerateSignal) {
                         const direction = data.trendDirection || (data.momentum > 0 ? 1 : -1);
@@ -1732,9 +1732,9 @@
             }
             
             if (opportunities.length === 0) {
-                // Just take highest beta - prices barely move
+                // Fallback: Take any symbol with price movement
                 volatilityData.forEach((data, symbol) => {
-                    if (data.prices.length >= 5 && data.beta > 0) {
+                    if (data.prices.length >= 3 && data.beta >= 0.0005) { // Tiny threshold
                         const direction = (data.momentum || 0) >= 0 ? 1 : -1;
                         opportunities.push({
                             symbol,

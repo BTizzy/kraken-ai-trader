@@ -2,13 +2,13 @@
 
 class PolymarketAPI {
     constructor() {
-        this.baseURL = GAME_CONFIG.polymarketAPI;
+        this.baseURL = '/api/markets'; // Use local proxy
         this.cache = new Map();
         this.cacheExpiry = 60000; // 1 minute
     }
 
     /**
-     * Fetch markets from Polymarket CLOB API
+     * Fetch markets from Polymarket CLOB API via proxy
      */
     async fetchMarkets(limit = GAME_CONFIG.maxMarketsToFetch) {
         try {
@@ -27,12 +27,15 @@ class PolymarketAPI {
 
             const data = await response.json();
             
+            // Handle both array and object with data property
+            const markets = Array.isArray(data) ? data : (data.data || data);
+            
             this.cache.set(cacheKey, {
-                data: data.data, // Extract the markets array from the response
+                data: markets,
                 timestamp: Date.now()
             });
 
-            return data.data;
+            return markets;
         } catch (error) {
             console.error('Error fetching markets:', error);
             throw error;
@@ -40,11 +43,11 @@ class PolymarketAPI {
     }
 
     /**
-     * Get market details by ID
+     * Get market details by ID via proxy
      */
     async getMarket(marketId) {
         try {
-            const response = await fetch(`${this.baseURL}/${marketId}`);
+            const response = await fetch(`/api/gamma/markets/${marketId}`);
             
             if (!response.ok) {
                 throw new Error(`API error: ${response.status}`);
@@ -397,7 +400,7 @@ class PriceSimulator {
 }
 
 // ============================================
-// REST API PRICE FETCHER (Real prices via polling)
+// REST API PRICE FETCHER (Real prices via proxy)
 // ============================================
 class RestApiPriceFeed {
     constructor() {
@@ -409,15 +412,15 @@ class RestApiPriceFeed {
     }
 
     /**
-     * Initialize the REST API price feed
+     * Initialize the REST API price feed via local proxy
      */
     async connect() {
-        // Test connection by fetching a market
+        // Test connection via local proxy
         try {
-            const response = await fetch(`${GAME_CONFIG.polymarketAPI}?limit=1`);
+            const response = await fetch('/api/markets?limit=1');
             if (response.ok) {
                 this.connected = true;
-                console.log('✅ REST API price feed connected');
+                console.log('✅ REST API price feed connected (via proxy)');
                 return true;
             }
             throw new Error('API not responding');
@@ -448,42 +451,24 @@ class RestApiPriceFeed {
     }
 
     /**
-     * Fetch real price from Polymarket API
+     * Fetch real price from Polymarket API via local proxy
      */
     async fetchPrice(marketId) {
         try {
-            // Try CLOB API first for real-time orderbook
-            const clobUrl = `https://clob.polymarket.com/book?token_id=${marketId}`;
-            let price = null;
+            // Use local proxy to avoid CORS issues
+            const proxyUrl = `/api/price/${marketId}`;
             
-            try {
-                const clobResponse = await fetch(clobUrl);
-                if (clobResponse.ok) {
-                    const orderbook = await clobResponse.json();
-                    // Get best bid/ask midpoint
-                    if (orderbook.bids?.length && orderbook.asks?.length) {
-                        const bestBid = parseFloat(orderbook.bids[0].price);
-                        const bestAsk = parseFloat(orderbook.asks[0].price);
-                        price = (bestBid + bestAsk) / 2;
-                    }
-                }
-            } catch (e) {
-                // CLOB API failed, try gamma API
-            }
-
-            // Fallback to gamma API
-            if (!price) {
-                const gammaUrl = `${GAME_CONFIG.polymarketGammaAPI}/markets/${marketId}`;
-                const gammaResponse = await fetch(gammaUrl);
-                if (gammaResponse.ok) {
-                    const data = await gammaResponse.json();
-                    price = parseFloat(data.outcomePrices?.[0] || data.bestBid || 0.5);
+            const response = await fetch(proxyUrl);
+            if (response.ok) {
+                const data = await response.json();
+                if (data.price && !isNaN(data.price)) {
+                    this.updatePrice(marketId, data.price);
+                    return;
                 }
             }
-
-            if (price && !isNaN(price)) {
-                this.updatePrice(marketId, price);
-            }
+            
+            // If proxy failed, log it
+            console.warn(`Price fetch returned no data for ${marketId}`);
         } catch (error) {
             console.warn(`Failed to fetch price for ${marketId}:`, error.message);
         }

@@ -853,7 +853,10 @@
             testTradesTarget: 25,
             testTradesCompleted: 0,
             testStartBalance: 1000,
-            testResults: []
+            testResults: [],
+            
+            // Test tracking - persists across sessions
+            testNumber: parseInt(localStorage.getItem('scalperTestNumber')) || 9
         };
 
         // =============================================
@@ -2127,8 +2130,46 @@
                 exitReasons[t.exitReason] = (exitReasons[t.exitReason] || 0) + 1;
             });
             
+            // Get test number from existing test-results folder
+            const testNumber = state.testNumber || 'N';
+            const timestamp = Date.now();
+            const dateStr = new Date().toISOString().split('T')[0];
+            
             const report = {
+                testNumber: testNumber,
                 timestamp: new Date().toISOString(),
+                
+                // STRATEGY CONFIG - Capture exactly what was used
+                strategyConfig: {
+                    name: 'Simple Mean Reversion',
+                    version: '3.0',
+                    entry: {
+                        betaThreshold: 0.05,
+                        requireOversold: true,
+                        oversoldThreshold: -0.05, // % below mean
+                        momentumMin: 0,
+                        directionAllowed: 'LONG_ONLY'
+                    },
+                    exit: {
+                        profitTargetMultiple: 1.0, // x trading costs
+                        stopLossMultiple: 1.0,    // x trading costs
+                        quickProfitThreshold: 0.2, // x costs after 5s
+                        bigProfitThreshold: 3.0,   // x costs
+                        maxHoldTime: 120000        // 2 minutes
+                    },
+                    position: {
+                        baseSize: 100,
+                        scalingEnabled: false
+                    },
+                    costs: {
+                        takerFee: config.takerFeePercent,
+                        makerFee: config.makerFeePercent,
+                        slippage: config.slippagePercent,
+                        spread: config.spreadPercent,
+                        estimatedRoundTrip: '$0.12'
+                    }
+                },
+                
                 summary: {
                     totalTrades: state.testResults.length,
                     winRate: winRate.toFixed(1) + '%',
@@ -2167,11 +2208,22 @@
                 allTrades: state.testResults.map(t => ({
                     symbol: t.symbol,
                     direction: t.direction,
+                    strategy: t.strategy || 'unknown',
                     entryPrice: t.entryPrice,
                     exitPrice: t.exitPrice,
+                    grossPnl: t.grossPnl ? '$' + t.grossPnl.toFixed(2) : 'N/A',
+                    costs: t.costs ? '$' + t.costs.toFixed(2) : 'N/A',
                     pnl: '$' + t.pnl.toFixed(2),
+                    pnlMultiple: t.pnlMultiple ? t.pnlMultiple.toFixed(2) + 'x' : 'N/A',
                     exitReason: t.exitReason,
-                    holdTime: t.holdTime ? (t.holdTime/1000).toFixed(1) + 's' : 'N/A'
+                    holdTime: t.holdTime ? (t.holdTime/1000).toFixed(1) + 's' : 'N/A',
+                    // Entry conditions
+                    entryBeta: t.entryBeta ? t.entryBeta.toFixed(4) : 'N/A',
+                    entryMomentum: t.entryMomentum ? t.entryMomentum.toFixed(4) : 'N/A',
+                    entryMeanDev: t.entryMeanDev ? t.entryMeanDev.toFixed(4) + '%' : 'N/A',
+                    // Quality flags
+                    wasHighBeta: t.wasHighBeta || false,
+                    wasOversold: t.entryMeanDev && t.entryMeanDev < -0.05
                 }))
             };
             
@@ -2179,18 +2231,35 @@
             console.log('📊 AUTO-SAVED TEST RESULTS');
             console.log(JSON.stringify(report.summary, null, 2));
             
+            // Generate STRATEGY_LOG.md row for easy copying
+            const pnlFormatted = totalPnl >= 0 ? `+$${totalPnl.toFixed(2)}` : `-$${Math.abs(totalPnl).toFixed(2)}`;
+            const wrFormatted = winRate >= 60 ? `**${winRate.toFixed(0)}%**` : `${winRate.toFixed(0)}%`;
+            const pnlMd = totalPnl >= 0 ? `**${pnlFormatted}**` : `**${pnlFormatted}**`;
+            const outcome = winRate >= 60 && totalPnl > 0 ? '✅ Good' : winRate < 30 || totalPnl < -5 ? '❌ Bad' : '⚠️ Mixed';
+            
+            const strategyLogRow = `| ${testNumber} | ${dateStr} | ${wrFormatted} | ${pnlMd} | ${report.strategyConfig.name} | ${outcome} |`;
+            report.strategyLogRow = strategyLogRow;
+            
+            console.log('📝 STRATEGY_LOG.md row:');
+            console.log(strategyLogRow);
+            
             // Download JSON file
+            const filename = `scalper-test-${testNumber}-${timestamp}.json`;
             const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `scalper-test-${Date.now()}.json`;
+            a.download = filename;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
             
-            console.log('💾 Saved to downloads: scalper-test-' + Date.now() + '.json');
+            console.log('💾 Saved to downloads: ' + filename);
+            
+            // Increment test number for next test
+            state.testNumber = (state.testNumber || 9) + 1;
+            localStorage.setItem('scalperTestNumber', state.testNumber);
         }
 
         // =============================================

@@ -1145,17 +1145,17 @@
                 console.log(`🔄 MEAN REVERSION: LONG (oversold by ${Math.abs(volData.meanDeviation || 0).toFixed(3)}%, β=${volData.beta.toFixed(3)})`);
             }
             
-            // DYNAMIC POSITION SIZING: Increase size for high-quality setups
-            // β≥0.15 = $150 (proven winners from data)
-            // β≥0.10 = $125 (good setups)
-            // β<0.10 = $100 (baseline)
-            let positionSize = config.positionSize;
+            // AGGRESSIVE POSITION SIZING: Bigger size for better risk/reward
+            // β≥0.15 = $250 (high vol = bigger moves)
+            // β≥0.10 = $200 (good setups)
+            // β<0.10 = $150 (baseline increased)
+            let positionSize = 150; // Increased baseline
             if (volData.beta >= 0.15) {
-                positionSize = 150;
-                console.log(`💰 HIGH BETA (${volData.beta.toFixed(3)}) - Increasing position to $150`);
+                positionSize = 250;
+                console.log(`💰 HIGH BETA (${volData.beta.toFixed(3)}) - Position: $250`);
             } else if (volData.beta >= 0.10) {
-                positionSize = 125;
-                console.log(`💵 GOOD BETA (${volData.beta.toFixed(3)}) - Increasing position to $125`);
+                positionSize = 200;
+                console.log(`💵 GOOD BETA (${volData.beta.toFixed(3)}) - Position: $200`);
             }
             
             console.log(`🔄 MEAN REVERSION: LONG (oversold by ${Math.abs(volData.meanDeviation || 0).toFixed(3)}%, β=${volData.beta.toFixed(3)})`);
@@ -2007,30 +2007,30 @@
             if (!trade.peakPnl) trade.peakPnl = netPnl;
             if (netPnl > trade.peakPnl) trade.peakPnl = netPnl;
             
-            // 1. TRAILING STOP - Let winners run but protect profit
-            // If we're up 2x costs or more, trail with 50% stop (lock in half)
-            if (trade.peakPnl > costs.total * 2.0) {
-                const trailStop = trade.peakPnl * 0.5; // Protect 50% of peak
+            // 1. TRAILING STOP - Let winners run, protect 60% of peak
+            // Activate when profit > 3x costs
+            if (trade.peakPnl > costs.total * 3.0) {
+                const trailStop = trade.peakPnl * 0.6; // Protect 60% of peak (was 50%)
                 if (netPnl < trailStop) {
                     shouldExit = true;
                     exitReason = 'trailing_stop';
                     console.log(`📉 Trailing stop: Peak $${trade.peakPnl.toFixed(2)} → Current $${netPnl.toFixed(2)}`);
                 }
             }
-            // 2. INSTANT WIN - Any profit after 5s (quick scalp)
-            else if (netPnl > costs.total * 0.2 && elapsed > 5000) {
+            // 2. BIG WIN - Lock in 5x costs ($0.60-1.00+ profit)
+            else if (netPnl > costs.total * 5.0) {
                 shouldExit = true;
-                exitReason = 'quick_profit';
+                exitReason = 'big_profit';
             }
-            // 3. SMALL WIN - 1.5x costs (was 1x, letting it breathe a bit)
-            else if (netPnl > costs.total * 1.5 && elapsed > 1000) {
+            // 3. GOOD WIN - 2.5x costs after 3+ seconds (let it breathe)
+            else if (netPnl > costs.total * 2.5 && elapsed > 3000) {
                 shouldExit = true;
                 exitReason = 'profit_target';
             }
-            // 4. BIG WIN - 4x costs (lock in big gains)
-            else if (netPnl > costs.total * 4.0) {
+            // 4. QUICK SCALP - Small profit after 8s (was 5s)
+            else if (netPnl > costs.total * 0.5 && elapsed > 8000) {
                 shouldExit = true;
-                exitReason = 'big_profit';
+                exitReason = 'quick_profit';
             }
             // 5. MEAN REVERSION COMPLETE - Price bounced back
             else if (strategy === 'reversion' && volData && Math.abs(volData.meanDeviation || 0) < 0.05) {
@@ -2040,8 +2040,8 @@
                     exitReason = 'reversion_complete';
                 }
             }
-            // 6. STOP LOSS - Cut losses at -1.5x costs (tighter than -2x, wider than -1x)
-            else if (netPnl < -costs.total * 1.5) {
+            // 6. STOP LOSS - Cut losses FAST at -1x costs (tight stop, proven in Test #3)
+            else if (netPnl < -costs.total * 1.0) {
                 shouldExit = true;
                 exitReason = 'fast_stop';
             }

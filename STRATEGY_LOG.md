@@ -17,6 +17,7 @@ This document tracks all strategy iterations, test results, and learnings to pre
 | 7 | 2026-01-07 | 40% | -$3.93 | Hybrid momentum + reversion | Still struggling, @174 big loss, BABY fast_stops |
 | 8 | 2026-01-07 | **8%** | **-$15.93** | Aggressive sizing ($150-250) | ❌ **WORST RUN** - Bigger positions = bigger losses |
 | 9 | 2026-01-07 | 48% | -$0.36 | Test #3 config (validation) | BABY 7 fast_stops in row killed it (-$1.59). Adding cooldowns |
+| 10 | 2026-01-07 | 44% | +$0.14 | + Symbol cooldowns | No BABY spam! But @248 flash crash -$1.41. FOGO +$2.68 |
 
 ---
 

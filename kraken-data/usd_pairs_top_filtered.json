@@ -1,0 +1,870 @@
+[
+  {
+    "pair": "1INCHUSD",
+    "wsname": "1INCH/USD",
+    "altname": "1INCHUSD",
+    "min_order": "11",
+    "fees": 0.4
+  },
+  {
+    "pair": "AAVEUSD",
+    "wsname": "AAVE/USD",
+    "altname": "AAVEUSD",
+    "min_order": "0.015",
+    "fees": 0.4
+  },
+  {
+    "pair": "AGLDUSD",
+    "wsname": "AGLD/USD",
+    "altname": "AGLDUSD",
+    "min_order": "1.8",
+    "fees": 0.4
+  },
+  {
+    "pair": "ALGOUSD",
+    "wsname": "ALGO/USD",
+    "altname": "ALGOUSD",
+    "min_order": "10",
+    "fees": 0.4
+  },
+  {
+    "pair": "ALMANAKUSD",
+    "wsname": "ALMANAK/USD",
+    "altname": "ALMANAKUSD",
+    "min_order": "50",
+    "fees": 0.4
+  },
+  {
+    "pair": "APENFTUSD",
+    "wsname": "APENFT/USD",
+    "altname": "APENFTUSD",
+    "min_order": "10000000",
+    "fees": 0.4
+  },
+  {
+    "pair": "APEUSD",
+    "wsname": "APE/USD",
+    "altname": "APEUSD",
+    "min_order": "18",
+    "fees": 0.4
+  },
+  {
+    "pair": "ARBUSD",
+    "wsname": "ARB/USD",
+    "altname": "ARBUSD",
+    "min_order": "5.2",
+    "fees": 0.4
+  },
+  {
+    "pair": "ATOMUSD",
+    "wsname": "ATOM/USD",
+    "altname": "ATOMUSD",
+    "min_order": "0.5",
+    "fees": 0.4
+  },
+  {
+    "pair": "AUDIOUSD",
+    "wsname": "AUDIO/USD",
+    "altname": "AUDIOUSD",
+    "min_order": "145",
+    "fees": 0.4
+  },
+  {
+    "pair": "AVAXUSD",
+    "wsname": "AVAX/USD",
+    "altname": "AVAXUSD",
+    "min_order": "0.1",
+    "fees": 0.4
+  },
+  {
+    "pair": "AXSUSD",
+    "wsname": "AXS/USD",
+    "altname": "AXSUSD",
+    "min_order": "4.5",
+    "fees": 0.4
+  },
+  {
+    "pair": "BADGERUSD",
+    "wsname": "BADGER/USD",
+    "altname": "BADGERUSD",
+    "min_order": "8.8",
+    "fees": 0.4
+  },
+  {
+    "pair": "BALUSD",
+    "wsname": "BAL/USD",
+    "altname": "BALUSD",
+    "min_order": "1.5",
+    "fees": 0.4
+  },
+  {
+    "pair": "BANDUSD",
+    "wsname": "BAND/USD",
+    "altname": "BANDUSD",
+    "min_order": "2.7",
+    "fees": 0.4
+  },
+  {
+    "pair": "BATUSD",
+    "wsname": "BAT/USD",
+    "altname": "BATUSD",
+    "min_order": "16",
+    "fees": 0.4
+  },
+  {
+    "pair": "BCHUSD",
+    "wsname": "BCH/USD",
+    "altname": "BCHUSD",
+    "min_order": "0.01",
+    "fees": 0.4
+  },
+  {
+    "pair": "BLURUSD",
+    "wsname": "BLUR/USD",
+    "altname": "BLURUSD",
+    "min_order": "129",
+    "fees": 0.4
+  },
+  {
+    "pair": "BNTUSD",
+    "wsname": "BNT/USD",
+    "altname": "BNTUSD",
+    "min_order": "6",
+    "fees": 0.4
+  },
+  {
+    "pair": "BONKUSD",
+    "wsname": "BONK/USD",
+    "altname": "BONKUSD",
+    "min_order": "500000",
+    "fees": 0.4
+  },
+  {
+    "pair": "C98USD",
+    "wsname": "C98/USD",
+    "altname": "C98USD",
+    "min_order": "175",
+    "fees": 0.4
+  },
+  {
+    "pair": "CAKEUSD",
+    "wsname": "CAKE/USD",
+    "altname": "CAKEUSD",
+    "min_order": "1",
+    "fees": 0.4
+  },
+  {
+    "pair": "CELOUSD",
+    "wsname": "CELO/USD",
+    "altname": "CELOUSD",
+    "min_order": "10",
+    "fees": 0.4
+  },
+  {
+    "pair": "CELRUSD",
+    "wsname": "CELR/USD",
+    "altname": "CELRUSD",
+    "min_order": "260",
+    "fees": 0.4
+  },
+  {
+    "pair": "CHZUSD",
+    "wsname": "CHZ/USD",
+    "altname": "CHZUSD",
+    "min_order": "50",
+    "fees": 0.4
+  },
+  {
+    "pair": "CMETHUSD",
+    "wsname": "CMETH/USD",
+    "altname": "CMETHUSD",
+    "min_order": "0.001",
+    "fees": 0.4
+  },
+  {
+    "pair": "COMPUSD",
+    "wsname": "COMP/USD",
+    "altname": "COMPUSD",
+    "min_order": "0.06",
+    "fees": 0.4
+  },
+  {
+    "pair": "COPMUSD",
+    "wsname": "COPM/USD",
+    "altname": "COPMUSD",
+    "min_order": "20000",
+    "fees": 0.2
+  },
+  {
+    "pair": "CRVUSD",
+    "wsname": "CRV/USD",
+    "altname": "CRVUSD",
+    "min_order": "4.5",
+    "fees": 0.4
+  },
+  {
+    "pair": "CTSIUSD",
+    "wsname": "CTSI/USD",
+    "altname": "CTSIUSD",
+    "min_order": "114",
+    "fees": 0.4
+  },
+  {
+    "pair": "CVCUSD",
+    "wsname": "CVC/USD",
+    "altname": "CVCUSD",
+    "min_order": "24",
+    "fees": 0.4
+  },
+  {
+    "pair": "DASHUSD",
+    "wsname": "DASH/USD",
+    "altname": "DASHUSD",
+    "min_order": "0.09",
+    "fees": 0.4
+  },
+  {
+    "pair": "DENTUSD",
+    "wsname": "DENT/USD",
+    "altname": "DENTUSD",
+    "min_order": "3100",
+    "fees": 0.4
+  },
+  {
+    "pair": "DYDXUSD",
+    "wsname": "DYDX/USD",
+    "altname": "DYDXUSD",
+    "min_order": "20",
+    "fees": 0.4
+  },
+  {
+    "pair": "ENJUSD",
+    "wsname": "ENJ/USD",
+    "altname": "ENJUSD",
+    "min_order": "148",
+    "fees": 0.4
+  },
+  {
+    "pair": "ETHFIUSD",
+    "wsname": "ETHFI/USD",
+    "altname": "ETHFIUSD",
+    "min_order": "2",
+    "fees": 0.4
+  },
+  {
+    "pair": "ETHPYUSD",
+    "wsname": "ETH/PYUSD",
+    "altname": "ETHPYUSD",
+    "min_order": "0.001",
+    "fees": 0.4
+  },
+  {
+    "pair": "ETHWUSD",
+    "wsname": "ETHW/USD",
+    "altname": "ETHWUSD",
+    "min_order": "8.3",
+    "fees": 0.4
+  },
+  {
+    "pair": "EUROPUSD",
+    "wsname": "EUROP/USD",
+    "altname": "EUROPUSD",
+    "min_order": "5",
+    "fees": 0.2
+  },
+  {
+    "pair": "FETUSD",
+    "wsname": "FET/USD",
+    "altname": "FETUSD",
+    "min_order": "18",
+    "fees": 0.4
+  },
+  {
+    "pair": "FIDAUSD",
+    "wsname": "FIDA/USD",
+    "altname": "FIDAUSD",
+    "min_order": "109",
+    "fees": 0.4
+  },
+  {
+    "pair": "FILUSD",
+    "wsname": "FIL/USD",
+    "altname": "FILUSD",
+    "min_order": "0.7",
+    "fees": 0.4
+  },
+  {
+    "pair": "FLOWUSD",
+    "wsname": "FLOW/USD",
+    "altname": "FLOWUSD",
+    "min_order": "5",
+    "fees": 0.4
+  },
+  {
+    "pair": "FORTHUSD",
+    "wsname": "FORTH/USD",
+    "altname": "FORTHUSD",
+    "min_order": "0.9",
+    "fees": 0.4
+  },
+  {
+    "pair": "GALAUSD",
+    "wsname": "GALA/USD",
+    "altname": "GALAUSD",
+    "min_order": "650",
+    "fees": 0.4
+  },
+  {
+    "pair": "GMTUSD",
+    "wsname": "GMT/USD",
+    "altname": "GMTUSD",
+    "min_order": "263",
+    "fees": 0.4
+  },
+  {
+    "pair": "GMXUSD",
+    "wsname": "GMX/USD",
+    "altname": "GMXUSD",
+    "min_order": "0.13",
+    "fees": 0.4
+  },
+  {
+    "pair": "GRTUSD",
+    "wsname": "GRT/USD",
+    "altname": "GRTUSD",
+    "min_order": "98",
+    "fees": 0.4
+  },
+  {
+    "pair": "GTCUSD",
+    "wsname": "GTC/USD",
+    "altname": "GTCUSD",
+    "min_order": "32",
+    "fees": 0.4
+  },
+  {
+    "pair": "HNTUSD",
+    "wsname": "HNT/USD",
+    "altname": "HNTUSD",
+    "min_order": "0.65",
+    "fees": 0.4
+  },
+  {
+    "pair": "ICPUSD",
+    "wsname": "ICP/USD",
+    "altname": "ICPUSD",
+    "min_order": "0.4",
+    "fees": 0.4
+  },
+  {
+    "pair": "IDEXUSD",
+    "wsname": "IDEX/USD",
+    "altname": "IDEXUSD",
+    "min_order": "350",
+    "fees": 0.4
+  },
+  {
+    "pair": "INJUSD",
+    "wsname": "INJ/USD",
+    "altname": "INJUSD",
+    "min_order": "0.9",
+    "fees": 0.4
+  },
+  {
+    "pair": "JITOSOLUSD",
+    "wsname": "JITOSOL/USD",
+    "altname": "JITOSOLUSD",
+    "min_order": "0.02",
+    "fees": 0.4
+  },
+  {
+    "pair": "JTOUSD",
+    "wsname": "JTO/USD",
+    "altname": "JTOUSD",
+    "min_order": "9.7",
+    "fees": 0.4
+  },
+  {
+    "pair": "KAVAUSD",
+    "wsname": "KAVA/USD",
+    "altname": "KAVAUSD",
+    "min_order": "42",
+    "fees": 0.4
+  },
+  {
+    "pair": "KERNELUSD",
+    "wsname": "KERNEL/USD",
+    "altname": "KERNELUSD",
+    "min_order": "56",
+    "fees": 0.4
+  },
+  {
+    "pair": "KNCUSD",
+    "wsname": "KNC/USD",
+    "altname": "KNCUSD",
+    "min_order": "8",
+    "fees": 0.4
+  },
+  {
+    "pair": "KSMUSD",
+    "wsname": "KSM/USD",
+    "altname": "KSMUSD",
+    "min_order": "0.12",
+    "fees": 0.4
+  },
+  {
+    "pair": "LDOUSD",
+    "wsname": "LDO/USD",
+    "altname": "LDOUSD",
+    "min_order": "2.8",
+    "fees": 0.4
+  },
+  {
+    "pair": "LINKUSD",
+    "wsname": "LINK/USD",
+    "altname": "LINKUSD",
+    "min_order": "0.2",
+    "fees": 0.4
+  },
+  {
+    "pair": "LPTUSD",
+    "wsname": "LPT/USD",
+    "altname": "LPTUSD",
+    "min_order": "0.3",
+    "fees": 0.4
+  },
+  {
+    "pair": "LRCUSD",
+    "wsname": "LRC/USD",
+    "altname": "LRCUSD",
+    "min_order": "20",
+    "fees": 0.4
+  },
+  {
+    "pair": "LSETHUSD",
+    "wsname": "LSETH/USD",
+    "altname": "LSETHUSD",
+    "min_order": "0.001",
+    "fees": 0.4
+  },
+  {
+    "pair": "LSSOLUSD",
+    "wsname": "LSSOL/USD",
+    "altname": "LSSOLUSD",
+    "min_order": "0.02",
+    "fees": 0.4
+  },
+  {
+    "pair": "MANAUSD",
+    "wsname": "MANA/USD",
+    "altname": "MANAUSD",
+    "min_order": "8",
+    "fees": 0.4
+  },
+  {
+    "pair": "MEMEUSD",
+    "wsname": "MEME/USD",
+    "altname": "MEMEUSD",
+    "min_order": "2100",
+    "fees": 0.4
+  },
+  {
+    "pair": "METHUSD",
+    "wsname": "METH/USD",
+    "altname": "METHUSD",
+    "min_order": "0.001",
+    "fees": 0.4
+  },
+  {
+    "pair": "MINAUSD",
+    "wsname": "MINA/USD",
+    "altname": "MINAUSD",
+    "min_order": "45",
+    "fees": 0.4
+  },
+  {
+    "pair": "MIRAUSD",
+    "wsname": "MIRA/USD",
+    "altname": "MIRAUSD",
+    "min_order": "10",
+    "fees": 0.4
+  },
+  {
+    "pair": "MIRRORUSD",
+    "wsname": "MIRROR/USD",
+    "altname": "MIRRORUSD",
+    "min_order": "1480",
+    "fees": 0.4
+  },
+  {
+    "pair": "MIRUSD",
+    "wsname": "MIR/USD",
+    "altname": "MIRUSD",
+    "min_order": "150",
+    "fees": 0.4
+  },
+  {
+    "pair": "MSOLUSD",
+    "wsname": "MSOL/USD",
+    "altname": "MSOLUSD",
+    "min_order": "0.017",
+    "fees": 0.4
+  },
+  {
+    "pair": "NMRUSD",
+    "wsname": "NMR/USD",
+    "altname": "NMRUSD",
+    "min_order": "0.2",
+    "fees": 0.4
+  },
+  {
+    "pair": "OCEANUSD",
+    "wsname": "OCEAN/USD",
+    "altname": "OCEANUSD",
+    "min_order": "6",
+    "fees": 0.4
+  },
+  {
+    "pair": "OPENUSD",
+    "wsname": "OPEN/USD",
+    "altname": "OPENUSD",
+    "min_order": "8",
+    "fees": 0.4
+  },
+  {
+    "pair": "OPUSD",
+    "wsname": "OP/USD",
+    "altname": "OPUSD",
+    "min_order": "16",
+    "fees": 0.4
+  },
+  {
+    "pair": "OXTUSD",
+    "wsname": "OXT/USD",
+    "altname": "OXTUSD",
+    "min_order": "40",
+    "fees": 0.4
+  },
+  {
+    "pair": "PAXGUSD",
+    "wsname": "PAXG/USD",
+    "altname": "PAXGUSD",
+    "min_order": "0.001",
+    "fees": 0.4
+  },
+  {
+    "pair": "PEPEUSD",
+    "wsname": "PEPE/USD",
+    "altname": "PEPEUSD",
+    "min_order": "250000",
+    "fees": 0.4
+  },
+  {
+    "pair": "PERPUSD",
+    "wsname": "PERP/USD",
+    "altname": "PERPUSD",
+    "min_order": "37",
+    "fees": 0.4
+  },
+  {
+    "pair": "POPCATUSD",
+    "wsname": "POPCAT/USD",
+    "altname": "POPCATUSD",
+    "min_order": "20",
+    "fees": 0.4
+  },
+  {
+    "pair": "PYTHUSD",
+    "wsname": "PYTH/USD",
+    "altname": "PYTHUSD",
+    "min_order": "66",
+    "fees": 0.4
+  },
+  {
+    "pair": "QNTUSD",
+    "wsname": "QNT/USD",
+    "altname": "QNTUSD",
+    "min_order": "0.04",
+    "fees": 0.4
+  },
+  {
+    "pair": "QTUMUSD",
+    "wsname": "QTUM/USD",
+    "altname": "QTUMUSD",
+    "min_order": "1.2",
+    "fees": 0.4
+  },
+  {
+    "pair": "RENDERUSD",
+    "wsname": "RENDER/USD",
+    "altname": "RENDERUSD",
+    "min_order": "0.6",
+    "fees": 0.4
+  },
+  {
+    "pair": "RENUSD",
+    "wsname": "REN/USD",
+    "altname": "RENUSD",
+    "min_order": "800",
+    "fees": 0.4
+  },
+  {
+    "pair": "RLCUSD",
+    "wsname": "RLC/USD",
+    "altname": "RLCUSD",
+    "min_order": "2",
+    "fees": 0.4
+  },
+  {
+    "pair": "RSRUSD",
+    "wsname": "RSR/USD",
+    "altname": "RSRUSD",
+    "min_order": "1450",
+    "fees": 0.4
+  },
+  {
+    "pair": "RUNEUSD",
+    "wsname": "RUNE/USD",
+    "altname": "RUNEUSD",
+    "min_order": "8",
+    "fees": 0.4
+  },
+  {
+    "pair": "SANDUSD",
+    "wsname": "SAND/USD",
+    "altname": "SANDUSD",
+    "min_order": "8",
+    "fees": 0.4
+  },
+  {
+    "pair": "SEIUSD",
+    "wsname": "SEI/USD",
+    "altname": "SEIUSD",
+    "min_order": "35",
+    "fees": 0.4
+  },
+  {
+    "pair": "SHIBUSD",
+    "wsname": "SHIB/USD",
+    "altname": "SHIBUSD",
+    "min_order": "160000",
+    "fees": 0.4
+  },
+  {
+    "pair": "SIDEKICKUSD",
+    "wsname": "SIDEKICK/USD",
+    "altname": "SIDEKICKUSD",
+    "min_order": "480",
+    "fees": 0.4
+  },
+  {
+    "pair": "SNXUSD",
+    "wsname": "SNX/USD",
+    "altname": "SNXUSD",
+    "min_order": "9",
+    "fees": 0.4
+  },
+  {
+    "pair": "SOLUSD",
+    "wsname": "SOL/USD",
+    "altname": "SOLUSD",
+    "min_order": "0.02",
+    "fees": 0.4
+  },
+  {
+    "pair": "SOLVUSD",
+    "wsname": "SOLV/USD",
+    "altname": "SOLVUSD",
+    "min_order": "90",
+    "fees": 0.4
+  },
+  {
+    "pair": "SRMUSD",
+    "wsname": "SRM/USD",
+    "altname": "SRMUSD",
+    "min_order": "700",
+    "fees": 0.4
+  },
+  {
+    "pair": "STORJUSD",
+    "wsname": "STORJ/USD",
+    "altname": "STORJUSD",
+    "min_order": "7",
+    "fees": 0.4
+  },
+  {
+    "pair": "SUIUSD",
+    "wsname": "SUI/USD",
+    "altname": "SUIUSD",
+    "min_order": "0.9",
+    "fees": 0.4
+  },
+  {
+    "pair": "SUSHIUSD",
+    "wsname": "SUSHI/USD",
+    "altname": "SUSHIUSD",
+    "min_order": "2.5",
+    "fees": 0.4
+  },
+  {
+    "pair": "TBTCUSD",
+    "wsname": "TBTC/USD",
+    "altname": "TBTCUSD",
+    "min_order": "0.00005",
+    "fees": 0.4
+  },
+  {
+    "pair": "TIAUSD",
+    "wsname": "TIA/USD",
+    "altname": "TIAUSD",
+    "min_order": "8.2",
+    "fees": 0.4
+  },
+  {
+    "pair": "TNSRUSD",
+    "wsname": "TNSR/USD",
+    "altname": "TNSRUSD",
+    "min_order": "8.5",
+    "fees": 0.4
+  },
+  {
+    "pair": "TRXUSD",
+    "wsname": "TRX/USD",
+    "altname": "TRXUSD",
+    "min_order": "15",
+    "fees": 0.4
+  },
+  {
+    "pair": "UNITEUSD",
+    "wsname": "UNITE/USD",
+    "altname": "UNITEUSD",
+    "min_order": "13500",
+    "fees": 0.4
+  },
+  {
+    "pair": "UNIUSD",
+    "wsname": "UNI/USD",
+    "altname": "UNIUSD",
+    "min_order": "0.3",
+    "fees": 0.4
+  },
+  {
+    "pair": "UXLINKUSD",
+    "wsname": "UXLINK/USD",
+    "altname": "UXLINKUSD",
+    "min_order": "236",
+    "fees": 0.4
+  },
+  {
+    "pair": "VELVETUSD",
+    "wsname": "VELVET/USD",
+    "altname": "VELVETUSD",
+    "min_order": "27",
+    "fees": 0.4
+  },
+  {
+    "pair": "VETUSD",
+    "wsname": "VET/USD",
+    "altname": "VETUSD",
+    "min_order": "200",
+    "fees": 0.4
+  },
+  {
+    "pair": "WBTCUSD",
+    "wsname": "WBTC/USD",
+    "altname": "WBTCUSD",
+    "min_order": "0.00005",
+    "fees": 0.4
+  },
+  {
+    "pair": "WIFUSD",
+    "wsname": "WIF/USD",
+    "altname": "WIFUSD",
+    "min_order": "14",
+    "fees": 0.4
+  },
+  {
+    "pair": "XDCUSD",
+    "wsname": "XDC/USD",
+    "altname": "XDCUSD",
+    "min_order": "70",
+    "fees": 0.4
+  },
+  {
+    "pair": "XETHZUSD",
+    "wsname": "ETH/USD",
+    "altname": "ETHUSD",
+    "min_order": "0.001",
+    "fees": 0.4
+  },
+  {
+    "pair": "XLTCZUSD",
+    "wsname": "LTC/USD",
+    "altname": "LTCUSD",
+    "min_order": "0.04",
+    "fees": 0.4
+  },
+  {
+    "pair": "XRPRLUSD",
+    "wsname": "XRP/RLUSD",
+    "altname": "XRPRLUSD",
+    "min_order": "1.65",
+    "fees": 0.4
+  },
+  {
+    "pair": "XTZUSD",
+    "wsname": "XTZ/USD",
+    "altname": "XTZUSD",
+    "min_order": "3",
+    "fees": 0.4
+  },
+  {
+    "pair": "XXLMZUSD",
+    "wsname": "XLM/USD",
+    "altname": "XLMUSD",
+    "min_order": "12",
+    "fees": 0.4
+  },
+  {
+    "pair": "XXMRZUSD",
+    "wsname": "XMR/USD",
+    "altname": "XMRUSD",
+    "min_order": "0.015",
+    "fees": 0.4
+  },
+  {
+    "pair": "XXRPZUSD",
+    "wsname": "XRP/USD",
+    "altname": "XRPUSD",
+    "min_order": "1.65",
+    "fees": 0.4
+  },
+  {
+    "pair": "XZECZUSD",
+    "wsname": "ZEC/USD",
+    "altname": "ZECUSD",
+    "min_order": "0.01",
+    "fees": 0.4
+  },
+  {
+    "pair": "YFIUSD",
+    "wsname": "YFI/USD",
+    "altname": "YFIUSD",
+    "min_order": "0.0006",
+    "fees": 0.4
+  },
+  {
+    "pair": "ZETAUSD",
+    "wsname": "ZETA/USD",
+    "altname": "ZETAUSD",
+    "min_order": "56",
+    "fees": 0.4
+  },
+  {
+    "pair": "ZRXUSD",
+    "wsname": "ZRX/USD",
+    "altname": "ZRXUSD",
+    "min_order": "9",
+    "fees": 0.4
+  }
+]

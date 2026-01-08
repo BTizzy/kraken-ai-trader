@@ -766,36 +766,32 @@
     </div>
 
     <script src="hyperliquid.js"></script>
+    <script src="kraken.js"></script>
     <script>
+        var krakenPriceFeed = new KrakenPriceFeed();
+
         // =============================================
         // STATE & CONFIG
         // =============================================
         const config = {
-            tradeWindowSeconds: 120,  // 2 minutes - realistic for 0.3%+ moves
-            positionSize: 100,    // Bigger size = costs are smaller % of trade
-            
+            tradeWindowSeconds: 60,  // Shortened from 120 for faster scalping
+            positionSize: 100,
             // REALISTIC SCALPING THRESHOLDS
-            // With 0.12% costs on $50, we need 0.15%+ moves to profit
-            // Strategy: Mean reversion + momentum continuation
-            minVolatilityForHot: 0.02,      // 2% shows activity
-            minVolatilityForSpike: 0.05,    // 5% is tradeable  
-            minVolatilityForExtreme: 0.10,  // 10%+ is high probability
-
-            // Momentum thresholds
-            minMomentumForEntry: 0.035,     // Need price moving in a direction (lowered)
-            
+            minVolatilityForHot: 0.02,
+            minVolatilityForSpike: 0.05,
+            minVolatilityForExtreme: 0.10,
+            minMomentumForEntry: 0.035,
             tradesForAutoUnlock: 20,
-            pollingRate: 50, // Much faster updates (50ms instead of 100ms)
-            
+            pollingRate: 50,
             // ========================================
-            // EXACT HYPERLIQUID FEES (Real wallet costs)
+            // KRAKEN SPOT FEES
             // ========================================
-            takerFeePercent: 0.035,
-            makerFeePercent: 0.01,
-            gasFeeUSD: 0,
-            slippagePercent: 0.02,
-            spreadPercent: 0.01,
-            fundingRatePercent: 0.01
+            takerFeePercent: 0.4,    // 0.4% taker fee (lowest tier)
+            makerFeePercent: 0.0,    // 0% maker fee
+            gasFeeUSD: 0,            // No gas fee for spot
+            slippagePercent: 0.05,   // 0.05% default slippage
+            spreadPercent: 0.01,     // 0.01% default spread
+            fundingRatePercent: 0.0  // No funding rate for spot
         };
         
         // Calculate total round-trip cost
@@ -822,12 +818,13 @@
                 entryFee,
                 exitFee,
                 totalFees,
-                slippage: totalSlippage,
-                spread: totalSpread,
-                gas: config.gasFeeUSD,
-                total: totalCost,
-                totalPercent: (totalCost / positionSize) * 100,
-                breakEvenPercent: (totalCost / positionSize) * 100 // Need this % gain to break even
+                entrySlippage,
+                exitSlippage,
+                totalSlippage,
+                entrySpread,
+                exitSpread,
+                totalSpread,
+                totalCost
             };
         }
 
@@ -931,6 +928,9 @@
                 return; // Skip unchanged prices to avoid zero-return inflation
             }
 
+            // Debug: Log every price update received
+            console.log(`[Volatility] Price update for ${symbol}: ${price}`);
+
             const now = Date.now();
             data.prices.push(price);
             data.timestamps.push(now);
@@ -944,7 +944,7 @@
             }
 
             // Calculate beta (volatility) - standard deviation of returns
-            if (data.prices.length > 5) {
+            if (data.prices.length > 1) {  // Changed from >5 to >1 for more pairs
                 const returns = [];
                 for (let i = 1; i < data.prices.length; i++) {
                     returns.push((data.prices[i] - data.prices[i-1]) / data.prices[i-1] * 100);
@@ -1012,16 +1012,23 @@
             const items = [];
             
             volatilityData.forEach((data, symbol) => {
-                if (data.prices.length < 5) return; // Need at least 5 price points
-                
-                // Match actual volatility: beta ~0.001
-                const isExtreme = data.beta >= 0.002;
-                const isSpiking = data.beta >= 0.001 || data.spikeRatio > 2;
-                const isHot = data.beta >= 0.0005;
-                
-                // ENTRY SIGNAL: Any volatility at all
-                const hasEntrySignal = data.beta >= 0.0005;
-                
+                if (data.prices.length < 1) return; // Need at least 1 price point
+                // Lowered thresholds for more frequent signals
+                const isExtreme = data.beta >= 0.025;
+                const isSpiking = data.beta >= 0.01 || data.spikeRatio > 2;
+                const isHot = data.beta >= 0.001;  // Lowered from 0.005
+                // ENTRY SIGNAL: Any volatility, momentum, mean deviation, or recent jump
+                const hasEntrySignal = (
+                    data.beta >= 0.001 ||  // Lowered from 0.005
+                    Math.abs(data.momentum) > 0.01 ||
+                    Math.abs(data.meanDeviation || 0) > 0.05 ||
+                    (data.recentJump || 0) > 0.5 // 0.5% jump in last 5s
+                );
+
+                if (hasEntrySignal) {
+                    console.log(`[ENTRY SIGNAL] ${symbol}: β=${data.beta.toFixed(4)}, mom=${data.momentum.toFixed(4)}, dev=${(data.meanDeviation||0).toFixed(4)}, jump=${(data.recentJump||0).toFixed(2)}`);
+                }
+
                 items.push({
                     symbol,
                     price: data.lastPrice,
@@ -1031,12 +1038,19 @@
                     expectedMove: data.expectedMove || 0,
                     trendStrength: data.trendStrength || 0,
                     trendDirection: data.trendDirection || 0,
+                    recentJump: data.recentJump || 0,
+                    meanDeviation: data.meanDeviation || 0,
                     isHot,
                     isSpiking,
                     isExtreme,
                     hasEntrySignal
                 });
             });
+            // Log top 20 pairs by volatility
+            if (items.length > 0) {
+                const sorted = [...items].sort((a, b) => b.beta - a.beta);
+                console.log('Top 20 by volatility:', sorted.slice(0, 20).map(i => `${i.symbol}: β=${i.beta.toFixed(4)}, mom=${i.momentum.toFixed(4)}, jump=${i.recentJump?.toFixed(2)}`));
+            }
 
             // Sort by: Entry signals first, then by beta
             items.sort((a, b) => {
@@ -1057,7 +1071,7 @@
                 return;
             }
 
-            el.scannerGrid.innerHTML = items.slice(0, 12).map(item => {
+            el.scannerGrid.innerHTML = items.slice(0, 20).map(item => {
                 const volPercent = Math.min(100, (item.beta / 0.5) * 100);
                 const volClass = item.isExtreme ? 'extreme' : (item.isSpiking ? 'high' : (item.isHot ? 'medium' : 'low'));
                 
@@ -1135,8 +1149,22 @@
             confidence = Math.min(0.95, 0.6 + Math.abs(volData.meanDeviation || 0) * 1.5);
             console.log(`🔄 MEAN REVERSION: LONG (oversold by ${Math.abs(volData.meanDeviation || 0).toFixed(3)}%, β=${volData.beta.toFixed(3)})`);
             
-            // CONSERVATIVE POSITION SIZING: $100 until profitable
-            let positionSize = 100;
+            // CONSERVATIVE BETA-BASED POSITION SIZING: Higher beta = larger position, but cap risk
+            // β≥0.50: High risk → $75 (reduced to prevent catastrophic losses)
+            // POSITION SIZING: Conservative beta-scaled (Test #14)
+            // Since we filter out β>0.5 symbols entirely, no high-beta penalty needed
+            // β≥0.30: 100% WR → $100 position (capped from $150)
+            // β≥0.20: 83% WR → $100 position  
+            // β<0.20: Smaller position $75
+            let positionSize = 100; // Base size
+            const beta = volData.beta || 0;
+            if (beta >= 0.30) {
+                positionSize = 100; // High confidence, but conservative size
+            } else if (beta >= 0.25) {
+                positionSize = 100; // Good confidence
+            } else if (beta < 0.20) {
+                positionSize = 75; // Lower confidence, smaller position
+            }
             
             state.currentTrade = {
                 symbol,
@@ -1155,9 +1183,9 @@
             state.tradeStartTime = Date.now();
             
             // Subscribe to real-time updates for this symbol (WebSocket)
-            if (hyperliquidPriceFeed.subscribeToSymbol) {
-                hyperliquidPriceFeed.subscribeToSymbol(symbol);
-                console.log(`📡 Subscribed to ${symbol} real-time price feed`);
+            if (krakenPriceFeed.subscribeToSymbol) {
+                krakenPriceFeed.subscribeToSymbol(symbol);
+                console.log(`📡 Subscribed to ${symbol} real-time price feed (Kraken)`);
             }
 
             // Update UI
@@ -1192,7 +1220,7 @@
             if (!state.inTrade || !state.currentTrade) return;
 
             const trade = state.currentTrade;
-            const currentPrice = hyperliquidPriceFeed.getPrice(trade.symbol);
+            const currentPrice = krakenPriceFeed.getPrice(trade.symbol);
             
             if (!currentPrice) return;
 
@@ -1291,7 +1319,7 @@
             if (!state.inTrade || !state.currentTrade) return;
 
             const trade = state.currentTrade;
-            const exitPrice = hyperliquidPriceFeed.getPrice(trade.symbol);
+            const exitPrice = krakenPriceFeed.getPrice(trade.symbol);
             const exitTime = Date.now();
             
             const grossPnlPercent = ((exitPrice - trade.entryPrice) / trade.entryPrice) * 100;
@@ -1517,7 +1545,7 @@
                 insights.push(`🎯 High beta (${trade.beta.toFixed(3)}) + profit = good volatility pick`);
             }
             
-            if (analysis.efficiency < 50 && trade.grossPnl > 0) {
+            if (analysis.efficiency < 50 && trade.grossPnL > 0) {
                 insights.push(`💸 Low efficiency (${analysis.efficiency.toFixed(0)}%) - costs took over half your gross`);
             }
             
@@ -1877,19 +1905,23 @@
                 
                 if (data.prices.length < 5) return; // Need at least 5 REAL price changes
                 
-                // DATA-DRIVEN CONFIG (from Test #10 analysis):
-                // Winners avg β=0.29, Losers avg β=0.09
-                // Raising threshold from 0.05 to 0.10 would have:
-                // - Kept FOGO, @194, @267, LIT (all profitable)
-                // - Filtered @207, @193, @184, @248, MAVIA, PUMP (all losers)
-                const hasStrongSignal = data.isOversold && 
-                                       data.beta >= 0.10 &&  // Raised from 0.05 based on data
-                                       (data.momentum || 0) >= 0;
+                // Use the same entry signals as the scanner
+                const hasEntrySignal = (
+                    data.beta >= 0.001 ||
+                    Math.abs(data.momentum) > 0.01 ||
+                    Math.abs(data.meanDeviation || 0) > 0.05 ||
+                    (data.recentJump || 0) > 0.5
+                );
                 
-                if (hasStrongSignal) {
-                    direction = 1; // Always long
-                    strategyType = 'reversion';
-                    confidence = Math.min(0.95, 0.6 + Math.abs(data.meanDeviation || 0) * 1.5);
+                if (hasEntrySignal) {
+                    // Determine direction based on signals
+                    let direction = 0;
+                    if (data.momentum > 0.01) direction = 1;
+                    else if (data.momentum < -0.01) direction = -1;
+                    else direction = Math.random() > 0.5 ? 1 : -1; // Random if no momentum
+                    
+                    strategyType = data.beta >= 0.01 ? 'momentum' : 'scalping';
+                    confidence = Math.min(0.8, 0.5 + (data.beta * 10)); // Higher beta = higher confidence
                     
                     // Check if volatility is extreme enough for straddle (both directions)
                     const straddleCandidate = data.beta >= 0.03 && data.trendStrength < 0.4;
@@ -2028,19 +2060,19 @@
             if (!trade.peakPnl) trade.peakPnl = netPnl;
             if (netPnl > trade.peakPnl) trade.peakPnl = netPnl;
             
-            // TEST #3 WINNING CONFIG - Simple exits
-            // 1. QUICK PROFIT - Any profit after 5s
-            if (netPnl > costs.total * 0.2 && elapsed > 5000) {
+            // TEST #13 WINNING CONFIG - Reverted to proven settings
+            // 1. QUICK PROFIT - Any profit after 5s (0.3x costs)
+            if (netPnl > costs.total * 0.3 && elapsed > 5000) {
                 shouldExit = true;
                 exitReason = 'quick_profit';
             }
-            // 2. PROFIT TARGET - 1x costs
+            // 2. PROFIT TARGET - 1.0x costs (reverted from 1.5x - wider exits hurt performance)
             else if (netPnl > costs.total * 1.0) {
                 shouldExit = true;
                 exitReason = 'profit_target';
             }
-            // 3. BIG PROFIT - 3x costs
-            else if (netPnl > costs.total * 3.0) {
+            // 3. BIG PROFIT - 4x costs (increased from 3.0x)
+            else if (netPnl > costs.total * 4.0) {
                 shouldExit = true;
                 exitReason = 'big_profit';
             }
@@ -2052,7 +2084,7 @@
                     exitReason = 'reversion_complete';
                 }
             }
-            // 6. STOP LOSS - Cut losses FAST at -1x costs (tight stop, proven in Test #3)
+            // 6. STOP LOSS - Cut losses at -1.0x costs (reverted from 1.5x - wider stops still all losses)
             else if (netPnl < -costs.total * 1.0) {
                 shouldExit = true;
                 exitReason = 'fast_stop';
@@ -2200,24 +2232,30 @@
                 // STRATEGY CONFIG - Capture exactly what was used
                 strategyConfig: {
                     name: 'Data-Driven Mean Reversion',
-                    version: '4.0',
+                    version: '7.0',
                     entry: {
-                        betaThreshold: 0.10, // Raised from 0.05 based on Test #10 analysis
+                        betaThreshold: 0.10, // Reverted from 0.20 - Test #12 regression showed higher threshold hurt performance
                         requireOversold: true,
                         oversoldThreshold: -0.05, // % below mean
                         momentumMin: 0,
                         directionAllowed: 'LONG_ONLY'
                     },
                     exit: {
-                        profitTargetMultiple: 1.0, // x trading costs
-                        stopLossMultiple: 1.0,    // x trading costs
-                        quickProfitThreshold: 0.2, // x costs after 5s
-                        bigProfitThreshold: 3.0,   // x costs
+                        profitTargetMultiple: 1.0, // Reverted from 1.5x - wider exits hurt performance in Test #12
+                        stopLossMultiple: 1.0,    // Reverted from 1.5x - wider stops still all losses
+                        quickProfitThreshold: 0.3, // Increased from 0.2x
+                        bigProfitThreshold: 4.0,   // Increased from 3.0x
                         maxHoldTime: 120000        // 2 minutes
                     },
                     position: {
                         baseSize: 100,
-                        scalingEnabled: false
+                        scalingEnabled: true, // Enable conservative beta-based position sizing
+                        betaScaling: {
+                            minBeta: 0.20,
+                            maxBeta: 0.40,
+                            minSize: 75,
+                            maxSize: 100  // Reduced from 150 to prevent catastrophic losses
+                        }
                     },
                     costs: {
                         takerFee: config.takerFeePercent,
@@ -2337,24 +2375,30 @@
             // Connect to price feed
             try {
                 el.connText.textContent = 'Connecting...';
-                await hyperliquidPriceFeed.connect();
+                await krakenPriceFeed.connect();
                 
                 state.connected = true;
                 el.connDot.classList.add('connected');
                 
                 // Check if WebSocket or REST
-                const isWebSocket = hyperliquidPriceFeed.constructor.name === 'HyperliquidPriceFeed';
-                el.connText.textContent = isWebSocket ? 'Live (WebSocket)' : 'Live (REST)';
+                const isWebSocket = krakenPriceFeed.constructor.name === 'KrakenPriceFeed';
+                el.connText.textContent = isWebSocket ? 'Live (Kraken WebSocket)' : 'Live (REST)';
                 if (isWebSocket) {
-                    console.log('🚀 REAL-TIME WebSocket connection active - millisecond updates!');
+                    console.log('🚀 REAL-TIME Kraken WebSocket connection active - millisecond updates!');
                 }
 
                 // Start update loops
                 setInterval(() => {
                     // Update volatility for all prices
-                    const prices = hyperliquidPriceFeed.getAllPrices();
+                    const prices = krakenPriceFeed.getAllPrices();
                     for (const [symbol, price] of Object.entries(prices)) {
                         updateVolatility(symbol, price);
+                    }
+                    // Initialize any missing pairs with current prices
+                    for (const [symbol, price] of Object.entries(prices)) {
+                        if (!volatilityData.has(symbol)) {
+                            updateVolatility(symbol, price);
+                        }
                     }
                     renderScanner();
                 }, config.pollingRate);

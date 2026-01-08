@@ -1,0 +1,6 @@
+nohup: ignoring input
+
+> polymarket-ai-trader@0.1.0 start:proxy
+> node server/kraken-proxy.js
+
+Kraken proxy running on http://localhost:3002

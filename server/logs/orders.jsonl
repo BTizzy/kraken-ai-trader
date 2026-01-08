@@ -1,0 +1,2 @@
+{"ts":"2026-01-08T00:46:56.471Z","type":"order","data":{"request":{"pair":"XBTUSD","side":"buy","type":"market","volume":"0.001","price":"30000"},"response":{"simulated":true,"error":[],"result":{"descr":{"order":"buy 0.001 XBTUSD @ market 30000"},"txid":["PAPER-1767833216471"]},"meta":{"mode":"paper"}},"simulated":true}}
+{"ts":"2026-01-08T00:47:03.472Z","type":"cancel","data":{"request":{"txid":"PAPER-1767833216471"},"response":{"simulated":true,"result":{"count":1,"pending":[],"txid":"PAPER-1767833216471"}},"simulated":true}}

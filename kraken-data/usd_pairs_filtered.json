@@ -1,0 +1,163 @@
+[
+  {
+    "pair": "AUDXUSD",
+    "wsname": "AUDX/USD",
+    "altname": "AUDXUSD",
+    "min_order": "5",
+    "fees": 0.2
+  },
+  {
+    "pair": "AUSDUSD",
+    "wsname": "AUSD/USD",
+    "altname": "AUSDUSD",
+    "min_order": "5",
+    "fees": 0.2
+  },
+  {
+    "pair": "DAIUSD",
+    "wsname": "DAI/USD",
+    "altname": "DAIUSD",
+    "min_order": "5",
+    "fees": 0.2
+  },
+  {
+    "pair": "ZEURZUSD",
+    "wsname": "EUR/USD",
+    "altname": "EURUSD",
+    "min_order": "0.5",
+    "fees": 0.2
+  },
+  {
+    "pair": "EURCUSD",
+    "wsname": "EURC/USD",
+    "altname": "EURCUSD",
+    "min_order": "5",
+    "fees": 0.2
+  },
+  {
+    "pair": "EUROPUSD",
+    "wsname": "EUROP/USD",
+    "altname": "EUROPUSD",
+    "min_order": "5",
+    "fees": 0.2
+  },
+  {
+    "pair": "EURQUSD",
+    "wsname": "EURQ/USD",
+    "altname": "EURQUSD",
+    "min_order": "5",
+    "fees": 0.2
+  },
+  {
+    "pair": "EURRUSD",
+    "wsname": "EURR/USD",
+    "altname": "EURRUSD",
+    "min_order": "5",
+    "fees": 0.2
+  },
+  {
+    "pair": "FRNTUSD",
+    "wsname": "FRNT/USD",
+    "altname": "FRNTUSD",
+    "min_order": "5",
+    "fees": 0.2
+  },
+  {
+    "pair": "ZGBPZUSD",
+    "wsname": "GBP/USD",
+    "altname": "GBPUSD",
+    "min_order": "5",
+    "fees": 0.2
+  },
+  {
+    "pair": "PYUSDUSD",
+    "wsname": "PYUSD/USD",
+    "altname": "PYUSDUSD",
+    "min_order": "5",
+    "fees": 0.2
+  },
+  {
+    "pair": "RLUSDUSD",
+    "wsname": "RLUSD/USD",
+    "altname": "RLUSDUSD",
+    "min_order": "5",
+    "fees": 0.2
+  },
+  {
+    "pair": "TGBPUSD",
+    "wsname": "TGBP/USD",
+    "altname": "TGBPUSD",
+    "min_order": "4",
+    "fees": 0.2
+  },
+  {
+    "pair": "TUSDUSD",
+    "wsname": "TUSD/USD",
+    "altname": "TUSDUSD",
+    "min_order": "5",
+    "fees": 0.2
+  },
+  {
+    "pair": "USD1USD",
+    "wsname": "USD1/USD",
+    "altname": "USD1USD",
+    "min_order": "5",
+    "fees": 0.2
+  },
+  {
+    "pair": "USDCUSD",
+    "wsname": "USDC/USD",
+    "altname": "USDCUSD",
+    "min_order": "5",
+    "fees": 0.2
+  },
+  {
+    "pair": "USDDUSD",
+    "wsname": "USDD/USD",
+    "altname": "USDDUSD",
+    "min_order": "5",
+    "fees": 0.2
+  },
+  {
+    "pair": "USDEUSD",
+    "wsname": "USDE/USD",
+    "altname": "USDEUSD",
+    "min_order": "5",
+    "fees": 0.2
+  },
+  {
+    "pair": "USDGUSD",
+    "wsname": "USDG/USD",
+    "altname": "USDGUSD",
+    "min_order": "5",
+    "fees": 0.01
+  },
+  {
+    "pair": "USDQUSD",
+    "wsname": "USDQ/USD",
+    "altname": "USDQUSD",
+    "min_order": "5",
+    "fees": 0.2
+  },
+  {
+    "pair": "USDRUSD",
+    "wsname": "USDR/USD",
+    "altname": "USDRUSD",
+    "min_order": "5",
+    "fees": 0.2
+  },
+  {
+    "pair": "USDSUSD",
+    "wsname": "USDS/USD",
+    "altname": "USDSUSD",
+    "min_order": "5",
+    "fees": 0.2
+  },
+  {
+    "pair": "USDTZUSD",
+    "wsname": "USDT/USD",
+    "altname": "USDTUSD",
+    "min_order": "5",
+    "fees": 0.2
+  }
+]

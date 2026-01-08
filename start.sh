@@ -1,7 +1,7 @@
 #!/bin/bash
-# start.sh - Start the Polymarket Trading Server
+# start.sh - Start the Kraken Trading Server
 
-echo "🚀 Starting Polymarket Trading Server..."
+echo "🚀 Starting Kraken Trading Server..."
 
 cd "$(dirname "$0")"
 

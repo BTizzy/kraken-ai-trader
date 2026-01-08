@@ -10,10 +10,10 @@ GitHub Pages is the easiest way to deploy this static web app for free.
 # Initialize git (if not already done)
 git init
 git add .
-git commit -m "Initial release - Polymarket AI Trading Game"
+git commit -m "Initial release - Kraken AI Trading Game"
 
 # Add remote and push
-git remote add origin https://github.com/BTizzy/polymarket-ai-trader.git
+git remote add origin https://github.com/BTizzy/kraken-ai-trader.git
 git branch -M main
 git push -u origin main
 ```
@@ -32,12 +32,12 @@ git push -u origin main
 
 Your game will be available at:
 ```
-https://BTizzy.github.io/polymarket-ai-trader/
+https://BTizzy.github.io/kraken-ai-trader/
 ```
 
 Setup page:
 ```
-https://BTizzy.github.io/polymarket-ai-trader/setup.html
+https://BTizzy.github.io/kraken-ai-trader/setup.html
 ```
 
 **Note:** It may take 1-2 minutes for the site to go live after enabling Pages.
@@ -99,7 +99,7 @@ Then visit: `http://localhost:8000/setup.html`
 ### CORS Considerations
 
 The app makes requests to:
-- `https://clob.polymarket.com/markets` (Polymarket API)
+- `https://clob.polymarket.com/markets` (Kraken API)
 - `https://api.groq.com/openai/v1/chat/completions` (Groq API)
 
 Both APIs support CORS and can be called from browser JavaScript.
@@ -107,7 +107,7 @@ Both APIs support CORS and can be called from browser JavaScript.
 ### Rate Limiting
 
 - Groq free tier: 30 requests/minute
-- Polymarket CLOB: No official limit (but be respectful)
+- Kraken CLOB: No official limit (but be respectful)
 - The app includes caching to minimize API calls
 
 ---
@@ -146,7 +146,7 @@ Add to `<head>`:
 ### Markets Not Loading
 
 - Check browser console for errors (F12)
-- Verify Polymarket API is accessible: https://clob.polymarket.com/markets
+- Verify Kraken API is accessible: https://clob.polymarket.com/markets
 - Check CORS policy in browser
 
 ### AI Predictions Failing
@@ -237,7 +237,7 @@ The app is responsive, but for best mobile experience:
 
 For issues or questions:
 
-1. Check the [GitHub Issues](https://github.com/BTizzy/polymarket-ai-trader/issues)
+1. Check the [GitHub Issues](https://github.com/BTizzy/kraken-ai-trader/issues)
 2. Open a new issue with:
    - Browser and version
    - Error messages from console

@@ -825,23 +825,16 @@ class FeeCalculator {
         if (!GAME_CONFIG.includeFees) {
             return { total: 0, breakdown: {} };
         }
-        
         const fees = GAME_CONFIG.fees;
-        
         // Slippage (based on volatility/liquidity)
         const slippage = tradeAmount * (fees.slippage[volatilityLevel] || fees.slippage.medium);
-        
         // Spread cost (half the spread on entry)
         const spreadCost = tradeAmount * (fees.typicalSpread / 2);
-        
-        // Trading fee (only on winnings)
-        const tradingFee = isWinning ? tradeAmount * fees.takerFee : 0;
-        
+        // Trading fee (Kraken taker fee on all trades)
+        const tradingFee = tradeAmount * fees.takerFee;
         // Gas cost
         const gasCost = fees.estimatedGasUSD * 2; // Entry + exit
-        
         const total = slippage + spreadCost + tradingFee + gasCost;
-        
         return {
             total: total,
             breakdown: {

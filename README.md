@@ -266,6 +266,43 @@ MIT License - See LICENSE file for details
 
 ---
 
+## Kraken Integration (US-ready)
+
+If you want to run the bot against a US-compliant exchange, **Kraken** is the recommended option.
+
+Quick setup:
+1. Copy `.env.example` → `.env` and fill in keys (DO NOT commit `.env`).
+2. Set `EXCHANGE=kraken` in `.env` or `config.js`.
+3. Start a local static server (required for WS from browser):
+
+```bash
+python3 -m http.server 8000
+# open http://localhost:8000/crypto-trader.html
+```
+
+Security notes:
+- **Regenerate** API keys immediately if they are ever exposed.
+- Store secrets in a secret manager or environment variables (never in repo).
+- **Do not** call private trading endpoints directly from browser code; implement a server-side proxy to sign requests.
+
+A minimal Node+Express proxy is included at `server/kraken-proxy.js` (development only). To run it locally:
+
+```bash
+# from project root
+npm install express node-fetch
+KRAKEN_API_KEY=yourkey KRAKEN_API_SECRET=yoursecret node server/kraken-proxy.js
+# proxy will listen on http://localhost:3001
+```
+
+This proxy exposes:
+- GET /public/assetpairs
+- GET /public/depth?pair=PAIR
+- GET /private/balance  (requires KRAKEN_API_KEY/KRAKEN_API_SECRET)
+
+**Important**: Keep API keys secret and never commit them to git.
+
+---
+
 ## Contact
 Built by [@BTizzy](https://github.com/BTizzy) | Providence, RI
 

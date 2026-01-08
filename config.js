@@ -10,7 +10,7 @@ const GAME_CONFIG = {
     
     // Price source: 'real' uses WebSocket, 'simulated' uses fake prices
     // MUST be 'real' for any serious use
-    priceSource: 'real',
+    priceSource: 'kraken-ws',
     
     // Fallback to simulation if real prices fail
     // DISABLED - Real prices only for production trading
@@ -75,22 +75,16 @@ const GAME_CONFIG = {
     // TRADING FEES (POLYMARKET ACTUAL)
     // ============================================
     fees: {
-        // Polymarket fee structure (as of 2024)
-        takerFee: 0.02,             // 2% taker fee on winnings
-        makerFee: 0.00,             // 0% maker fee
-        
-        // Estimated slippage based on liquidity
+        // Kraken spot fee structure (2026)
+        takerFee: 0.004,             // 0.4% taker fee (as decimal)
+        makerFee: 0.0,               // 0% maker fee
         slippage: {
-            low: 0.005,             // 0.5% for liquid markets
-            medium: 0.01,           // 1% for average markets
-            high: 0.02              // 2% for illiquid markets
+            low: 0.0005,             // 0.05% for liquid markets
+            medium: 0.001,           // 0.1% for average markets
+            high: 0.002              // 0.2% for illiquid markets
         },
-        
-        // Network gas (Polygon)
-        estimatedGasUSD: 0.01,      // ~$0.01 per transaction
-        
-        // Spread (bid-ask difference)
-        typicalSpread: 0.01         // 1% typical spread
+        estimatedGasUSD: 0,          // No gas fee for spot
+        typicalSpread: 0.0001        // 0.01% typical spread
     },
     
     // Include fees in P&L calculations?
@@ -219,11 +213,11 @@ const GAME_CONFIG = {
     // WALLET INTEGRATION (FUTURE)
     // ============================================
     wallet: {
-        // NOT YET IMPLEMENTED - placeholder for wallet integration
-        enabled: false,
-        supportedWallets: ['metamask', 'coinbase', 'walletconnect'],
-        chainId: 137,               // Polygon mainnet
-        usdcContract: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174'
+        enabled: true,
+        supportedWallets: ['kraken'],
+        krakenWsUrl: 'wss://ws.kraken.com',
+        krakenRestUrl: 'http://localhost:3002',
+        // Add more wallet config as needed
     }
 };
 

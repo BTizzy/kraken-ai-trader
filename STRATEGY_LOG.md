@@ -18,23 +18,104 @@ This document tracks all strategy iterations, test results, and learnings to pre
 | 8 | 2026-01-07 | **8%** | **-$15.93** | Aggressive sizing ($150-250) | ❌ **WORST RUN** - Bigger positions = bigger losses |
 | 9 | 2026-01-07 | 48% | -$0.36 | Test #3 config (validation) | BABY 7 fast_stops in row killed it (-$1.59). Adding cooldowns |
 | 10 | 2026-01-07 | 44% | +$0.14 | + Symbol cooldowns | No BABY spam! But @248 flash crash -$1.41. FOGO +$2.68 |
+| 11 | 2026-01-07 | **72%** | **+$3.35** | Data-Driven Mean Reversion v4.0 | ✅ **BEST RUN** - β≥0.10, symbol cooldowns, FOGO/@267 dominate |
+| 12 | 2026-01-07 | 56% | +$3.07 | Data-Driven Mean Reversion v5.0 | β≥0.20, beta-scaling positions, wider exits (1.5x) - **REGRESSION** |
+| 13 | 2026-01-07 | **72%** | **-$1.27** | Data-Driven Mean Reversion v6.0 | ⚠️ **POSITION SIZING ISSUE** - β≥0.10, 1.0x exits, conservative sizing, but high-beta losses persist |
+| 14 | 2026-01-08 | **96%** | **+$4.13** | Data-Driven Mean Reversion v7.0 | ✅ **BETA FILTERING WORKED** - β≥0.10, β≤0.5, 1.0x exits, no catastrophic losses |
 
 ---
 
-## 📈 Data-Driven Improvement (after Test #10)
+## 📈 Data-Driven Improvement (after Test #11)
 
-**Analysis of Test #10 data:**
-- Winners (11 trades): avg β = 0.29
-- Losers (14 trades): avg β = 0.09
-- All trades with β < 0.10 lost money
+**Analysis of Test #11 data (72% WR, +$3.35):**
+- **Symbol Performance:**
+  - FOGO: 76.2% WR, +$2.55 (21 trades) - **dominant performer**
+  - @267: 100% WR, +$0.99 (1 trade) - excellent but limited data
+  - PEOPLE: 50% WR, -$0.13 (2 trades)
+  - kPEPE: 0% WR, -$0.04 (1 trade)
 
-**Change for Test #11:** Raised betaThreshold from 0.05 → **0.10**
+- **Beta Range Performance:**
+  - β≥0.30: 100% WR, +$0.31 avg P&L (6 trades)
+  - β≥0.20-0.25: 83.3% WR, +$0.13 avg P&L
+  - β≥0.15-0.20: 57.1% WR, -$0.00 avg P&L
+  - β≥0.10-0.15: 50% WR, +$0.20 avg P&L
+  - β<0.15: Lower performance
 
-This would have filtered out 6 losing trades (-$3.14) while keeping all winners.
+- **Exit Reason Performance:**
+  - profit_target: 100% WR, +$0.34 avg P&L
+  - quick_profit: 100% WR, +$0.10 avg P&L
+  - reversion_complete: 66.7% WR, +$0.04 avg P&L
+  - fast_stop: 0% WR, -$0.18 avg P&L - **all losses**
+
+**Changes for Test #12:**
+1. **Beta threshold:** 0.10 → **0.20** (focus on higher-quality trades)
+2. **Symbol whitelist:** Only trade FOGO and @267 (top performers)
+3. **Position sizing:** Beta-scaled (β≥0.30: $150, β≥0.25: $125, β<0.20: $75)
+4. **Exit adjustments:** Profit targets +50% (1.0x→1.5x, 3.0x→4.0x), stop loss +50% (1.0x→1.5x)
 
 ---
 
-## 🏆 Best Performing Configuration (Test #3)
+## 📉 Test #12 Regression Analysis
+
+**Test #12 Results (56% WR, +$3.07):**
+- **Symbol Performance:**
+  - FOGO: 80% WR, +$1.31 (10 trades) - still strong
+  - @267: 43% WR, +$0.94 (7 trades) - declined
+  - ZEN: 50% WR, +$0.79 (2 trades)
+  - @228: 33% WR, +$0.70 (3 trades)
+  - @184: 33% WR, -$0.67 (3 trades)
+
+- **Beta Range Performance:**
+  - 0.20-0.30: 57% WR, -$0.06 avg P&L (7 trades)
+  - 0.30-0.50: 75% WR, +$0.23 avg P&L (8 trades)
+  - 1.0+: 40% WR, +$0.16 avg P&L (10 trades)
+
+- **Exit Reason Performance:**
+  - profit_target: 100% WR, +$0.99 avg P&L (5 trades)
+  - fast_stop: 0% WR, -$0.46 avg P&L (7 trades) - **all losses**
+  - reversion_complete: 20% WR, -$0.01 avg P&L (5 trades)
+  - quick_profit: 100% WR, +$0.18 avg P&L (8 trades)
+
+**Root Cause Analysis:**
+1. **Beta threshold too high (0.20+):** Eliminated many opportunities, winners had lower beta (1.85 avg) than losers (3.22 avg)
+2. **Wider exits hurt performance:** fast_stop exits still 0% win rate despite wider stops, reversion_complete only 20% wins
+3. **Winners vs Losers:** Winners had shorter hold times (7.1s vs 17.1s), suggesting strategy works better with faster exits
+
+**Changes for Test #13:**
+1. **Beta threshold:** 0.20 → **0.10** (revert to proven setting)
+2. **Exit multiples:** 1.5x → **1.0x** (revert to proven setting)
+3. **Keep:** Symbol cooldowns, beta-scaling position sizing
+
+---
+
+## 📈 Test #13 Position Sizing Analysis
+
+**Test #13 Results (72% WR, -$1.27):**
+- **Symbol Performance:**
+  - FOGO: 77.3% WR, +$2.15 (22 trades) - **dominant performer**
+  - @248: 50% WR, +$0.29 (4 trades)
+  - @204: 0% WR, -$4.13 (1 trade) - **catastrophic loss**
+  - @184: 50% WR, -$0.04 (2 trades)
+
+- **Beta Range Performance:**
+  - 0.10-0.25: 75% WR, +$0.15 avg P&L (4 trades)
+  - 0.25-0.35: 83.3% WR, +$0.20 avg P&L (6 trades)
+  - 0.35-0.50: 100% WR, +$0.29 avg P&L (5 trades)
+  - 0.50+: 25% WR, -$0.78 avg P&L (4 trades) - **problem range**
+
+- **Exit Reason Performance:**
+  - profit_target: 100% WR, +$0.26 avg P&L (17 trades)
+  - fast_stop: 0% WR, -$0.82 avg P&L (7 trades) - **all losses**
+  - quick_profit: 100% WR, +$0.21 avg P&L (1 trade)
+
+**Root Cause Analysis:**
+1. **High beta symbols still risky:** Even with $75 positions, β>0.5 symbols cause catastrophic losses (@204 -$4.13)
+2. **Position sizing insufficient:** Conservative sizing helped but didn't eliminate high-volatility risks
+3. **fast_stop still 0% wins:** All 7 fast_stops are losses, suggesting exit logic issues on volatile symbols
+
+**Changes for Test #14:**
+1. **Beta filtering:** Skip symbols with β > **0.5** entirely (eliminate catastrophic losses)
+2. **Keep:** β≥0.10 threshold, 1.0x exits, symbol cooldowns, conservative position sizing
 
 **Win Rate: 68% | P&L: +$2.14**
 
@@ -85,67 +166,30 @@ This would have filtered out 6 losing trades (-$3.14) while keeping all winners.
 
 ---
 
-## 🔧 Current Strategy Configuration (Test #7)
+## 🔧 Current Strategy Configuration (Test #14)
 
-### Entry Paths (Hybrid)
+**Data-Driven Mean Reversion v7.0**
 
-**Path 1: MOMENTUM BREAKOUT**
-```javascript
-hasMomentumBreakout = 
-  β ≥ 0.06 &&
-  momentum > 0.05% &&  // Strong upward move
-  trendStrength > 0.6   // Clear direction
-```
-
-**Path 2: MEAN REVERSION**
-```javascript
-hasMeanReversionSetup = 
-  isOversold &&           // Below -0.10% from mean
-  β ≥ 0.08 &&            // Higher vol requirement
-  momentum > 0 &&         // Turning positive
-  trendStrength < 0.5     // NOT in strong trend
-```
+### Entry Criteria
 
 ### Exit Criteria
-- Trailing stop: 50% of peak when profit > 2x costs
-- Profit target: 1.5x costs
-- Stop loss: -1.5x costs
-- Quick profit: >0.2x costs after 5s
 
-### Position Sizing
-- β ≥ 0.15 → $150
-- β ≥ 0.10 → $125
-- β < 0.10 → $100
+### Position Sizing (Conservative Beta-Scaled)
 
----
+### What Changed from Test #13
+
 
 ## 📈 Key Metrics to Watch
 
-1. **Fast Stop Rate** - Should be <30% of trades
-2. **Average Win Size** - Should be >$0.20
-3. **Average Loss Size** - Should be <$0.30
-4. **Win Rate** - Target >55%
-5. **Profit Factor** - Total wins / Total losses > 1.2
 
----
-
-## 🎯 Next Improvements to Try
-
-1. **Return to Test #3 settings** - Best performer, don't over-engineer
-2. **Add trend strength filter** - Skip symbols with trendStrength > 0.7 (too trendy)
-3. **Reduce momentum threshold** - 0.05% may be too high, try 0.02%
-4. **Minimum price filter** - Avoid ultra-low price symbols (more volatile)
-5. **Time-of-day analysis** - Are certain hours more profitable?
-
----
+1. **Test #13:** Revert to proven settings (β≥0.10, 1.0x exits) to recover from Test #12 regression
+4. **Reduce momentum threshold** - 0.05% may be too high, try 0.02%
+5. **Minimum price filter** - Avoid ultra-low price symbols (more volatile)
 
 ## 📝 Symbol Performance Notes
 
 ### Consistently Good
 - **@267** - High beta, quick profits
-- **FOGO** - Works well in ranging markets
-- **@184** - Many small wins
-
 ### Problematic
 - **MEGA** - Extreme volatility, large losses when wrong
 - **BIO** - Repeated fast_stops in Test #3-4
@@ -157,4 +201,4 @@ hasMeanReversionSetup =
 
 ---
 
-*Last Updated: 2026-01-07 21:46 UTC*
+*Last Updated: 2026-01-07 23:45 UTC*

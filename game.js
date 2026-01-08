@@ -1,6 +1,6 @@
 // Main Game Logic
 
-class PolymarketTradingGame {
+class KrakenTradingGame {
     constructor() {
         // Game state
         this.state = {
@@ -114,7 +114,7 @@ class PolymarketTradingGame {
         if (!modal || !results) return;
         
         // Get trade history
-        const tradeHistory = JSON.parse(localStorage.getItem(GAME_CONFIG.localStorageKeys?.tradeHistory || 'polymarket_trades') || '[]');
+        const tradeHistory = JSON.parse(localStorage.getItem(GAME_CONFIG.localStorageKeys?.tradeHistory || 'kraken_trades') || '[]');
         
         // Run readiness check
         const readiness = TradeValidator.checkLiveReadiness(tradeHistory);
@@ -157,7 +157,7 @@ class PolymarketTradingGame {
      * Export trades to CSV
      */
     exportTrades() {
-        const tradeHistory = JSON.parse(localStorage.getItem(GAME_CONFIG.localStorageKeys?.tradeHistory || 'polymarket_trades') || '[]');
+        const tradeHistory = JSON.parse(localStorage.getItem(GAME_CONFIG.localStorageKeys?.tradeHistory || 'kraken_trades') || '[]');
         
         if (tradeHistory.length === 0) {
             this.showStatus('No trades to export', 'error');
@@ -188,7 +188,7 @@ class PolymarketTradingGame {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `polymarket_trades_${new Date().toISOString().split('T')[0]}.csv`;
+        a.download = `kraken_trades_${new Date().toISOString().split('T')[0]}.csv`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -515,7 +515,7 @@ class PolymarketTradingGame {
         this.elements.marketGrid.innerHTML = `
             <div class="no-markets-message">
                 <h3>No Active Markets Available</h3>
-                <p>Polymarket currently has no markets accepting orders. This can happen when:</p>
+                <p>Kraken currently has no markets accepting orders. This can happen when:</p>
                 <ul>
                     <li>All markets are closed or resolved</li>
                     <li>Trading is paused temporarily</li>
@@ -664,23 +664,23 @@ class PolymarketTradingGame {
     }
 
     /**
-     * Load markets from Polymarket
+     * Load markets from Kraken
      */
     async loadMarkets() {
         try {
             this.elements.marketGrid.innerHTML = `
                 <div class="loading-container">
                     <div class="spinner"></div>
-                    <div class="loading-text">Loading markets from Polymarket...</div>
+                    <div class="loading-text">Loading markets from Kraken...</div>
                 </div>
             `;
 
             // Fetch markets
-            const rawMarkets = await polymarketAPI.fetchMarkets();
+            const rawMarkets = await krakenAPI.fetchMarkets();
             
             // Parse markets
             this.state.markets = rawMarkets
-                .map(m => polymarketAPI.parseMarket(m))
+                .map(m => krakenAPI.parseMarket(m))
                 .filter(m => m !== null && m.active && m.acceptingOrders);
 
             // Check if no markets are accepting orders
@@ -1343,7 +1343,7 @@ class PolymarketTradingGame {
             history.splice(0, history.length - 1000);
         }
         
-        localStorage.setItem('polymarket_trade_history', JSON.stringify(history));
+        localStorage.setItem('kraken_trade_history', JSON.stringify(history));
     }
 
     /**
@@ -1481,7 +1481,7 @@ class PolymarketTradingGame {
      */
     loadTradeHistory() {
         try {
-            const history = localStorage.getItem('polymarket_trade_history');
+            const history = localStorage.getItem('kraken_trade_history');
             return history ? JSON.parse(history) : [];
         } catch (e) {
             console.warn('Failed to load trade history:', e);
@@ -1897,7 +1897,7 @@ class TradeAnalytics {
 
 // Initialize game when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    window.game = new PolymarketTradingGame();
-    console.log('Polymarket Trading Game initialized!');
+    window.game = new KrakenTradingGame();
+    console.log('Kraken Trading Game initialized!');
     console.log('Configure your Groq API key in Settings to enable AI predictions.');
 });

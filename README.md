@@ -32,8 +32,8 @@ This bot is a **volatility-based trading system** that:
 
 ```bash
 # Clone repository
-git clone https://github.com/BTizzy/polymarket-ai-trader.git
-cd polymarket-ai-trader
+git clone https://github.com/BTizzy/kraken-ai-trader.git
+cd kraken-ai-trader
 
 # Install dependencies
 npm install

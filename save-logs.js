@@ -7,7 +7,7 @@ const TradingLogExporter = {
      * Get all trade logs from localStorage
      */
     getLogs() {
-        const logs = localStorage.getItem('polymarket_trade_log');
+        const logs = localStorage.getItem('kraken_trade_log');
         return logs ? JSON.parse(logs) : [];
     },
 
@@ -109,7 +109,7 @@ const TradingLogExporter = {
      */
     clearLogs() {
         if (confirm('Are you sure you want to clear all trade logs? This cannot be undone.')) {
-            localStorage.removeItem('polymarket_trade_log');
+            localStorage.removeItem('kraken_trade_log');
             console.log('✅ Trade logs cleared');
         }
     },

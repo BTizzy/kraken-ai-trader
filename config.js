@@ -103,10 +103,10 @@ const GAME_CONFIG = {
     // ============================================
     // POLYMARKET API ENDPOINTS
     // ============================================
-    polymarketAPI: 'https://clob.polymarket.com/markets',
-    polymarketWS: 'wss://ws-subscriptions-clob.polymarket.com/ws/market',
-    polymarketGammaAPI: 'https://gamma-api.polymarket.com',
-    polymarketClobWS: 'wss://clob.polymarket.com/ws',
+    krakenAPI: 'https://clob.polymarket.com/markets',
+    krakenWS: 'wss://ws-subscriptions-clob.polymarket.com/ws/market',
+    krakenGammaAPI: 'https://gamma-api.polymarket.com',
+    krakenClobWS: 'wss://clob.polymarket.com/ws',
     
     // ============================================
     // MARKET SETTINGS
@@ -204,7 +204,7 @@ const GAME_CONFIG = {
         enabled: true,
         logToConsole: true,         // Real-time console output
         logToStorage: true,         // Auto-save to localStorage
-        storageKey: 'polymarket_trade_log',
+        storageKey: 'kraken_trade_log',
         maxLogEntries: 1000,        // Keep last 1000 entries
         includeAnalytics: true      // Include running stats in each log
     },

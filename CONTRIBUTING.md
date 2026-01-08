@@ -1,4 +1,4 @@
-# Contributing to Polymarket AI Trading Game
+# Contributing to Kraken AI Trading Game
 
 Thank you for your interest in contributing! This document provides guidelines for contributing to the project.
 
@@ -22,8 +22,8 @@ Thank you for your interest in contributing! This document provides guidelines f
 1. Fork the repository
 2. Clone your fork:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/polymarket-ai-trader.git
-   cd polymarket-ai-trader
+   git clone https://github.com/YOUR_USERNAME/kraken-ai-trader.git
+   cd kraken-ai-trader
    ```
 
 3. Start local server:
@@ -42,7 +42,7 @@ Thank you for your interest in contributing! This document provides guidelines f
 
 ### Reporting Bugs
 
-1. Check if the bug is already reported in [Issues](https://github.com/BTizzy/polymarket-ai-trader/issues)
+1. Check if the bug is already reported in [Issues](https://github.com/BTizzy/kraken-ai-trader/issues)
 2. If not, create a new issue with:
    - Clear title describing the bug
    - Steps to reproduce
@@ -113,7 +113,7 @@ Thank you for your interest in contributing! This document provides guidelines f
 ├── setup.html          # Setup/onboarding page
 ├── styles.css          # All styles
 ├── config.js           # Game configuration constants
-├── api.js              # API integrations (Polymarket, Groq)
+├── api.js              # API integrations (Kraken, Groq)
 ├── game.js             # Core game logic
 ├── README.md           # Project documentation
 ├── DEPLOYMENT.md       # Deployment guide
@@ -122,7 +122,7 @@ Thank you for your interest in contributing! This document provides guidelines f
 
 ### Key Components
 
-1. **PolymarketAPI** (api.js)
+1. **KrakenAPI** (api.js)
    - Fetches markets from CLOB API
    - Calculates volatility
    - Caches responses
@@ -137,7 +137,7 @@ Thank you for your interest in contributing! This document provides guidelines f
    - Different volatility levels
    - Random walk with trends
 
-4. **PolymarketTradingGame** (game.js)
+4. **KrakenTradingGame** (game.js)
    - Main game controller
    - Session management
    - Trade execution
@@ -148,7 +148,7 @@ Thank you for your interest in contributing! This document provides guidelines f
 ```
 User clicks "Start Session"
     ↓
-Fetch markets from Polymarket API
+Fetch markets from Kraken API
     ↓
 Get AI predictions for each market
     ↓
@@ -177,7 +177,7 @@ const marketData = fetchMarkets();
 function calculatePnL(trade) { ... }
 
 // Use PascalCase for classes
-class PolymarketAPI { ... }
+class KrakenAPI { ... }
 
 // Use UPPERCASE for constants
 const API_BASE_URL = 'https://api.example.com';
@@ -262,7 +262,7 @@ Before submitting PR, verify:
 
 ### CORS Errors
 
-- Polymarket API supports CORS
+- Kraken API supports CORS
 - Groq API supports CORS
 - If testing locally, use a local server (not file://)
 
@@ -280,7 +280,7 @@ Before submitting PR, verify:
 
 ## 📚 Resources
 
-- [Polymarket CLOB API Docs](https://docs.polymarket.com)
+- [Kraken CLOB API Docs](https://docs.polymarket.com)
 - [Groq API Docs](https://console.groq.com/docs)
 - [MDN Web Docs](https://developer.mozilla.org)
 - [JavaScript.info](https://javascript.info)
@@ -299,7 +299,7 @@ By contributing, you agree that your contributions will be licensed under the MI
 
 ## ❓ Questions?
 
-- Open a [GitHub Discussion](https://github.com/BTizzy/polymarket-ai-trader/discussions)
+- Open a [GitHub Discussion](https://github.com/BTizzy/kraken-ai-trader/discussions)
 - Tag [@BTizzy](https://github.com/BTizzy) in issues
 - Check existing docs and issues first
 

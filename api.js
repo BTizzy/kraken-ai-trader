@@ -1,6 +1,6 @@
-// API Module - Handles Polymarket and Groq API calls
+// API Module - Handles Kraken and Groq API calls
 
-class PolymarketAPI {
+class KrakenAPI {
     constructor() {
         this.baseURL = '/api/markets'; // Use local proxy
         this.cache = new Map();
@@ -8,7 +8,7 @@ class PolymarketAPI {
     }
 
     /**
-     * Fetch markets from Polymarket CLOB API via proxy
+     * Fetch markets from Kraken CLOB API via proxy
      */
     async fetchMarkets(limit = GAME_CONFIG.maxMarketsToFetch) {
         try {
@@ -451,7 +451,7 @@ class RestApiPriceFeed {
     }
 
     /**
-     * Fetch real price from Polymarket API via local proxy
+     * Fetch real price from Kraken API via local proxy
      */
     async fetchPrice(marketId) {
         try {
@@ -596,16 +596,16 @@ class RealTimePriceFeed {
     }
 
     /**
-     * Connect to Polymarket WebSocket
+     * Connect to Kraken WebSocket
      */
     async connect() {
         return new Promise((resolve, reject) => {
             try {
-                // Use Polymarket's price WebSocket
-                this.ws = new WebSocket(GAME_CONFIG.polymarketClobWS || 'wss://clob.polymarket.com/ws');
+                // Use Kraken's price WebSocket
+                this.ws = new WebSocket(GAME_CONFIG.krakenClobWS || 'wss://clob.polymarket.com/ws');
                 
                 this.ws.onopen = () => {
-                    console.log('🔌 WebSocket connected to Polymarket');
+                    console.log('🔌 WebSocket connected to Kraken');
                     this.connected = true;
                     this.reconnectAttempts = 0;
                     resolve(true);
@@ -945,7 +945,7 @@ class TradeValidator {
 // ============================================
 class TradeLogger {
     constructor() {
-        this.storageKey = GAME_CONFIG.tradeLogging?.storageKey || 'polymarket_trade_log';
+        this.storageKey = GAME_CONFIG.tradeLogging?.storageKey || 'kraken_trade_log';
         this.maxEntries = GAME_CONFIG.tradeLogging?.maxLogEntries || 1000;
     }
     
@@ -1239,7 +1239,7 @@ class EntryValidator {
 }
 
 // Export instances
-const polymarketAPI = new PolymarketAPI();
+const krakenAPI = new KrakenAPI();
 const groqAPI = new GroqAPI();
 const priceSimulator = new PriceSimulator();
 const realTimePriceFeed = new RealTimePriceFeed();

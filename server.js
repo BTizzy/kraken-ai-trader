@@ -1,6 +1,6 @@
 /**
- * Polymarket Trading Proxy Server
- * Handles CORS issues by proxying requests to Polymarket APIs
+ * Kraken Trading Proxy Server
+ * Handles CORS issues by proxying requests to Kraken APIs
  */
 
 const http = require('http');
@@ -23,7 +23,7 @@ const MIME_TYPES = {
     '.ico': 'image/x-icon'
 };
 
-// Polymarket API endpoints
+// Kraken API endpoints
 const POLYMARKET_CLOB = 'https://clob.polymarket.com';
 const POLYMARKET_GAMMA = 'https://gamma-api.polymarket.com';
 
@@ -40,7 +40,7 @@ function httpsGet(targetUrl) {
             path: parsedUrl.pathname + parsedUrl.search,
             method: 'GET',
             headers: {
-                'User-Agent': 'PolymarketTrader/1.0',
+                'User-Agent': 'KrakenTrader/1.0',
                 'Accept': 'application/json'
             }
         };
@@ -211,7 +211,7 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
     console.log(`
 ╔════════════════════════════════════════════════════════════╗
-║         Polymarket Trading Server v1.0                     ║
+║         Kraken Trading Server v1.0                     ║
 ║         http://localhost:${PORT}                              ║
 ╠════════════════════════════════════════════════════════════╣
 ║  API Endpoints:                                            ║

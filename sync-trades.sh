@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOGS_DIR="$SCRIPT_DIR/logs"
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
 
-echo "📊 Polymarket Trading Log Sync"
+echo "📊 Kraken Trading Log Sync"
 echo "================================"
 
 # Create logs directory if it doesn't exist

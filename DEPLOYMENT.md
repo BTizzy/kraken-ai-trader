@@ -99,7 +99,7 @@ Then visit: `http://localhost:8000/setup.html`
 ### CORS Considerations
 
 The app makes requests to:
-- `https://clob.polymarket.com/markets` (Kraken API)
+- `https://clob.polymarket.com/markets` (Polymarket API)
 - `https://api.groq.com/openai/v1/chat/completions` (Groq API)
 
 Both APIs support CORS and can be called from browser JavaScript.
@@ -146,7 +146,7 @@ Add to `<head>`:
 ### Markets Not Loading
 
 - Check browser console for errors (F12)
-- Verify Kraken API is accessible: https://clob.polymarket.com/markets
+- Verify Polymarket API is accessible: https://clob.polymarket.com/markets
 - Check CORS policy in browser
 
 ### AI Predictions Failing

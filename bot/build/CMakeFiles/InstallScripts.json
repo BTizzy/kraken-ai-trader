@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/ryanbartell/polymarket-ai-trader/kraken-ai-trader-1/bot/build/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

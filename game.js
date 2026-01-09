@@ -52,6 +52,9 @@ class KrakenTradingGame {
         // Initialize real-time price feed
         this.initializePriceFeed();
         
+        // Initialize bot status monitoring
+        this.initializeBotStatus();
+        
         // Show existing trade log analytics on startup
         this.showTradeLogSummary();
     }
@@ -253,6 +256,142 @@ class KrakenTradingGame {
     }
 
     /**
+     * Initialize bot status monitoring
+     */
+    initializeBotStatus() {
+        // Initial status update
+        this.updateBotStatus();
+        this.updateLearningDashboard();
+        
+        // Update bot status every 5 seconds
+        setInterval(() => {
+            this.updateBotStatus();
+            this.updateLearningDashboard();
+        }, 5000);
+    }
+
+    /**
+     * Update bot status from server
+     */
+    async updateBotStatus() {
+        try {
+            const response = await fetch('/api/bot/status');
+            const status = await response.json();
+            
+            if (status.running) {
+                this.elements.botStatus.textContent = '🟢 Running';
+                this.elements.botStatus.style.color = '#22c55e';
+                this.elements.botMode.textContent = status.mode === 'paper' ? 'Paper Trading' : 'Live Trading';
+                this.elements.pairsScanned.textContent = status.pairs_scanned || 0;
+                this.elements.tradesCompleted.textContent = status.trades_completed || 0;
+                this.elements.currentPnL.textContent = `$${status.current_pnl?.toFixed(2) || '0.00'}`;
+                this.elements.botActivity.textContent = status.message || 'Bot is active';
+            } else {
+                this.elements.botStatus.textContent = '🔴 Offline';
+                this.elements.botStatus.style.color = '#ef4444';
+                this.elements.botMode.textContent = 'Unknown';
+                this.elements.pairsScanned.textContent = '0';
+                this.elements.tradesCompleted.textContent = '0';
+                this.elements.currentPnL.textContent = '$0.00';
+                this.elements.botActivity.textContent = status.message || 'Bot is not running';
+            }
+        } catch (error) {
+            console.error('Failed to fetch bot status:', error);
+            this.elements.botStatus.textContent = '🔴 Error';
+            this.elements.botStatus.style.color = '#ef4444';
+            this.elements.botActivity.textContent = 'Unable to connect to bot status';
+        }
+    }
+
+    /**
+     * Update learning dashboard from server
+     */
+    async updateLearningDashboard() {
+        try {
+            const response = await fetch('/api/bot/learning');
+            const data = await response.json();
+            
+            // Update metrics
+            if (this.elements.learningTotalTrades) {
+                this.elements.learningTotalTrades.textContent = data.total_trades || 0;
+            }
+            
+            if (this.elements.learningWinRate) {
+                const winRate = data.win_rate || 0;
+                this.elements.learningWinRate.textContent = `${winRate.toFixed(1)}%`;
+                this.elements.learningWinRate.className = 'metric-value ' + (winRate >= 50 ? 'positive' : winRate > 0 ? 'negative' : '');
+            }
+            
+            if (this.elements.learningTotalPnL) {
+                const pnl = data.total_pnl || 0;
+                this.elements.learningTotalPnL.textContent = `$${pnl.toFixed(2)}`;
+                this.elements.learningTotalPnL.className = 'metric-value ' + (pnl >= 0 ? 'positive' : 'negative');
+            }
+            
+            // Update adaptive parameters
+            if (this.elements.learningPositionSize) {
+                this.elements.learningPositionSize.textContent = `$${(data.position_size || 100).toFixed(2)}`;
+            }
+            
+            if (this.elements.learningLeverage) {
+                this.elements.learningLeverage.textContent = `${(data.target_leverage || 2.0).toFixed(2)}x`;
+            }
+            
+            // Update position bar (0-100% based on $50-$150 range)
+            if (this.elements.positionBar) {
+                const positionPercent = Math.max(0, Math.min(100, ((data.position_size || 100) - 50) / 100 * 100));
+                this.elements.positionBar.style.width = `${positionPercent}%`;
+            }
+            
+            // Update recent trades list
+            if (this.elements.recentTradesList && data.recent_trades) {
+                this.renderRecentTrades(data.recent_trades);
+            }
+        } catch (error) {
+            console.error('Failed to fetch learning data:', error);
+        }
+    }
+
+    /**
+     * Render recent trades in the learning dashboard
+     */
+    renderRecentTrades(trades) {
+        if (!trades || trades.length === 0) {
+            this.elements.recentTradesList.innerHTML = '<div class="trade-item empty">No trades recorded yet...</div>';
+            return;
+        }
+        
+        const tradesHtml = trades.slice(0, 10).map(trade => {
+            const isWin = trade.result === 'WIN';
+            const timeAgo = this.formatTimeAgo(trade.timestamp);
+            const roiClass = trade.roi >= 0 ? 'positive' : 'negative';
+            
+            return `
+                <div class="trade-item ${isWin ? 'win' : 'loss'}">
+                    <span class="trade-pair">${trade.pair}</span>
+                    <span class="trade-result ${isWin ? 'win' : 'loss'}">${isWin ? '✅ WIN' : '❌ LOSS'}</span>
+                    <span class="trade-roi ${roiClass}">${trade.roi >= 0 ? '+' : ''}${trade.roi.toFixed(2)}%</span>
+                    <span class="trade-time">${timeAgo}</span>
+                </div>
+            `;
+        }).join('');
+        
+        this.elements.recentTradesList.innerHTML = tradesHtml;
+    }
+
+    /**
+     * Format timestamp to relative time
+     */
+    formatTimeAgo(timestamp) {
+        const seconds = Math.floor((Date.now() - timestamp) / 1000);
+        
+        if (seconds < 60) return `${seconds}s ago`;
+        if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+        if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+        return `${Math.floor(seconds / 86400)}d ago`;
+    }
+
+    /**
      * Get current price feed (WebSocket or REST)
      */
     getPriceFeed() {
@@ -276,10 +415,9 @@ class KrakenTradingGame {
             tradeCount: document.getElementById('trade-count'),
 
             // Controls
-            startSession: document.getElementById('start-session'),
-            endSession: document.getElementById('end-session'),
+            startBot: document.getElementById('start-bot'),
+            stopBot: document.getElementById('stop-bot'),
             showSettings: document.getElementById('show-settings'),
-            refreshMarkets: document.getElementById('refresh-markets'),
 
             // Settings
             settingsPanel: document.getElementById('settings-panel'),
@@ -291,6 +429,23 @@ class KrakenTradingGame {
 
             // Status
             statusMessage: document.getElementById('status-message'),
+
+            // Bot Status
+            botStatus: document.getElementById('bot-status'),
+            botMode: document.getElementById('bot-mode'),
+            pairsScanned: document.getElementById('pairs-scanned'),
+            tradesCompleted: document.getElementById('trades-completed'),
+            currentPnL: document.getElementById('current-pnl'),
+            botActivity: document.getElementById('bot-activity'),
+
+            // Learning Dashboard
+            learningTotalTrades: document.getElementById('learning-total-trades'),
+            learningWinRate: document.getElementById('learning-win-rate'),
+            learningTotalPnL: document.getElementById('learning-total-pnl'),
+            learningPositionSize: document.getElementById('learning-position-size'),
+            learningLeverage: document.getElementById('learning-leverage'),
+            positionBar: document.getElementById('position-bar'),
+            recentTradesList: document.getElementById('recent-trades-list'),
 
             // Market grid
             marketGrid: document.getElementById('market-grid'),
@@ -328,10 +483,10 @@ class KrakenTradingGame {
      * Attach event listeners
      */
     attachEventListeners() {
-        this.elements.startSession.addEventListener('click', () => this.startSession());
-        this.elements.endSession.addEventListener('click', () => this.endSession());
+        // Bot controls
+        this.elements.startBot.addEventListener('click', () => this.startBot());
+        this.elements.stopBot.addEventListener('click', () => this.stopBot());
         this.elements.showSettings.addEventListener('click', () => this.toggleSettings());
-        this.elements.refreshMarkets.addEventListener('click', () => this.loadMarkets());
         
         this.elements.saveApiKey.addEventListener('click', () => this.saveApiKey());
         this.elements.aiThreshold.addEventListener('change', (e) => this.updateSettings());
@@ -1474,6 +1629,74 @@ class KrakenTradingGame {
         this.analyzeTradingPatterns();
         
         this.startSession();
+    }
+
+    /**
+     * Start the trading bot
+     */
+    async startBot() {
+        try {
+            this.showStatus('Starting bot...', 'info');
+            this.elements.startBot.disabled = true;
+            
+            const response = await fetch('/api/bot/start', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                this.showStatus('Bot started successfully!', 'success');
+                this.elements.stopBot.disabled = false;
+                // Refresh status after a short delay
+                setTimeout(() => this.updateBotStatus(), 2000);
+            } else {
+                this.showStatus('Failed to start bot: ' + result.error, 'error');
+                this.elements.startBot.disabled = false;
+            }
+            
+        } catch (error) {
+            console.error('Failed to start bot:', error);
+            this.showStatus('Failed to start bot: ' + error.message, 'error');
+            this.elements.startBot.disabled = false;
+        }
+    }
+
+    /**
+     * Stop the trading bot
+     */
+    async stopBot() {
+        try {
+            this.showStatus('Stopping bot...', 'info');
+            this.elements.stopBot.disabled = true;
+            
+            const response = await fetch('/api/bot/stop', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                this.showStatus('Bot stop requested successfully!', 'success');
+                this.elements.startBot.disabled = false;
+                // Refresh status after a short delay
+                setTimeout(() => this.updateBotStatus(), 1000);
+            } else {
+                this.showStatus('Failed to stop bot: ' + result.error, 'error');
+                this.elements.stopBot.disabled = false;
+            }
+            
+        } catch (error) {
+            console.error('Failed to stop bot:', error);
+            this.showStatus('Failed to stop bot: ' + error.message, 'error');
+            this.elements.stopBot.disabled = false;
+        }
     }
 
     /**

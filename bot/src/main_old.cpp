@@ -1,0 +1,528 @@
+#include <iostream>
+#include <memory>
+#include <thread>
+#include <chrono>
+#include <cstring>
+#include <cstdlib>
+#include <future>
+#include <vector>
+#include <mutex>
+#include <iomanip>
+#include "kraken_api.hpp"
+#include "learning_engine.hpp"
+
+using namespace std::chrono_literals;
+
+struct PerformanceMetrics {
+    double total_pnl = 0.0;
+    double total_trades = 0;
+    double winning_trades = 0;
+    double losing_trades = 0;
+    double win_rate = 0.0;
+    double avg_win = 0.0;
+    double avg_loss = 0.0;
+    double sharpe_ratio = 0.0;
+    double max_drawdown = 0.0;
+    double current_drawdown = 0.0;
+    double peak_pnl = 0.0;
+    std::vector<double> pnl_history;
+    std::chrono::system_clock::time_point last_update;
+    
+    void update_trade(double pnl) {
+        total_pnl += pnl;
+        total_trades++;
+        pnl_history.push_back(pnl);
+        
+        if (pnl > 0) {
+            winning_trades++;
+            avg_win = ((avg_win * (winning_trades - 1)) + pnl) / winning_trades;
+        } else {
+            losing_trades++;
+            avg_loss = ((avg_loss * (losing_trades - 1)) + pnl) / losing_trades;
+        }
+        
+        win_rate = winning_trades / total_trades;
+        
+        // Update drawdown
+        if (total_pnl > peak_pnl) {
+            peak_pnl = total_pnl;
+            current_drawdown = 0.0;
+        } else {
+            current_drawdown = peak_pnl - total_pnl;
+            max_drawdown = std::max(max_drawdown, current_drawdown);
+        }
+        
+        // Calculate Sharpe ratio (simplified)
+        if (pnl_history.size() > 1) {
+            double mean_return = total_pnl / total_trades;
+            double variance = 0.0;
+            for (double p : pnl_history) {
+                variance += (p - mean_return) * (p - mean_return);
+            }
+            variance /= (total_trades - 1);
+            double std_dev = std::sqrt(variance);
+            sharpe_ratio = (mean_return / std_dev) * std::sqrt(365); // Annualized
+        }
+        
+        last_update = std::chrono::system_clock::now();
+    }
+    
+    void print_summary() {
+        std::cout << "\n📊 PERFORMANCE SUMMARY:" << std::endl;
+        std::cout << "  Total P&L: $" << std::fixed << std::setprecision(2) << total_pnl << std::endl;
+        std::cout << "  Total Trades: " << (int)total_trades << std::endl;
+        std::cout << "  Win Rate: " << std::fixed << std::setprecision(1) << (win_rate * 100) << "%" << std::endl;
+        std::cout << "  Avg Win: $" << avg_win << " | Avg Loss: $" << avg_loss << std::endl;
+        std::cout << "  Sharpe Ratio: " << sharpe_ratio << std::endl;
+        std::cout << "  Max Drawdown: $" << max_drawdown << std::endl;
+    }
+};
+
+struct HistoricalData {
+    std::string pair;
+    std::chrono::system_clock::time_point timestamp;
+    double open;
+    double high;
+    double low;
+    double close;
+    double volume;
+};
+
+struct BotConfig {
+    bool paper_trading = true;
+    bool enable_learning = true;
+    int learning_cycle_trades = 25;  // Analyze every 25 trades
+    std::string strategy_file = "strategies.json";
+    std::string trade_log_file = "trade_log.json";
+    int max_concurrent_trades = 1;
+    double target_leverage = 2.0;
+    double position_size_usd = 100;
+};
+
+struct ScanResult {
+    std::string pair;
+    double volatility = 0.0;
+    double spread = 0.0;
+    double trend_strength = 0.0;
+    double volume_score = 0.0;
+    TradingStrategy strategy;
+    bool valid = false;
+};
+
+class KrakenTradingBot {
+public:
+    KrakenTradingBot(const BotConfig& config) : config(config) {
+        api = std::make_unique<KrakenAPI>(config.paper_trading);
+        learning_engine = std::make_unique<LearningEngine>();
+        
+        std::cout << "\n🤖 KRAKEN TRADING BOT v1.0 (C++)" << std::endl;
+        std::cout << "Mode: " << (config.paper_trading ? "PAPER TRADING" : "LIVE TRADING") << std::endl;
+        std::cout << "Learning enabled: " << (config.enable_learning ? "YES" : "NO") << std::endl;
+        std::cout << "=================================\n" << std::endl;
+    }
+    
+    ~KrakenTradingBot() {
+        if (learning_engine) {
+            learning_engine->print_summary();
+            learning_engine->save_to_file(config.trade_log_file);
+        }
+        performance.print_summary();
+    }
+    
+    void run() {
+        std::cout << "📊 Authenticating with Kraken..." << std::endl;
+        if (!api->authenticate()) {
+            std::cerr << "❌ Authentication failed. Check KRAKEN_API_KEY and KRAKEN_API_SECRET." << std::endl;
+            return;
+        }
+        std::cout << "✅ Authenticated successfully" << std::endl;
+    BotConfig config;
+    std::unique_ptr<KrakenAPI> api;
+    std::unique_ptr<LearningEngine> learning_engine;
+    PerformanceMetrics performance;
+    
+    // Scan a single pair for trading opportunity
+    ScanResult scan_single_pair(const std::string& pair) {
+        ScanResult result;
+        result.pair = pair;
+        
+        try {
+            auto ticker = api->get_ticker(pair);
+            
+            // Calculate volatility from high/low prices
+            double high_24h = std::stod(std::string(ticker["h"][0]));
+            double low_24h = std::stod(std::string(ticker["l"][0]));
+            double open_24h = std::stod(std::string(ticker["o"]));
+            double current_price = std::stod(std::string(ticker["c"][0]));
+            
+            double volatility = ((high_24h - low_24h) / open_24h) * 100.0;  // % volatility
+            
+            // Skip if volatility is too low or invalid
+            if (volatility <= 0.1 || volatility > 1000) return result;
+            
+            double spread = api->get_bid_ask_spread(pair);
+            
+            // Filter by spread
+            if (spread > 1.0) return result;  // Allow up to 1% spread
+            
+            // Calculate trend strength: (current - open) / open
+            double trend_strength = (current_price - open_24h) / open_24h;
+            
+            // Calculate volume score (normalize volume)
+            double volume_24h = std::stod(std::string(ticker["v"][1]));  // 24h volume
+            // Simple volume scoring - higher volume = better (normalized 0-1)
+            result.volume_score = std::min(1.0, volume_24h / 1000000.0);  // Scale by $1M volume
+            
+            // Get strategy for this pair
+            auto strategy = learning_engine->get_optimal_strategy(pair, volatility);
+            
+            // Adjust strategy based on trend
+            if (trend_strength > 0.02) {  // Strong uptrend
+                strategy.leverage *= 1.2;  // Increase leverage in uptrends
+                strategy.take_profit_pct *= 1.5;  // Wider profit targets
+            } else if (trend_strength < -0.02) {  // Strong downtrend
+                strategy.leverage *= 0.8;  // Reduce leverage in downtrends
+                strategy.stop_loss_pct *= 1.2;  // Tighter stops
+            }
+            
+            // Dynamic position sizing based on volatility and account balance
+            double account_balance = api->get_balance("USD");
+            double base_position_size = std::min(100.0, account_balance * 0.02);  // Max 2% of account
+            
+            // Scale position size with volatility (higher vol = smaller position)
+            double vol_factor = std::max(0.1, 1.0 - (volatility / 50.0));  // Reduce size for very volatile pairs
+            strategy.position_size_usd = base_position_size * vol_factor;
+            
+            // Ensure minimum position size
+            strategy.position_size_usd = std::max(10.0, strategy.position_size_usd);
+            
+            // Market regime detection and adjustment
+            std::string regime = detect_market_regime();
+            if (regime == "bull") {
+                strategy.leverage *= 1.1;
+                strategy.take_profit_pct *= 1.2;
+            } else if (regime == "bear") {
+                strategy.leverage *= 0.9;
+                strategy.stop_loss_pct *= 1.1;
+            } else {  // consolidation
+                strategy.timeframe_seconds *= 1.5;  // Hold longer in consolidation
+            }
+            
+            result.volatility = volatility;
+            result.spread = spread;
+            result.trend_strength = trend_strength;
+            result.strategy = strategy;
+            result.valid = true;
+            
+        } catch (...) {
+            // Skip on error
+        }
+        
+        return result;
+    }
+    
+    // Detect overall market regime based on major pairs
+    std::string detect_market_regime() {
+        std::vector<std::string> major_pairs = {"XBTUSD", "ETHUSD", "ADAUSD", "DOTUSD", "LINKUSD"};
+        int uptrends = 0;
+        int downtrends = 0;
+        
+        for (const auto& pair : major_pairs) {
+            try {
+                auto ticker = api->get_ticker(pair);
+                double open_24h = std::stod(std::string(ticker["o"]));
+                double current_price = std::stod(std::string(ticker["c"][0]));
+                double change_pct = (current_price - open_24h) / open_24h * 100.0;
+                
+                if (change_pct > 1.0) uptrends++;
+                else if (change_pct < -1.0) downtrends++;
+            } catch (...) {
+                // Skip failed pairs
+            }
+        }
+        
+        if (uptrends > downtrends + 1) return "bull";
+        if (downtrends > uptrends + 1) return "bear";
+        return "consolidation";
+    }
+    
+    // Adjust parameters based on performance metrics
+    void adjust_parameters_based_on_performance() {
+        if (performance.total_trades < 10) return; // Need minimum sample size
+        
+        // Adjust position sizing based on win rate and drawdown
+        if (performance.win_rate > 0.6 && performance.current_drawdown < 50) {
+            // Good performance - increase position size
+            config.position_size_usd = std::min(config.position_size_usd * 1.1, 200.0);
+        } else if (performance.win_rate < 0.4 || performance.current_drawdown > 100) {
+            // Poor performance - reduce position size
+            config.position_size_usd = std::max(config.position_size_usd * 0.9, 25.0);
+        }
+        
+        // Adjust leverage based on Sharpe ratio
+        if (performance.sharpe_ratio > 1.5) {
+            config.target_leverage = std::min(config.target_leverage * 1.05, 5.0);
+        } else if (performance.sharpe_ratio < 0.5) {
+            config.target_leverage = std::max(config.target_leverage * 0.95, 1.0);
+        }
+        
+        // Print parameter adjustments
+        if (performance.total_trades >= 5 && (int)performance.total_trades % 5 == 0) { // Every 5 trades
+            std::cout << "\n🔧 PARAMETER ADJUSTMENT:" << std::endl;
+            std::cout << "  Position Size: $" << config.position_size_usd << std::endl;
+            std::cout << "  Target Leverage: " << config.target_leverage << "x" << std::endl;
+            std::cout << "  Win Rate: " << std::fixed << std::setprecision(1) << (performance.win_rate * 100) << "%" << std::endl;
+            std::cout << "  Sharpe Ratio: " << performance.sharpe_ratio << std::endl;
+        }
+    }
+    
+    // Main trading loop
+    // One-click live deployment
+        std::cout << "📊 Authenticating with Kraken..." << std::endl;
+        if (!api->authenticate()) {
+            std::cerr << "❌ Authentication failed. Check KRAKEN_API_KEY and KRAKEN_API_SECRET." << std::endl;
+            return;
+        }
+        std::cout << "✅ Authenticated successfully" << std::endl;
+        
+        // Get available pairs
+        auto pairs = api->get_trading_pairs();
+        std::cout << "\n📈 Available trading pairs: " << pairs.size() << std::endl;
+        
+        int trade_count = 0;
+        bool running = true;
+        
+        std::cout << "\n▶️  Starting trading loop..." << std::endl;
+        std::cout << "Press Ctrl+C to stop\n" << std::endl;
+        
+        while (running) {
+            try {
+                // 1. SCAN PAIRS FOR OPPORTUNITIES
+                std::string best_pair = "";
+                double best_volatility = 0;
+                StrategyConfig best_strategy;
+                
+                // SCAN ALL AVAILABLE PAIRS FOR OPPORTUNITIES
+                std::vector<std::string> test_pairs = pairs;  // Use all pairs
+                
+                std::cout << "\n[" << trade_count + 1 << "] 🔍 Scanning " << test_pairs.size() << " pairs..." << std::endl;
+                
+                // PARALLEL SCANNING: Process pairs concurrently
+                const size_t max_concurrent = 20;  // Increased for full pair scanning
+                std::vector<std::future<ScanResult>> futures;
+                
+                for (size_t i = 0; i < test_pairs.size(); i += max_concurrent) {
+                    // Launch batch of concurrent scans
+                    for (size_t j = 0; j < max_concurrent && (i + j) < test_pairs.size(); ++j) {
+                        futures.push_back(std::async(std::launch::async, 
+                            [this, pair = test_pairs[i + j]]() {
+                                return this->scan_single_pair(pair);
+                            }));
+                    }
+                    
+                    // Wait for this batch to complete
+                    for (auto& future : futures) {
+                        ScanResult result = future.get();
+                        if (result.valid && result.volatility > best_volatility) {
+                            best_volatility = result.volatility;
+                            best_pair = result.pair;
+                            best_strategy = result.strategy;
+                        }
+                    }
+                    futures.clear();
+                }
+                
+                if (best_pair.empty()) {
+                    std::cout << "  ⏳ No good opportunities found, waiting..." << std::endl;
+                    std::this_thread::sleep_for(5s);
+                    continue;
+                }
+                
+                std::cout << "  ✅ Found opportunity: " << best_pair 
+                          << " (volatility: " << best_volatility << "%, strategy: " 
+                          << best_strategy.name << ")" << std::endl;
+                
+                // 2. EXECUTE TRADE
+                std::cout << "  📍 Entering position..." << std::endl;
+                
+                Order order = api->place_market_order(
+                    best_pair,
+                    "buy",
+                    config.position_size_usd / api->get_current_price(best_pair),
+                    best_strategy.leverage
+                );
+                
+                if (order.status == "filled") {
+                    std::cout << "  ✅ Order filled: " << order.volume << " " << best_pair 
+                              << " @ $" << order.price << " (" << best_strategy.leverage << "x)" << std::endl;
+                    
+                    // 3. HOLD AND MONITOR WITH ADVANCED PROFIT TAKING
+                    double entry_price = order.price;
+                    double current_price = entry_price;
+                    double highest_price = entry_price;  // For trailing stop
+                    double trailing_stop_price = entry_price * (1.0 - best_strategy.stop_loss_pct);
+                    bool partial_exit_taken = false;
+                    auto entry_time = std::chrono::system_clock::now();
+                    
+                    std::cout << "  ⏱️  Holding for " << best_strategy.timeframe_seconds << "s..." << std::endl;
+                    
+                    for (int i = 0; i < best_strategy.timeframe_seconds; i++) {
+                        current_price = api->get_current_price(best_pair);
+                        double unrealized_pnl = (current_price - entry_price) * order.volume;
+                        double unrealized_pct = ((current_price - entry_price) / entry_price) * 100;
+                        
+                        // Update highest price for trailing stop
+                        if (current_price > highest_price) {
+                            highest_price = current_price;
+                            // Trail stop loss behind the highest price
+                            trailing_stop_price = highest_price * (1.0 - best_strategy.stop_loss_pct * 0.8); // Tighter trailing stop
+                        }
+                        
+                        // PARTIAL PROFIT TAKING: Exit 50% at 50% of target
+                        if (!partial_exit_taken && unrealized_pnl > (config.position_size_usd * best_strategy.take_profit_pct * 0.5)) {
+                            double partial_volume = order.volume * 0.5;
+                            Order partial_exit = api->place_market_order(best_pair, "sell", partial_volume, 1.0);
+                            if (partial_exit.status == "filled") {
+                                std::cout << "  💰 Partial profit taken: " << partial_volume << " " << best_pair 
+                                          << " @ $" << partial_exit.price << " (50% exit at " << unrealized_pct << "%)" << std::endl;
+                                partial_exit_taken = true;
+                                // Adjust remaining position
+                                order.volume -= partial_volume;
+                            }
+                        }
+                        
+                        // FULL PROFIT TARGET
+                        if (unrealized_pnl > (config.position_size_usd * best_strategy.take_profit_pct)) {
+                            std::cout << "  🎯 Take profit hit (" << unrealized_pct << "%)!" << std::endl;
+                            break;
+                        }
+                        
+                        // TRAILING STOP LOSS
+                        if (current_price <= trailing_stop_price) {
+                            std::cout << "  🛑 Trailing stop triggered @ $" << trailing_stop_price 
+                                      << " (" << unrealized_pct << "%)!" << std::endl;
+                            break;
+                        }
+                        
+                        // ORIGINAL STOP LOSS (wider)
+                        if (unrealized_pnl < -(config.position_size_usd * best_strategy.stop_loss_pct)) {
+                            std::cout << "  ⛔ Stop loss triggered (" << unrealized_pct << "%)!" << std::endl;
+                            break;
+                        }
+                        
+                        std::cout << "    " << i << "s: " << best_pair << " @ $" << current_price 
+                                  << " (" << std::fixed << std::setprecision(2) << unrealized_pnl 
+                                  << " / " << unrealized_pct << "%)" << std::endl;
+                        
+                        std::this_thread::sleep_for(1s);
+                    }
+                    
+                    // 4. EXIT TRADE
+                    std::cout << "  📊 Closing position..." << std::endl;
+                    Order exit_order = api->place_market_order(best_pair, "sell", order.volume, 1.0);
+                    
+                    if (exit_order.status == "filled") {
+                        double exit_price = exit_order.price;
+                        double gross_pnl = (exit_price - entry_price) * order.volume;
+                        double fees = config.position_size_usd * 0.004;  // 0.4% fee
+                        double net_pnl = gross_pnl - fees;
+                        double roi = (net_pnl / config.position_size_usd) * 100;
+                        
+                        std::cout << "  ✅ Exit @ $" << exit_price << "\n" << std::endl;
+                        std::cout << "  💰 RESULT: " << (net_pnl > 0 ? "+" : "") << net_pnl 
+                                  << " (" << roi << "%)" << std::endl;
+                        std::cout << "  =========================\n" << std::endl;
+                        
+                        // 5. RECORD TRADE
+                        TradeRecord trade;
+                        trade.pair = best_pair;
+                        trade.entry_price = entry_price;
+                        trade.exit_price = exit_price;
+                        trade.leverage = best_strategy.leverage;
+                        trade.position_size = config.position_size_usd;
+                        trade.pnl = net_pnl;
+                        trade.gross_pnl = gross_pnl;
+                        trade.fees_paid = fees;
+                        trade.timestamp = entry_time;
+                        trade.exit_reason = net_pnl > 0 ? "take_profit" : "timeout";
+                        trade.timeframe_seconds = best_strategy.timeframe_seconds;
+                        trade.volatility_at_entry = best_volatility;
+                        
+                        learning_engine->record_trade(trade);
+                        trade_count++;
+                        
+                        // TRACK PERFORMANCE
+                        performance.update_trade(net_pnl);
+                        
+                        // ADJUST PARAMETERS BASED ON PERFORMANCE
+                        adjust_parameters_based_on_performance();
+                    }
+                } else {
+                    std::cout << "  ❌ Order failed to fill" << std::endl;
+                }
+                
+                // Brief cooldown
+                std::this_thread::sleep_for(2s);
+                
+            } catch (const std::exception& e) {
+                std::cerr << "  ❌ Error: " << e.what() << std::endl;
+                std::this_thread::sleep_for(5s);
+            }
+        }
+    // One-click live deployment
+    bool deploy_live() {
+        std::cout << "\n⚠️  ONE-CLICK LIVE DEPLOYMENT" << std::endl;
+        std::cout << std::string(50, '=') << std::endl;
+        std::cout << "This will switch from PAPER to LIVE TRADING." << std::endl;
+        std::cout << "Your Kraken API keys from environment variables will be used." << std::endl;
+        std::cout << "\n❓ Type 'YES' to deploy: ";
+        
+        std::string response;
+        std::getline(std::cin, response);
+        
+        if (response != "YES") {
+            std::cout << "❌ Deployment cancelled" << std::endl;
+            return false;
+        }
+        
+        config.paper_trading = false;
+        api->set_paper_mode(false);
+        
+        std::cout << "✅ DEPLOYED TO LIVE TRADING" << std::endl;
+        std::cout << "⚠️  Real money is now at risk!" << std::endl;
+        std::cout << std::string(50, '=') << std::endl;
+        
+        return true;
+    }
+};
+
+int main(int argc, char* argv[]) {
+    // Parse arguments
+    BotConfig config;
+    
+    for (int i = 1; i < argc; i++) {
+        if (std::string(argv[i]) == "--live") {
+            config.paper_trading = false;
+            std::cout << "🚨 WARNING: LIVE TRADING MODE" << std::endl;
+        } else if (std::string(argv[i]) == "--learning-off") {
+            config.enable_learning = false;
+        } else if (std::string(argv[i]) == "--help") {
+            std::cout << "\nUsage: kraken_bot [options]\n" << std::endl;
+            std::cout << "Options:" << std::endl;
+            std::cout << "  --live          Use live trading (default: paper)" << std::endl;
+            std::cout << "  --learning-off  Disable self-learning" << std::endl;
+            std::cout << "  --help          Show this help\n" << std::endl;
+            return 0;
+        }
+    }
+    
+    try {
+        KrakenTradingBot bot(config);
+        bot.run();
+    } catch (const std::exception& e) {
+        std::cerr << "Fatal error: " << e.what() << std::endl;
+        return 1;
+    }
+    
+    return 0;
+}

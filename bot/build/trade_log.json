@@ -1,0 +1,4806 @@
+{
+  "total_trades": 600,
+  "trades": [
+    {
+      "entry": 0.396786,
+      "exit": 0.396786,
+      "leverage": 1.0,
+      "pair": "ADAUSD",
+      "pnl": -0.3973899616631665,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 1.0,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 1.0231616820328302,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0888e-05,
+      "exit": 1.0888e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.39772664772206434,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.012046,
+      "exit": 0.012046,
+      "leverage": 2.4000000000000004,
+      "pair": "BLESSUSD",
+      "pnl": -0.19155825383058683,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 1.0231616820328302,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01144,
+      "exit": 0.01144,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.39789658194566163,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 1.0,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0888e-05,
+      "exit": 1.0888e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.39772664772206434,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.396786,
+      "exit": 0.396786,
+      "leverage": 1.0,
+      "pair": "ADAUSD",
+      "pnl": -0.3973899616631665,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01144,
+      "exit": 0.01144,
+      "leverage": 0.9,
+      "pair": "BOBUSD",
+      "pnl": -0.39789658194566163,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.396786,
+      "exit": 0.396901,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.3714755764327594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.012046,
+      "exit": 0.012046,
+      "leverage": 2.1600000000000006,
+      "pair": "BLESSUSD",
+      "pnl": -0.19155825383058683,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.13445,
+      "exit": 0.13445,
+      "leverage": 0.9,
+      "pair": "ALGOUSD",
+      "pnl": -0.3983917802099621,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.396901,
+      "exit": 0.396901,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.39715746405763913,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0888e-05,
+      "exit": 1.0888e-05,
+      "leverage": 0.9,
+      "pair": "BONKUSD",
+      "pnl": -0.39772664772206434,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0888e-05,
+      "exit": 1.0888e-05,
+      "leverage": 0.9,
+      "pair": "BONKUSD",
+      "pnl": -0.39772664772206434,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.396901,
+      "exit": 0.396901,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.39715746405763913,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.13445,
+      "exit": 0.13445,
+      "leverage": 0.9,
+      "pair": "ALGOUSD",
+      "pnl": -0.3983917802099621,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0888e-05,
+      "exit": 1.0888e-05,
+      "leverage": 0.9,
+      "pair": "BONKUSD",
+      "pnl": -0.39772664772206434,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.396901,
+      "exit": 0.396901,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.39715746405763913,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.012046,
+      "exit": 0.012046,
+      "leverage": 2.1600000000000006,
+      "pair": "BLESSUSD",
+      "pnl": -0.19155825383058683,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01864,
+      "exit": 0.01864,
+      "leverage": 0.9,
+      "pair": "BABYUSD",
+      "pnl": -0.39268030139935417,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.396901,
+      "exit": 0.39669,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.44466314080357305,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01144,
+      "exit": 0.01144,
+      "leverage": 0.9,
+      "pair": "BOBUSD",
+      "pnl": -0.39789658194566163,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0888e-05,
+      "exit": 1.0888e-05,
+      "leverage": 0.9,
+      "pair": "BONKUSD",
+      "pnl": -0.39772664772206434,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01864,
+      "exit": 0.01868,
+      "leverage": 0.9,
+      "pair": "BABYUSD",
+      "pnl": -0.2030814434275707,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.39669,
+      "exit": 0.396592,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.4192334480311948,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001865,
+      "exit": 0.001865,
+      "leverage": 2.1600000000000006,
+      "pair": "BKSUSD",
+      "pnl": -0.3458051068264722,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01144,
+      "exit": 0.01144,
+      "leverage": 0.9,
+      "pair": "BOBUSD",
+      "pnl": -0.39789658194566163,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.396592,
+      "exit": 0.396592,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.39715746405763913,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01144,
+      "exit": 0.01144,
+      "leverage": 0.9,
+      "pair": "BOBUSD",
+      "pnl": -0.39789658194566163,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.13448,
+      "exit": 0.13448,
+      "leverage": 0.9,
+      "pair": "ALGOUSD",
+      "pnl": -0.3983917802099621,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0868e-05,
+      "exit": 1.0868e-05,
+      "leverage": 0.9,
+      "pair": "BONKUSD",
+      "pnl": -0.396993308277569,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.396592,
+      "exit": 0.396632,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.3881446317853861,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.396632,
+      "exit": 0.396632,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.39715746405763913,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001865,
+      "exit": 0.001865,
+      "leverage": 2.1600000000000006,
+      "pair": "BKSUSD",
+      "pnl": -0.3458051068264722,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01144,
+      "exit": 0.01144,
+      "leverage": 0.9,
+      "pair": "BOBUSD",
+      "pnl": -0.39789658194566163,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.396632,
+      "exit": 0.396843,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.34961956846137376,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01144,
+      "exit": 0.01144,
+      "leverage": 0.9,
+      "pair": "BOBUSD",
+      "pnl": -0.39789658194566163,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001865,
+      "exit": 0.001865,
+      "leverage": 2.1600000000000006,
+      "pair": "BKSUSD",
+      "pnl": -0.3458051068264722,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.396843,
+      "exit": 0.396843,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.39715746405763913,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0868e-05,
+      "exit": 1.0868e-05,
+      "leverage": 0.9,
+      "pair": "BONKUSD",
+      "pnl": -0.396993308277569,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.13448,
+      "exit": 0.13448,
+      "leverage": 0.9,
+      "pair": "ALGOUSD",
+      "pnl": -0.3983917802099621,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01144,
+      "exit": 0.01144,
+      "leverage": 0.9,
+      "pair": "BOBUSD",
+      "pnl": -0.39789658194566163,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.396843,
+      "exit": 0.396843,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.39715746405763913,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01868,
+      "exit": 0.01868,
+      "leverage": 0.9,
+      "pair": "BABYUSD",
+      "pnl": -0.39268030139935417,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0868e-05,
+      "exit": 1.0868e-05,
+      "leverage": 0.9,
+      "pair": "BONKUSD",
+      "pnl": -0.396993308277569,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.396843,
+      "exit": 0.396843,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.39715746405763913,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01144,
+      "exit": 0.01144,
+      "leverage": 0.9,
+      "pair": "BOBUSD",
+      "pnl": -0.39789658194566163,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01868,
+      "exit": 0.01868,
+      "leverage": 0.9,
+      "pair": "BABYUSD",
+      "pnl": -0.39268030139935417,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.396843,
+      "exit": 0.396843,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.39715746405763913,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0868e-05,
+      "exit": 1.0868e-05,
+      "leverage": 0.9,
+      "pair": "BONKUSD",
+      "pnl": -0.396993308277569,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 5.2e-05,
+      "exit": 5.2e-05,
+      "leverage": 0.9,
+      "pair": "APUUSD",
+      "pnl": -0.3953667953667955,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0868e-05,
+      "exit": 1.0868e-05,
+      "leverage": 0.9,
+      "pair": "BONKUSD",
+      "pnl": -0.396993308277569,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01144,
+      "exit": 0.01144,
+      "leverage": 0.9,
+      "pair": "BOBUSD",
+      "pnl": -0.39789658194566163,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.396843,
+      "exit": 0.396843,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.39715746405763913,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01144,
+      "exit": 0.01144,
+      "leverage": 0.9,
+      "pair": "BOBUSD",
+      "pnl": -0.39789658194566163,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.396843,
+      "exit": 0.397018,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.3577512627456144,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0868e-05,
+      "exit": 1.0868e-05,
+      "leverage": 0.9,
+      "pair": "BONKUSD",
+      "pnl": -0.396993308277569,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.397018,
+      "exit": 0.397018,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.3968420760014455,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01144,
+      "exit": 0.01144,
+      "leverage": 0.9,
+      "pair": "BOBUSD",
+      "pnl": -0.39789658194566163,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0868e-05,
+      "exit": 1.0868e-05,
+      "leverage": 0.9,
+      "pair": "BONKUSD",
+      "pnl": -0.396993308277569,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.397018,
+      "exit": 0.397018,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.3968420760014455,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01144,
+      "exit": 0.01144,
+      "leverage": 0.9,
+      "pair": "BOBUSD",
+      "pnl": -0.39789658194566163,
+      "reason": "timeout"
+    },
+    {
+      "entry": 5.2e-05,
+      "exit": 5.2e-05,
+      "leverage": 0.9,
+      "pair": "APUUSD",
+      "pnl": -0.3953667953667955,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.397534,
+      "exit": 0.397534,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.3958777163680841,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0868e-05,
+      "exit": 1.0868e-05,
+      "leverage": 0.9,
+      "pair": "BONKUSD",
+      "pnl": -0.396993308277569,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01144,
+      "exit": 0.01144,
+      "leverage": 0.9,
+      "pair": "BOBUSD",
+      "pnl": -0.39789658194566163,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.397534,
+      "exit": 0.397534,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.3958777163680841,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01144,
+      "exit": 0.01144,
+      "leverage": 0.9,
+      "pair": "BOBUSD",
+      "pnl": -0.39789658194566163,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0868e-05,
+      "exit": 1.0868e-05,
+      "leverage": 0.9,
+      "pair": "BONKUSD",
+      "pnl": -0.396993308277569,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01868,
+      "exit": 0.01868,
+      "leverage": 0.9,
+      "pair": "BABYUSD",
+      "pnl": -0.39268030139935417,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.397534,
+      "exit": 0.397534,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.3958777163680841,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01144,
+      "exit": 0.01144,
+      "leverage": 0.9,
+      "pair": "BOBUSD",
+      "pnl": -0.39789658194566163,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01144,
+      "exit": 0.01144,
+      "leverage": 0.9,
+      "pair": "BOBUSD",
+      "pnl": -0.39789658194566163,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.397534,
+      "exit": 0.397534,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.3958777163680841,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0868e-05,
+      "exit": 1.0868e-05,
+      "leverage": 0.9,
+      "pair": "BONKUSD",
+      "pnl": -0.396993308277569,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.012046,
+      "exit": 0.012046,
+      "leverage": 2.1600000000000006,
+      "pair": "BLESSUSD",
+      "pnl": -0.19155825383058683,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.397534,
+      "exit": 0.397432,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.41873209760502667,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01144,
+      "exit": 0.01144,
+      "leverage": 0.9,
+      "pair": "BOBUSD",
+      "pnl": -0.39789658194566163,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01144,
+      "exit": 0.01144,
+      "leverage": 0.9,
+      "pair": "BOBUSD",
+      "pnl": -0.39789658194566163,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000308,
+      "exit": 0.000308,
+      "leverage": 0.9,
+      "pair": "ATLASUSD",
+      "pnl": -0.397411003236246,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.397432,
+      "exit": 0.397432,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.3958777163680841,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.397432,
+      "exit": 0.397432,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.3958777163680841,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001865,
+      "exit": 0.001865,
+      "leverage": 2.1600000000000006,
+      "pair": "BKSUSD",
+      "pnl": -0.3458051068264722,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01144,
+      "exit": 0.01144,
+      "leverage": 0.9,
+      "pair": "BOBUSD",
+      "pnl": -0.39789658194566163,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.397432,
+      "exit": 0.397432,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": -0.3958777163680841,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01144,
+      "exit": 0.01144,
+      "leverage": 0.9,
+      "pair": "BOBUSD",
+      "pnl": -0.39789658194566163,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001865,
+      "exit": 0.001865,
+      "leverage": 2.1600000000000006,
+      "pair": "BKSUSD",
+      "pnl": -0.3458051068264722,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 0.0092,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": -0.39826086956521745,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0092,
+      "exit": 99.5,
+      "leverage": 0.9,
+      "pair": "ACHUSD",
+      "pnl": 969047.5166729679,
+      "reason": "take_profit"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 99.5,
+      "leverage": 0.9208455138295472,
+      "pair": "ABUSD",
+      "pnl": 1981739.8238264346,
+      "reason": "take_profit"
+    },
+    {
+      "entry": 0.001865,
+      "exit": 99.5,
+      "leverage": 2.1600000000000006,
+      "pair": "BKSUSD",
+      "pnl": 9962337.525220778,
+      "reason": "take_profit"
+    },
+    {
+      "entry": 0.397432,
+      "exit": 99.5,
+      "leverage": 0.9,
+      "pair": "ADAUSD",
+      "pnl": 22210.478231217672,
+      "reason": "take_profit"
+    },
+    {
+      "entry": 0.01144,
+      "exit": 99.5,
+      "leverage": 0.9,
+      "pair": "BOBUSD",
+      "pnl": 778573.5131616849,
+      "reason": "take_profit"
+    },
+    {
+      "entry": 1.0856e-05,
+      "exit": 1.0856e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01045,
+      "exit": 0.01045,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01145,
+      "exit": 0.01145,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.39368974583698507,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0365,
+      "exit": 0.0365,
+      "leverage": 1.0,
+      "pair": "AIXBTUSD",
+      "pnl": -0.3978142076502732,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00933,
+      "exit": 0.00933,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.382608695652174,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011891,
+      "exit": 0.011891,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0856e-05,
+      "exit": 1.0856e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01145,
+      "exit": 0.01145,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.39368974583698507,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01045,
+      "exit": 0.01045,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0365,
+      "exit": 0.0365,
+      "leverage": 1.0,
+      "pair": "AIXBTUSD",
+      "pnl": -0.3978142076502732,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.398021,
+      "exit": 0.398021,
+      "leverage": 0.0,
+      "pair": "ADAUSD",
+      "pnl": -0.38868242090658905,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0876e-05,
+      "exit": 1.0876e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01045,
+      "exit": 0.01045,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00395,
+      "exit": 0.00395,
+      "leverage": 1.0,
+      "pair": "BANANAS31USD",
+      "pnl": -0.3946992864424057,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00395,
+      "exit": 0.00395,
+      "leverage": 1.0,
+      "pair": "BANANAS31USD",
+      "pnl": -0.3946992864424057,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011891,
+      "exit": 0.011891,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01045,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": 0.3065134869262167,
+      "reason": "take_profit"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00933,
+      "exit": 0.00933,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.382608695652174,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0876e-05,
+      "exit": 1.0876e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01145,
+      "exit": 0.01145,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.39368974583698507,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00395,
+      "exit": 0.00395,
+      "leverage": 1.0,
+      "pair": "BANANAS31USD",
+      "pnl": -0.3946992864424057,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00303,
+      "exit": 0.00303,
+      "leverage": 1.0,
+      "pair": "BEAMUSD",
+      "pnl": -0.3843648208469056,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00933,
+      "exit": 0.00933,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.382608695652174,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011891,
+      "exit": 0.011891,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00933,
+      "exit": 0.00933,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.382608695652174,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01882,
+      "exit": 0.01882,
+      "leverage": 1.0,
+      "pair": "BABYUSD",
+      "pnl": -0.38579117330462864,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0876e-05,
+      "exit": 1.0876e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00395,
+      "exit": 0.00395,
+      "leverage": 1.0,
+      "pair": "BANANAS31USD",
+      "pnl": -0.3946992864424057,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00933,
+      "exit": 0.00933,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.382608695652174,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00395,
+      "exit": 0.00395,
+      "leverage": 1.0,
+      "pair": "BANANAS31USD",
+      "pnl": -0.3946992864424057,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0876e-05,
+      "exit": 1.0876e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01881,
+      "exit": 0.01881,
+      "leverage": 1.0,
+      "pair": "BABYUSD",
+      "pnl": -0.38579117330462864,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01881,
+      "exit": 0.01881,
+      "leverage": 1.0,
+      "pair": "BABYUSD",
+      "pnl": -0.38579117330462864,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0876e-05,
+      "exit": 1.0876e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00395,
+      "exit": 0.00395,
+      "leverage": 1.0,
+      "pair": "BANANAS31USD",
+      "pnl": -0.3946992864424057,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0876e-05,
+      "exit": 1.088e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.3505694421917291,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011891,
+      "exit": 0.011891,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.007851,
+      "exit": 0.007851,
+      "leverage": 1.2638638122259536,
+      "pair": "ANIMEUSD",
+      "pnl": -0.37977817900438476,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0365,
+      "exit": 0.0365,
+      "leverage": 1.0,
+      "pair": "AIXBTUSD",
+      "pnl": -0.3978142076502732,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.088e-05,
+      "exit": 1.088e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.398733,
+      "exit": 0.398733,
+      "leverage": 0.0,
+      "pair": "ADAUSD",
+      "pnl": -0.38868242090658905,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00395,
+      "exit": 0.00395,
+      "leverage": 1.0,
+      "pair": "BANANAS31USD",
+      "pnl": -0.3946992864424057,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.007851,
+      "exit": 0.007851,
+      "leverage": 1.2638638122259536,
+      "pair": "ANIMEUSD",
+      "pnl": -0.37977817900438476,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.088e-05,
+      "exit": 1.088e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.13499,
+      "exit": 0.13499,
+      "leverage": 1.0,
+      "pair": "ALGOUSD",
+      "pnl": -0.38522820341002173,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.71715,
+      "exit": 0.71715,
+      "leverage": 1.0,
+      "pair": "ASTERUSD",
+      "pnl": -0.38962608586176506,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.71715,
+      "exit": 0.71715,
+      "leverage": 1.0,
+      "pair": "ASTERUSD",
+      "pnl": -0.38962608586176506,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.13499,
+      "exit": 0.13499,
+      "leverage": 1.0,
+      "pair": "ALGOUSD",
+      "pnl": -0.38522820341002173,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011891,
+      "exit": 0.011891,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.088e-05,
+      "exit": 1.088e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.71715,
+      "exit": 0.71715,
+      "leverage": 1.0,
+      "pair": "ASTERUSD",
+      "pnl": -0.38962608586176506,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011891,
+      "exit": 0.011866,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.5888078350885984,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00933,
+      "exit": 0.00933,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.382608695652174,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.088e-05,
+      "exit": 1.088e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.088e-05,
+      "exit": 1.088e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.088e-05,
+      "exit": 1.088e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.007851,
+      "exit": 0.007851,
+      "leverage": 1.2638638122259536,
+      "pair": "ANIMEUSD",
+      "pnl": -0.37977817900438476,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011866,
+      "exit": 0.011866,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00946,
+      "exit": 0.00946,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.37565217391304356,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004666,
+      "exit": 0.004666,
+      "leverage": 1.3509544787077872,
+      "pair": "BLUAIUSD",
+      "pnl": -0.3729809104258443,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011866,
+      "exit": 0.011866,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00946,
+      "exit": 0.00946,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.37565217391304356,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011866,
+      "exit": 0.011866,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004666,
+      "exit": 0.004666,
+      "leverage": 1.3509544787077872,
+      "pair": "BLUAIUSD",
+      "pnl": -0.3729809104258443,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011866,
+      "exit": 0.011866,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.088e-05,
+      "exit": 1.088e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.088e-05,
+      "exit": 1.088e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.007851,
+      "exit": 0.007851,
+      "leverage": 1.2638638122259536,
+      "pair": "ANIMEUSD",
+      "pnl": -0.37977817900438476,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011866,
+      "exit": 0.011866,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0365,
+      "exit": 0.0365,
+      "leverage": 1.0,
+      "pair": "AIXBTUSD",
+      "pnl": -0.3978142076502732,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.398735,
+      "exit": 0.398932,
+      "leverage": 0.0,
+      "pair": "ADAUSD",
+      "pnl": -0.38868242090658905,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.088e-05,
+      "exit": 1.088e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.088e-05,
+      "exit": 1.088e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.088e-05,
+      "exit": 1.0886e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.3328404636214991,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0886e-05,
+      "exit": 1.0886e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0886e-05,
+      "exit": 1.0886e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.007851,
+      "exit": 0.007851,
+      "leverage": 1.2638638122259536,
+      "pair": "ANIMEUSD",
+      "pnl": -0.37977817900438476,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011866,
+      "exit": 0.011866,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.007851,
+      "exit": 0.007851,
+      "leverage": 1.2638638122259536,
+      "pair": "ANIMEUSD",
+      "pnl": -0.37977817900438476,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011866,
+      "exit": 0.011866,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0886e-05,
+      "exit": 1.0886e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0886e-05,
+      "exit": 1.0886e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0095,
+      "exit": 0.00953,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3721739130434783,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004666,
+      "exit": 0.004666,
+      "leverage": 1.3509544787077872,
+      "pair": "BLUAIUSD",
+      "pnl": -0.3729809104258443,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011866,
+      "exit": 0.011866,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0886e-05,
+      "exit": 1.0886e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011866,
+      "exit": 0.011866,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0886e-05,
+      "exit": 1.0886e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011866,
+      "exit": 0.011866,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00395,
+      "exit": 0.00395,
+      "leverage": 1.0,
+      "pair": "BANANAS31USD",
+      "pnl": -0.3946992864424057,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0188,
+      "exit": 0.0188,
+      "leverage": 1.0,
+      "pair": "BABYUSD",
+      "pnl": -0.38579117330462864,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.088e-05,
+      "exit": 1.088e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.088e-05,
+      "exit": 1.088e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.088e-05,
+      "exit": 1.088e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.088e-05,
+      "exit": 1.088e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.088e-05,
+      "exit": 1.088e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.088e-05,
+      "exit": 1.088e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0188,
+      "exit": 0.0188,
+      "leverage": 1.0,
+      "pair": "BABYUSD",
+      "pnl": -0.38579117330462864,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.088e-05,
+      "exit": 1.088e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00395,
+      "exit": 0.00395,
+      "leverage": 1.0,
+      "pair": "BANANAS31USD",
+      "pnl": -0.3946992864424057,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.088e-05,
+      "exit": 1.088e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011866,
+      "exit": 0.011866,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.088e-05,
+      "exit": 1.088e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011866,
+      "exit": 0.011866,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011866,
+      "exit": 0.011866,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.007851,
+      "exit": 0.007851,
+      "leverage": 1.2638638122259536,
+      "pair": "ANIMEUSD",
+      "pnl": -0.37977817900438476,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.71728,
+      "exit": 0.71728,
+      "leverage": 1.0,
+      "pair": "ASTERUSD",
+      "pnl": -0.38962608586176506,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.088e-05,
+      "exit": 1.088e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.39885,
+      "exit": 0.39885,
+      "leverage": 0.0,
+      "pair": "ADAUSD",
+      "pnl": -0.38868242090658905,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0365,
+      "exit": 0.0365,
+      "leverage": 1.0,
+      "pair": "AIXBTUSD",
+      "pnl": -0.3978142076502732,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011866,
+      "exit": 0.011866,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.007851,
+      "exit": 0.007851,
+      "leverage": 1.2638638122259536,
+      "pair": "ANIMEUSD",
+      "pnl": -0.37977817900438476,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.088e-05,
+      "exit": 1.0865e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.5191317678872727,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0865e-05,
+      "exit": 1.0865e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011866,
+      "exit": 0.011866,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.007851,
+      "exit": 0.007851,
+      "leverage": 1.2638638122259536,
+      "pair": "ANIMEUSD",
+      "pnl": -0.37977817900438476,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004666,
+      "exit": 0.004666,
+      "leverage": 1.3509544787077872,
+      "pair": "BLUAIUSD",
+      "pnl": -0.3729809104258443,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011866,
+      "exit": 0.011866,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.007851,
+      "exit": 0.007851,
+      "leverage": 1.2638638122259536,
+      "pair": "ANIMEUSD",
+      "pnl": -0.37977817900438476,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004666,
+      "exit": 0.004666,
+      "leverage": 1.3509544787077872,
+      "pair": "BLUAIUSD",
+      "pnl": -0.3729809104258443,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011866,
+      "exit": 0.011866,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.007851,
+      "exit": 0.007851,
+      "leverage": 1.2638638122259536,
+      "pair": "ANIMEUSD",
+      "pnl": -0.37977817900438476,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004666,
+      "exit": 0.004666,
+      "leverage": 1.3509544787077872,
+      "pair": "BLUAIUSD",
+      "pnl": -0.3729809104258443,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011866,
+      "exit": 0.011866,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.007851,
+      "exit": 0.007851,
+      "leverage": 1.2638638122259536,
+      "pair": "ANIMEUSD",
+      "pnl": -0.37977817900438476,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0866e-05,
+      "exit": 1.0866e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.011866,
+      "exit": 0.011866,
+      "leverage": 1.0,
+      "pair": "BLESSUSD",
+      "pnl": -0.3859497253204594,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0866e-05,
+      "exit": 1.0866e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.39885,
+      "exit": 0.39885,
+      "leverage": 0.0,
+      "pair": "ADAUSD",
+      "pnl": -0.38868242090658905,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0365,
+      "exit": 0.0365,
+      "leverage": 1.0,
+      "pair": "AIXBTUSD",
+      "pnl": -0.3978142076502732,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.39885,
+      "exit": 0.398786,
+      "leverage": 0.0,
+      "pair": "ADAUSD",
+      "pnl": -0.38868242090658905,
+      "reason": "timeout"
+    },
+    {
+      "entry": 5.1e-05,
+      "exit": 5.1e-05,
+      "leverage": 2.5096525096525117,
+      "pair": "APUUSD",
+      "pnl": -0.3598455598455598,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0866e-05,
+      "exit": 1.0866e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0365,
+      "exit": 0.0365,
+      "leverage": 1.0,
+      "pair": "AIXBTUSD",
+      "pnl": -0.3978142076502732,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0866e-05,
+      "exit": 1.0866e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0365,
+      "exit": 0.0365,
+      "leverage": 1.0,
+      "pair": "AIXBTUSD",
+      "pnl": -0.3978142076502732,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.398786,
+      "exit": 0.398786,
+      "leverage": 0.0,
+      "pair": "ADAUSD",
+      "pnl": -0.38868242090658905,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00303,
+      "exit": 0.00303,
+      "leverage": 1.0,
+      "pair": "BEAMUSD",
+      "pnl": -0.3843648208469056,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0365,
+      "exit": 0.0365,
+      "leverage": 1.0,
+      "pair": "AIXBTUSD",
+      "pnl": -0.3978142076502732,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0866e-05,
+      "exit": 1.0866e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.398786,
+      "exit": 0.398786,
+      "leverage": 0.0,
+      "pair": "ADAUSD",
+      "pnl": -0.38868242090658905,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00957,
+      "exit": 0.00957,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0866e-05,
+      "exit": 1.0866e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0866e-05,
+      "exit": 1.0866e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00957,
+      "exit": 0.00957,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.398786,
+      "exit": 0.398931,
+      "leverage": 0.0,
+      "pair": "ADAUSD",
+      "pnl": -0.38868242090658905,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.71763,
+      "exit": 0.71763,
+      "leverage": 1.0,
+      "pair": "ASTERUSD",
+      "pnl": -0.38962608586176506,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0866e-05,
+      "exit": 1.0866e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0188,
+      "exit": 0.0188,
+      "leverage": 1.0,
+      "pair": "BABYUSD",
+      "pnl": -0.38579117330462864,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00957,
+      "exit": 0.00957,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0866e-05,
+      "exit": 1.0866e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00957,
+      "exit": 0.00957,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.398931,
+      "exit": 0.39878,
+      "leverage": 0.0,
+      "pair": "ADAUSD",
+      "pnl": -0.38868242090658905,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00395,
+      "exit": 0.00395,
+      "leverage": 1.0,
+      "pair": "BANANAS31USD",
+      "pnl": -0.3946992864424057,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00957,
+      "exit": 0.00957,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0866e-05,
+      "exit": 1.0866e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.71763,
+      "exit": 0.71763,
+      "leverage": 1.0,
+      "pair": "ASTERUSD",
+      "pnl": -0.38962608586176506,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00395,
+      "exit": 0.00395,
+      "leverage": 1.0,
+      "pair": "BANANAS31USD",
+      "pnl": -0.3946992864424057,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00957,
+      "exit": 0.00957,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0866e-05,
+      "exit": 1.0866e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.71763,
+      "exit": 0.71763,
+      "leverage": 1.0,
+      "pair": "ASTERUSD",
+      "pnl": -0.38962608586176506,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00957,
+      "exit": 0.00957,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.71763,
+      "exit": 0.71763,
+      "leverage": 1.0,
+      "pair": "ASTERUSD",
+      "pnl": -0.38962608586176506,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01878,
+      "exit": 0.01878,
+      "leverage": 1.0,
+      "pair": "BABYUSD",
+      "pnl": -0.38579117330462864,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0866e-05,
+      "exit": 1.0866e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0866e-05,
+      "exit": 1.0866e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01878,
+      "exit": 0.01878,
+      "leverage": 1.0,
+      "pair": "BABYUSD",
+      "pnl": -0.38579117330462864,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.71763,
+      "exit": 0.71763,
+      "leverage": 1.0,
+      "pair": "ASTERUSD",
+      "pnl": -0.38962608586176506,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00957,
+      "exit": 0.00957,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.39878,
+      "exit": 0.39878,
+      "leverage": 0.0,
+      "pair": "ADAUSD",
+      "pnl": -0.38868242090658905,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0866e-05,
+      "exit": 1.0866e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00957,
+      "exit": 0.00957,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.71763,
+      "exit": 0.71763,
+      "leverage": 1.0,
+      "pair": "ASTERUSD",
+      "pnl": -0.38962608586176506,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00957,
+      "exit": 0.00957,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01878,
+      "exit": 0.01878,
+      "leverage": 1.0,
+      "pair": "BABYUSD",
+      "pnl": -0.38579117330462864,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0866e-05,
+      "exit": 1.0887e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.19953522436174306,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.71763,
+      "exit": 0.71763,
+      "leverage": 1.0,
+      "pair": "ASTERUSD",
+      "pnl": -0.38962608586176506,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00957,
+      "exit": 0.00956,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0887e-05,
+      "exit": 1.0887e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01878,
+      "exit": 0.01878,
+      "leverage": 1.0,
+      "pair": "BABYUSD",
+      "pnl": -0.38579117330462864,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.398576,
+      "exit": 0.39866,
+      "leverage": 0.0,
+      "pair": "ADAUSD",
+      "pnl": -0.38868242090658905,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0887e-05,
+      "exit": 1.0887e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00956,
+      "exit": 0.00956,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.71763,
+      "exit": 0.71763,
+      "leverage": 1.0,
+      "pair": "ASTERUSD",
+      "pnl": -0.38962608586176506,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00956,
+      "exit": 0.00956,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0887e-05,
+      "exit": 1.0887e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00395,
+      "exit": 0.00395,
+      "leverage": 1.0,
+      "pair": "BANANAS31USD",
+      "pnl": -0.3946992864424057,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.71763,
+      "exit": 0.71763,
+      "leverage": 1.0,
+      "pair": "ASTERUSD",
+      "pnl": -0.38962608586176506,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00395,
+      "exit": 0.00395,
+      "leverage": 1.0,
+      "pair": "BANANAS31USD",
+      "pnl": -0.3946992864424057,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0887e-05,
+      "exit": 1.0887e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00956,
+      "exit": 0.00956,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00395,
+      "exit": 0.00395,
+      "leverage": 1.0,
+      "pair": "BANANAS31USD",
+      "pnl": -0.3946992864424057,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0887e-05,
+      "exit": 1.0887e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.71763,
+      "exit": 0.71763,
+      "leverage": 1.0,
+      "pair": "ASTERUSD",
+      "pnl": -0.38962608586176506,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00956,
+      "exit": 0.00956,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.398072,
+      "exit": 0.398072,
+      "leverage": 0.0,
+      "pair": "ADAUSD",
+      "pnl": -0.38868242090658905,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00956,
+      "exit": 0.00956,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0887e-05,
+      "exit": 1.0887e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.71763,
+      "exit": 0.71763,
+      "leverage": 1.0,
+      "pair": "ASTERUSD",
+      "pnl": -0.38962608586176506,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00956,
+      "exit": 0.00956,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0887e-05,
+      "exit": 1.0887e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00395,
+      "exit": 0.00395,
+      "leverage": 1.0,
+      "pair": "BANANAS31USD",
+      "pnl": -0.3946992864424057,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 5.1e-05,
+      "exit": 5.1e-05,
+      "leverage": 2.5096525096525117,
+      "pair": "APUUSD",
+      "pnl": -0.3598455598455598,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00956,
+      "exit": 0.00956,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00956,
+      "exit": 0.00956,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 5.1e-05,
+      "exit": 5.1e-05,
+      "leverage": 2.5096525096525117,
+      "pair": "APUUSD",
+      "pnl": -0.3598455598455598,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 5.1e-05,
+      "exit": 5.1e-05,
+      "leverage": 2.5096525096525117,
+      "pair": "APUUSD",
+      "pnl": -0.3598455598455598,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.0105,
+      "exit": 0.0105,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00956,
+      "exit": 0.00956,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 5.1e-05,
+      "exit": 5.1e-05,
+      "leverage": 2.5096525096525117,
+      "pair": "APUUSD",
+      "pnl": -0.3598455598455598,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00956,
+      "exit": 0.00956,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01048,
+      "exit": 0.01048,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01048,
+      "exit": 0.01048,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00956,
+      "exit": 0.00956,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 5.1e-05,
+      "exit": 5.1e-05,
+      "leverage": 2.5096525096525117,
+      "pair": "APUUSD",
+      "pnl": -0.3598455598455598,
+      "reason": "timeout"
+    },
+    {
+      "entry": 5.1e-05,
+      "exit": 5.1e-05,
+      "leverage": 2.5096525096525117,
+      "pair": "APUUSD",
+      "pnl": -0.3598455598455598,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00956,
+      "exit": 0.00956,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.007851,
+      "exit": 0.007851,
+      "leverage": 1.2638638122259536,
+      "pair": "ANIMEUSD",
+      "pnl": -0.37977817900438476,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004666,
+      "exit": 0.004666,
+      "leverage": 1.3509544787077872,
+      "pair": "BLUAIUSD",
+      "pnl": -0.3729809104258443,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 5.1e-05,
+      "exit": 5.1e-05,
+      "leverage": 2.5096525096525117,
+      "pair": "APUUSD",
+      "pnl": -0.3598455598455598,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004666,
+      "exit": 0.004666,
+      "leverage": 1.3509544787077872,
+      "pair": "BLUAIUSD",
+      "pnl": -0.3729809104258443,
+      "reason": "timeout"
+    },
+    {
+      "entry": 5.1e-05,
+      "exit": 5.1e-05,
+      "leverage": 2.5096525096525117,
+      "pair": "APUUSD",
+      "pnl": -0.3598455598455598,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.001856,
+      "exit": 0.001856,
+      "leverage": 1.0,
+      "pair": "BKSUSD",
+      "pnl": -0.39785061794734017,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.000301,
+      "exit": 0.000301,
+      "leverage": 1.0355987055016154,
+      "pair": "ATLASUSD",
+      "pnl": -0.3792880258899677,
+      "reason": "timeout"
+    },
+    {
+      "entry": 1.0887e-05,
+      "exit": 1.0887e-05,
+      "leverage": 1.0,
+      "pair": "BONKUSD",
+      "pnl": -0.386066550554588,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.398017,
+      "exit": 0.398017,
+      "leverage": 0.0,
+      "pair": "ADAUSD",
+      "pnl": -0.38868242090658905,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00956,
+      "exit": 0.00956,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 5.1e-05,
+      "exit": 5.1e-05,
+      "leverage": 2.5096525096525117,
+      "pair": "APUUSD",
+      "pnl": -0.3598455598455598,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01153,
+      "exit": 0.01153,
+      "leverage": 1.0,
+      "pair": "BOBUSD",
+      "pnl": -0.3915863277826468,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.004434,
+      "exit": 0.004434,
+      "leverage": 0.0,
+      "pair": "ABUSD",
+      "pnl": -0.38362941308747467,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.00956,
+      "exit": 0.00956,
+      "leverage": 0.0,
+      "pair": "ACHUSD",
+      "pnl": -0.3660869565217391,
+      "reason": "timeout"
+    },
+    {
+      "entry": 0.01048,
+      "exit": 0.01048,
+      "leverage": 1.5180265654648912,
+      "pair": "ATHUSD",
+      "pnl": -0.3757115749525617,
+      "reason": "timeout"
+    }
+  ],
+  "version": "1.0"
+}

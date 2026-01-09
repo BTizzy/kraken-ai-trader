@@ -16,7 +16,7 @@ const PORT = 8000;
 let botProcess = null;
 let botStatus = {
     running: false,
-    mode: 'unknown',
+    mode: 'paper',
     pairs_scanned: 0,
     trades_completed: 0,
     current_pnl: 0.0,
@@ -24,15 +24,27 @@ let botStatus = {
     message: 'Bot not started'
 };
 
-// Learning data tracking
+// Learning data tracking - Enhanced
 let learningData = {
     total_trades: 0,
+    winning_trades: 0,
+    losing_trades: 0,
     win_rate: 0.0,
     total_pnl: 0.0,
+    profit_factor: 1.0,
     position_size: 100.0,
-    target_leverage: 2.0,
+    avg_win: 0.0,
+    avg_loss: 0.0,
+    best_trade: 0.0,
+    worst_trade: 0.0,
+    max_drawdown: 0.0,
+    tp_exits: 0,
+    sl_exits: 0,
+    trailing_exits: 0,
+    timeout_exits: 0,
+    blacklisted_pairs: 0,
     recent_trades: [],
-    patterns: {},
+    pair_stats: {},
     last_update: Date.now()
 };
 
@@ -319,70 +331,136 @@ const server = http.createServer(async (req, res) => {
                     botStatus.message = `Bot error: ${error.message}`;
                 });
 
-                // Monitor bot output for status updates
-                let outputBuffer = '';
+                // Monitor bot output for status updates - IMPROVED PARSING
                 botProcess.stdout.on('data', (data) => {
                     const output = data.toString();
-                    outputBuffer += output;
                     console.log('[BOT]', output.trim());
                     
-                    // Extract status info from output
-                    if (output.includes('Available trading pairs:')) {
-                        const match = output.match(/Available trading pairs: (\d+)/);
-                        if (match) {
-                            botStatus.pairs_scanned = parseInt(match[1]);
-                            botStatus.message = `Scanning ${match[1]} trading pairs`;
-                        }
+                    // Parse pairs count - "Found 500 USD pairs"
+                    const pairsMatch = output.match(/Found (\d+) USD pairs/);
+                    if (pairsMatch) {
+                        botStatus.pairs_scanned = parseInt(pairsMatch[1]);
+                        botStatus.message = `Scanning ${pairsMatch[1]} USD pairs`;
                     }
                     
                     if (output.includes('Scanning')) {
-                        botStatus.message = 'Scanning trading pairs';
+                        botStatus.message = 'Scanning for opportunities';
                     }
-
-                    // Parse trade recording: 📝 Trade recorded: ADAUSD | WIN ✅ | ROI: 1.50% | Pattern: ADAUSD_2x_0
-                    const tradeMatch = output.match(/📝 Trade recorded: (\w+) \| (WIN|LOSS) [✅❌] \| ROI: ([\-\d.]+)% \| Pattern: (\w+)/);
-                    if (tradeMatch) {
-                        const trade = {
-                            pair: tradeMatch[1],
-                            result: tradeMatch[2],
-                            roi: parseFloat(tradeMatch[3]),
-                            pattern: tradeMatch[4],
-                            timestamp: Date.now()
-                        };
-                        learningData.recent_trades.unshift(trade);
-                        if (learningData.recent_trades.length > 20) {
+                    
+                    // Parse trade ENTRY: "--- ENTER XXUSD ---"
+                    const enterMatch = output.match(/--- ENTER (\w+) ---/);
+                    if (enterMatch) {
+                        const pair = enterMatch[1];
+                        const entryTime = Date.now();
+                        learningData.recent_trades.unshift({
+                            pair: pair,
+                            direction: 'LONG',
+                            entry_time: entryTime,
+                            exit_time: null,
+                            hold_time_seconds: null,
+                            timestamp: entryTime, // Keep for UI compatibility
+                            status: 'active',
+                            pnl: null,
+                            exit_reason: null,
+                            result: null // Add result field for UI compatibility
+                        });
+                        if (learningData.recent_trades.length > 30) {
                             learningData.recent_trades.pop();
                         }
-                        botStatus.trades_completed++;
-                    }
-
-                    // Parse learning update: Total Trades: 5, Win Rate: 20.0%, Total P&L: $-1.77
-                    const totalTradesMatch = output.match(/Total Trades: (\d+)/);
-                    if (totalTradesMatch) {
-                        learningData.total_trades = parseInt(totalTradesMatch[1]);
+                        botStatus.message = 'Entered ' + pair;
                     }
                     
-                    const winRateMatch = output.match(/Win Rate: ([\d.]+)%/);
-                    if (winRateMatch) {
-                        learningData.win_rate = parseFloat(winRateMatch[1]);
+                    // Parse trade EXIT: "--- EXIT XXUSD [take_profit] ---"
+                    const exitMatch = output.match(/--- EXIT (\w+) \[(take_profit|stop_loss|trailing_stop|timeout)\] ---/);
+                    if (exitMatch) {
+                        const pair = exitMatch[1];
+                        const reason = exitMatch[2];
+                        
+                        if (reason === 'take_profit') learningData.tp_exits++;
+                        else if (reason === 'stop_loss') learningData.sl_exits++;
+                        else if (reason === 'trailing_stop') learningData.trailing_exits++;
+                        else learningData.timeout_exits++;
+                        
+                        const trade = learningData.recent_trades.find(t => t.pair === pair && t.status === 'active');
+                        if (trade) {
+                            const exitTime = Date.now();
+                            trade.exit_time = exitTime;
+                            trade.hold_time_seconds = Math.round((exitTime - trade.entry_time) / 1000);
+                            trade.exit_reason = reason;
+                            trade.result = reason; // Set result field for UI compatibility
+                            trade.status = 'exiting';
+                        }
+                        botStatus.message = 'Exited ' + pair + ' [' + reason + ']';
                     }
                     
-                    const pnlMatch = output.match(/Total P&L: \$([\-\d.]+)/);
-                    if (pnlMatch) {
-                        learningData.total_pnl = parseFloat(pnlMatch[1]);
-                        botStatus.current_pnl = learningData.total_pnl;
-                    }
-
-                    // Parse parameter adjustments: Position Size: $90.00, Target Leverage: 1.90x
-                    const positionMatch = output.match(/Position Size: \$([\d.]+)/);
-                    if (positionMatch) {
-                        learningData.position_size = parseFloat(positionMatch[1]);
+                    // Parse P&L line: "  P&L: $1.50 (+1.5%)" - individual trade P&L (not summary with fees)
+                    const tradePnlMatch = output.match(/P&L: \$([\-\d.]+)/);
+                    if (tradePnlMatch && !output.includes('(fees:')) {
+                        const tradePnl = parseFloat(tradePnlMatch[1]);
+                        if (!isNaN(tradePnl) && Math.abs(tradePnl) < 10000) {
+                            botStatus.trades_completed++;
+                            learningData.total_trades++;
+                            learningData.total_pnl += tradePnl;
+                            botStatus.current_pnl = learningData.total_pnl;
+                            
+                            if (tradePnl > 0) {
+                                learningData.winning_trades++;
+                                if (tradePnl > learningData.best_trade) learningData.best_trade = tradePnl;
+                            } else {
+                                learningData.losing_trades++;
+                                if (tradePnl < learningData.worst_trade) learningData.worst_trade = tradePnl;
+                            }
+                            
+                            learningData.win_rate = learningData.total_trades > 0 
+                                ? (learningData.winning_trades / learningData.total_trades * 100) 
+                                : 0;
+                            
+                            const trade = learningData.recent_trades.find(t => t.status === 'exiting');
+                            if (trade) {
+                                trade.pnl = tradePnl;
+                                trade.status = 'completed';
+                            }
+                            
+                            learningData.last_update = Date.now();
+                        }
                     }
                     
-                    const leverageMatch = output.match(/Target Leverage: ([\d.]+)x/);
-                    if (leverageMatch) {
-                        learningData.target_leverage = parseFloat(leverageMatch[1]);
+                    // Parse PERFORMANCE SUMMARY: "  Trades: 10 (W:4 L:6)"
+                    const summaryTradesMatch = output.match(/Trades: (\d+) \(W:(\d+) L:(\d+)\)/);
+                    if (summaryTradesMatch) {
+                        learningData.total_trades = parseInt(summaryTradesMatch[1]);
+                        learningData.winning_trades = parseInt(summaryTradesMatch[2]);
+                        learningData.losing_trades = parseInt(summaryTradesMatch[3]);
                     }
+                    
+                    // Parse Win Rate: "  Win Rate: 40.0%"
+                    const wrMatch = output.match(/Win Rate: ([\d.]+)%/);
+                    if (wrMatch) {
+                        learningData.win_rate = parseFloat(wrMatch[1]);
+                    }
+                    
+                    // Parse summary P&L with fees: "  P&L: $-2.50 (fees: $4.00)"
+                    const summaryPnlMatch = output.match(/P&L: \$([\-\d.]+) \(fees:/);
+                    if (summaryPnlMatch) {
+                        const pnl = parseFloat(summaryPnlMatch[1]);
+                        if (!isNaN(pnl) && Math.abs(pnl) < 100000) {
+                            learningData.total_pnl = pnl;
+                            botStatus.current_pnl = pnl;
+                        }
+                    }
+                    
+                    // Parse exit summary: "  Exits: TP:2 SL:3 Trail:1 TO:4"
+                    const exitsMatch = output.match(/Exits: TP:(\d+) SL:(\d+) Trail:(\d+) TO:(\d+)/);
+                    if (exitsMatch) {
+                        learningData.tp_exits = parseInt(exitsMatch[1]);
+                        learningData.sl_exits = parseInt(exitsMatch[2]);
+                        learningData.trailing_exits = parseInt(exitsMatch[3]);
+                        learningData.timeout_exits = parseInt(exitsMatch[4]);
+                    }
+                    
+                    // Update timestamps
+                    learningData.last_update = Date.now();
+                    botStatus.last_update = Date.now();
                 });
 
                 res.writeHead(200, {

@@ -14,9 +14,25 @@ void LearningEngine::record_trade(const TradeRecord& trade) {
     trade_history.push_back(trade);
     trades_by_pair[trade.pair].push_back(trade);
     
+    // Generate pattern key for this trade
+    int timeframe_bucket;
+    if (trade.timeframe_seconds < 30) timeframe_bucket = 0;
+    else if (trade.timeframe_seconds < 60) timeframe_bucket = 1;
+    else if (trade.timeframe_seconds < 120) timeframe_bucket = 2;
+    else timeframe_bucket = 3;
+    
+    std::string key = generate_pattern_key(trade.pair, trade.leverage, timeframe_bucket);
+    trades_by_strategy[key].push_back(trade);
+    
+    // Print what we learned from this trade
+    std::cout << "📝 Trade recorded: " << trade.pair 
+              << " | " << (trade.is_win() ? "WIN ✅" : "LOSS ❌")
+              << " | ROI: " << std::fixed << std::setprecision(2) << trade.roi() << "%" 
+              << " | Pattern: " << key << std::endl;
+    
     // Auto-analyze every 25 trades
     if (trade_history.size() % 25 == 0) {
-        std::cout << "📊 Auto-analyzing at trade #" << trade_history.size() << "..." << std::endl;
+        std::cout << "\n📊 AUTO-ANALYZING at trade #" << trade_history.size() << "..." << std::endl;
         analyze_patterns();
     }
 }
@@ -96,7 +112,7 @@ void LearningEngine::analyze_patterns() {
         double expected_pnl = (metrics.win_rate * metrics.avg_win) + 
                             ((1.0 - metrics.win_rate) * -metrics.avg_loss);
         metrics.has_edge = expected_pnl > metrics.total_fees * 1.5;  // Must beat fees
-        metrics.edge_percentage = (expected_pnl / metrics.avg_win) * 100 if metrics.avg_win > 0 else 0;
+        metrics.edge_percentage = metrics.avg_win > 0 ? (expected_pnl / metrics.avg_win) * 100 : 0;
         
         pattern_database[pattern_key] = metrics;
         
@@ -287,34 +303,111 @@ void LearningEngine::update_strategy_database() {
 }
 
 StrategyConfig LearningEngine::get_optimal_strategy(const std::string& pair, double current_volatility) {
-    // Filter candidates
-    std::vector<StrategyConfig> candidates;
+    // Check if this pair has consistently lost - suggest avoiding
+    int total_pair_trades = 0;
+    int pair_wins = 0;
+    double pair_pnl = 0;
     
-    for (const auto& config : strategy_configs) {
-        if (config.name.find(pair) == 0 && current_volatility >= config.min_volatility) {
-            candidates.push_back(config);
+    for (const auto& [key, metrics] : pattern_database) {
+        if (key.find(pair + "_") == 0) {
+            total_pair_trades += metrics.total_trades;
+            pair_wins += metrics.winning_trades;
+            pair_pnl += metrics.total_pnl;
         }
     }
     
-    if (candidates.empty()) {
-        // Return safe default
-        StrategyConfig safe;
-        safe.name = "safe_default";
-        safe.leverage = 1.0;
-        safe.timeframe_seconds = 60;
-        safe.take_profit_pct = 0.02;
-        safe.stop_loss_pct = 0.03;
-        safe.position_size_usd = 50;
-        return safe;
+    // If we have enough data and this pair is a consistent loser, return very conservative strategy
+    if (total_pair_trades >= 10) {
+        double pair_win_rate = (double)pair_wins / total_pair_trades;
+        if (pair_win_rate < 0.3 || pair_pnl < -5.0) {
+            std::cout << "⚠️ " << pair << " has poor history (WR: " << std::fixed << std::setprecision(1) 
+                      << (pair_win_rate * 100) << "%, P&L: $" << std::setprecision(2) << pair_pnl 
+                      << ") - using ULTRA CONSERVATIVE" << std::endl;
+            
+            StrategyConfig conservative;
+            conservative.name = "avoid_" + pair;
+            conservative.leverage = 1.0;
+            conservative.timeframe_seconds = 120;  // Longer hold for recovery
+            conservative.take_profit_pct = 0.02;   // 2% TP to overcome fees
+            conservative.stop_loss_pct = 0.005;    // 0.5% SL - cut losses fast
+            conservative.position_size_usd = 25;   // Minimum size
+            conservative.min_volatility = 3.0;     // Only trade if very volatile
+            conservative.max_spread_pct = 0.1;     // Very tight spread required
+            return conservative;
+        }
     }
     
-    // Return best (highest Sharpe ratio)
-    return *std::max_element(candidates.begin(), candidates.end(),
-        [](const auto& a, const auto& b) {
-            const auto& ma = pattern_database.at(a.name);
-            const auto& mb = pattern_database.at(b.name);
-            return ma.sharpe_ratio < mb.sharpe_ratio;
-        });
+    // If we have learned strategies with edge, use them
+    if (!strategy_configs.empty()) {
+        std::vector<StrategyConfig> candidates;
+        
+        for (const auto& config : strategy_configs) {
+            if (config.name.find(pair) == 0 && current_volatility >= config.min_volatility) {
+                candidates.push_back(config);
+            }
+        }
+        
+        if (!candidates.empty()) {
+            // Return best (highest estimated edge)
+            auto best = std::max_element(candidates.begin(), candidates.end(),
+                [](const auto& a, const auto& b) {
+                    return a.estimated_edge < b.estimated_edge;
+                });
+            
+            std::cout << "🎯 Using LEARNED strategy for " << pair 
+                      << " | Edge: " << std::fixed << std::setprecision(1) << best->estimated_edge << "%" << std::endl;
+            return *best;
+        }
+    }
+    
+    // Check if we have pattern data and use it to customize strategy
+    double best_win_rate = 0;
+    double best_leverage = 1.0;
+    int best_timeframe = 60;
+    
+    for (const auto& [key, metrics] : pattern_database) {
+        if (key.find(pair + "_") == 0 && metrics.total_trades >= 3 && metrics.win_rate > best_win_rate) {
+            best_win_rate = metrics.win_rate;
+            best_leverage = metrics.leverage;
+            best_timeframe = metrics.timeframe_bucket * 30 + 30;
+            
+            std::cout << "📊 Found winning pattern for " << pair 
+                      << " | WR: " << std::fixed << std::setprecision(1) << (metrics.win_rate * 100) << "%"
+                      << " | Leverage: " << metrics.leverage << "x" << std::endl;
+        }
+    }
+    
+    // Build strategy based on learned data or defaults
+    StrategyConfig adaptive;
+    adaptive.name = "adaptive_" + pair;
+    
+    // Use learned parameters if we found any, otherwise use volatility-based defaults
+    if (best_win_rate > 0.4) {
+        adaptive.leverage = best_leverage;
+        adaptive.timeframe_seconds = best_timeframe;
+    } else {
+        // More conservative defaults for unknown pairs
+        adaptive.leverage = std::min(2.0, std::max(1.0, current_volatility / 3.0));
+        adaptive.timeframe_seconds = std::max(60, std::min(180, (int)(60 / current_volatility * 5)));
+    }
+    
+    // Take profit must exceed fees (0.4%) plus buffer
+    adaptive.take_profit_pct = std::max(0.015, current_volatility / 100.0 * 0.4);  // At least 1.5%
+    adaptive.stop_loss_pct = std::max(0.008, current_volatility / 100.0 * 0.2);    // At least 0.8%
+    
+    // Position sizing: smaller for unknown pairs
+    adaptive.position_size_usd = total_pair_trades < 5 ? 50 : 75;  // Start conservative
+    adaptive.min_volatility = 1.5;  // Need decent volatility
+    adaptive.max_spread_pct = 0.3;
+    
+    if (total_pair_trades == 0) {
+        std::cout << "🔄 Using ADAPTIVE strategy for " << pair << " (no data yet)" << std::endl;
+    } else {
+        std::cout << "🔄 Using ADAPTIVE strategy for " << pair 
+                  << " | Historical WR: " << std::fixed << std::setprecision(1) << ((double)pair_wins/total_pair_trades*100) << "%" << std::endl;
+    }
+    
+    return adaptive;
 }
 
 PatternMetrics LearningEngine::get_pattern_metrics(const std::string& pair, double leverage, int timeframe_bucket) const {
@@ -448,8 +541,8 @@ void LearningEngine::print_summary() const {
     
     auto stats = get_statistics_json();
     std::cout << "  Total Trades: " << stats["total_trades"] << std::endl;
-    std::cout << "  Win Rate: " << std::fixed << std::setprecision(1) 
-              << stats["win_rate"] * 100 << "%" << std::endl;
+    std::cout << "  Win Rate: " << std::fixed << std::setprecision(1)
+              << double(stats["win_rate"]) * 100 << "%" << std::endl;
     std::cout << "  Total P&L: $" << std::setprecision(2) << stats["total_pnl"] << std::endl;
     std::cout << "  Patterns Found: " << stats["patterns_found"] << std::endl;
     std::cout << "  Validated Strategies: " << stats["strategies"] << std::endl;

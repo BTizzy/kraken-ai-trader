@@ -2,34 +2,68 @@
 
 class KrakenAPI {
     constructor() {
-        this.baseURL = '/api/markets'; // Use local proxy
+        this.baseURL = '/api'; // Use local proxy to Kraken
         this.cache = new Map();
         this.cacheExpiry = 60000; // 1 minute
     }
 
     /**
-     * Fetch markets from Kraken CLOB API via proxy
+     * Fetch trading pairs from Kraken API via proxy
      */
     async fetchMarkets(limit = GAME_CONFIG.maxMarketsToFetch) {
         try {
             const cacheKey = `markets_${limit}`;
             const cached = this.cache.get(cacheKey);
-            
+
             if (cached && Date.now() - cached.timestamp < this.cacheExpiry) {
                 return cached.data;
             }
 
-            const response = await fetch(`${this.baseURL}?limit=${limit}&active=true`);
-            
+            const response = await fetch(`${this.baseURL}/assetpairs`);
+
             if (!response.ok) {
                 throw new Error(`API error: ${response.status}`);
             }
 
             const data = await response.json();
-            
-            // Handle both array and object with data property
-            const markets = Array.isArray(data) ? data : (data.data || data);
-            
+
+            if (!data.result) {
+                throw new Error('Invalid Kraken API response');
+            }
+
+            // Convert Kraken asset pairs to our market format
+            const markets = Object.entries(data.result)
+                .filter(([pair, info]) => info.status === 'online' && pair.endsWith('USD'))
+                .slice(0, limit)
+                .map(([pair, info]) => ({
+                    id: pair,
+                    pair: pair,
+                    altname: info.altname,
+                    wsname: info.wsname,
+                    base: info.base,
+                    quote: info.quote,
+                    fees: parseFloat(info.fees[0][1]),
+                    min_order: info.ordermin,
+                    active: true,
+                    market_slug: pair.toLowerCase(),
+                    question: `${info.base}/${info.quote} Trading Pair`,
+                    description: `Trade ${info.base} against ${info.quote} on Kraken`,
+                    end_date_iso: null,
+                    game_start_time: null,
+                    tokens: [
+                        {
+                            token_id: `${pair}_YES`,
+                            outcome: 'Yes',
+                            price: 0.5
+                        },
+                        {
+                            token_id: `${pair}_NO`,
+                            outcome: 'No',
+                            price: 0.5
+                        }
+                    ]
+                }));
+
             this.cache.set(cacheKey, {
                 data: markets,
                 timestamp: Date.now()
@@ -43,23 +77,102 @@ class KrakenAPI {
     }
 
     /**
-     * Get market details by ID via proxy
+     * Get market details by pair via proxy
      */
-    async getMarket(marketId) {
+    async getMarket(pair) {
         try {
-            const response = await fetch(`/api/gamma/markets/${marketId}`);
-            
+            const response = await fetch(`${this.baseURL}/ticker/${pair}`);
+
             if (!response.ok) {
                 throw new Error(`API error: ${response.status}`);
             }
 
-            return await response.json();
+            const data = await response.json();
+
+            if (!data.result || !data.result[pair]) {
+                throw new Error('Market not found');
+            }
+
+            const ticker = data.result[pair];
+            const lastPrice = parseFloat(ticker.c[0]);
+            const volume = parseFloat(ticker.v[1]);
+
+            return {
+                id: pair,
+                pair: pair,
+                last_price: lastPrice,
+                volume: volume,
+                high: parseFloat(ticker.h[1]),
+                low: parseFloat(ticker.l[1]),
+                open: parseFloat(ticker.o),
+                bid: parseFloat(ticker.b[0]),
+                ask: parseFloat(ticker.a[0]),
+                timestamp: Date.now()
+            };
         } catch (error) {
             console.error('Error fetching market:', error);
             throw error;
         }
     }
 
+    /**
+     * Get order book for a pair
+     */
+    async getOrderBook(pair, count = 10) {
+        try {
+            const response = await fetch(`${this.baseURL}/depth/${pair}?count=${count}`);
+
+            if (!response.ok) {
+                throw new Error(`API error: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            if (!data.result || !data.result[pair]) {
+                throw new Error('Order book not found');
+            }
+
+            const book = data.result[pair];
+
+            return {
+                pair: pair,
+                bids: book.bids.map(([price, volume, timestamp]) => ({
+                    price: parseFloat(price),
+                    volume: parseFloat(volume),
+                    timestamp: parseInt(timestamp)
+                })),
+                asks: book.asks.map(([price, volume, timestamp]) => ({
+                    price: parseFloat(price),
+                    volume: parseFloat(volume),
+                    timestamp: parseInt(timestamp)
+                }))
+            };
+        } catch (error) {
+            console.error('Error fetching order book:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get current price for a pair
+     */
+    async getPrice(pair) {
+        try {
+            const market = await this.getMarket(pair);
+            return {
+                pair: pair,
+                price: market.last_price,
+                bid: market.bid,
+                ask: market.ask,
+                timestamp: market.timestamp,
+                source: 'kraken-api'
+            };
+        } catch (error) {
+            console.error('Error fetching price:', error);
+            throw error;
+        }
+    }
+            
     /**
      * Calculate volatility score from market data
      */

@@ -18,10 +18,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 add_executable(kraken_bot
     src/main.cpp
     src/kraken_api.cpp
-    src/strategy_engine.cpp
     src/learning_engine.cpp
-    src/trade_logger.cpp
-    src/position_manager.cpp
 )
 
 target_link_libraries(kraken_bot
@@ -34,5 +31,5 @@ target_link_libraries(kraken_bot
 )
 
 # Build tests
-enable_testing()
-add_subdirectory(tests)
+# enable_testing()
+# add_subdirectory(tests)

@@ -137,7 +137,10 @@ void LearningEngine::analyze_patterns() {
     // 5. REGIME DETECTION
     detect_regime_shifts();
     
-    // 6. UPDATE STRATEGY DATABASE
+    // 6. INDICATOR EFFECTIVENESS ANALYSIS (from awesome-systematic-trading)
+    analyze_indicator_patterns();
+    
+    // 7. UPDATE STRATEGY DATABASE
     update_strategy_database();
 }
 
@@ -548,4 +551,329 @@ void LearningEngine::print_summary() const {
     std::cout << "  Validated Strategies: " << stats["strategies"] << std::endl;
     std::cout << "  Market Regime: " << stats["regime"] << std::endl;
     std::cout << std::string(60, '=') << std::endl;
+}
+
+// ============================================================================
+// TECHNICAL INDICATOR CALCULATIONS (from awesome-systematic-trading research)
+// ============================================================================
+
+double LearningEngine::calculate_sma(const std::vector<double>& prices, int period) const {
+    if (prices.size() < static_cast<size_t>(period)) return 0.0;
+    double sum = 0.0;
+    for (int i = prices.size() - period; i < static_cast<int>(prices.size()); i++) {
+        sum += prices[i];
+    }
+    return sum / period;
+}
+
+double LearningEngine::calculate_ema(const std::vector<double>& prices, int period) const {
+    if (prices.empty()) return 0.0;
+    if (prices.size() < static_cast<size_t>(period)) return prices.back();
+    
+    double multiplier = 2.0 / (period + 1);
+    double ema = calculate_sma(std::vector<double>(prices.begin(), prices.begin() + period), period);
+    
+    for (size_t i = period; i < prices.size(); i++) {
+        ema = (prices[i] - ema) * multiplier + ema;
+    }
+    return ema;
+}
+
+double LearningEngine::calculate_rsi(const std::vector<double>& prices, int period) const {
+    if (prices.size() < static_cast<size_t>(period + 1)) return 50.0;  // Neutral default
+    
+    double avg_gain = 0.0, avg_loss = 0.0;
+    
+    // Calculate initial average gain/loss
+    for (int i = 1; i <= period; i++) {
+        double change = prices[i] - prices[i - 1];
+        if (change > 0) avg_gain += change;
+        else avg_loss -= change;
+    }
+    avg_gain /= period;
+    avg_loss /= period;
+    
+    // Calculate smoothed RSI
+    for (size_t i = period + 1; i < prices.size(); i++) {
+        double change = prices[i] - prices[i - 1];
+        double gain = change > 0 ? change : 0;
+        double loss = change < 0 ? -change : 0;
+        
+        avg_gain = (avg_gain * (period - 1) + gain) / period;
+        avg_loss = (avg_loss * (period - 1) + loss) / period;
+    }
+    
+    if (avg_loss == 0) return 100.0;
+    double rs = avg_gain / avg_loss;
+    return 100.0 - (100.0 / (1.0 + rs));
+}
+
+std::pair<double, double> LearningEngine::calculate_macd(const std::vector<double>& prices, 
+                                                          int fast, int slow, int signal) const {
+    if (prices.size() < static_cast<size_t>(slow + signal)) return {0.0, 0.0};
+    
+    double fast_ema = calculate_ema(prices, fast);
+    double slow_ema = calculate_ema(prices, slow);
+    double macd_line = fast_ema - slow_ema;
+    
+    // Calculate signal line (EMA of MACD line)
+    std::vector<double> macd_values;
+    for (size_t i = slow; i <= prices.size(); i++) {
+        std::vector<double> subset(prices.begin(), prices.begin() + i);
+        double f = calculate_ema(subset, fast);
+        double s = calculate_ema(subset, slow);
+        macd_values.push_back(f - s);
+    }
+    
+    double signal_line = calculate_ema(macd_values, signal);
+    double histogram = macd_line - signal_line;
+    
+    return {histogram, signal_line};
+}
+
+std::tuple<double, double, double> LearningEngine::calculate_bollinger_bands(
+    const std::vector<double>& prices, int period, double std_multiplier) const {
+    if (prices.size() < static_cast<size_t>(period)) {
+        double price = prices.empty() ? 0.0 : prices.back();
+        return {price, price, price};
+    }
+    
+    double sma = calculate_sma(prices, period);
+    
+    // Calculate standard deviation
+    double sum_sq = 0.0;
+    for (int i = prices.size() - period; i < static_cast<int>(prices.size()); i++) {
+        double diff = prices[i] - sma;
+        sum_sq += diff * diff;
+    }
+    double std_dev = std::sqrt(sum_sq / period);
+    
+    double upper = sma + (std_multiplier * std_dev);
+    double lower = sma - (std_multiplier * std_dev);
+    
+    return {upper, sma, lower};
+}
+
+double LearningEngine::calculate_atr(const std::vector<double>& highs, 
+                                      const std::vector<double>& lows,
+                                      const std::vector<double>& closes, int period) const {
+    if (highs.size() < static_cast<size_t>(period) || 
+        lows.size() < static_cast<size_t>(period) || 
+        closes.size() < static_cast<size_t>(period)) return 0.0;
+    
+    std::vector<double> true_ranges;
+    for (size_t i = 1; i < closes.size(); i++) {
+        double tr1 = highs[i] - lows[i];
+        double tr2 = std::abs(highs[i] - closes[i - 1]);
+        double tr3 = std::abs(lows[i] - closes[i - 1]);
+        true_ranges.push_back(std::max({tr1, tr2, tr3}));
+    }
+    
+    return calculate_sma(true_ranges, period);
+}
+
+LearningEngine::TechnicalSignals LearningEngine::calculate_signals(
+    const std::vector<double>& prices,
+    const std::vector<double>& volumes,
+    double current_bid, double current_ask) const {
+    
+    TechnicalSignals signals;
+    
+    if (prices.size() < 20) return signals;  // Not enough data
+    
+    // RSI
+    signals.rsi = calculate_rsi(prices, 14);
+    
+    // MACD
+    auto [macd_hist, macd_sig] = calculate_macd(prices, 12, 26, 9);
+    signals.macd_histogram = macd_hist;
+    signals.macd_signal = macd_sig;
+    
+    // Bollinger Bands position
+    auto [upper, middle, lower] = calculate_bollinger_bands(prices, 20, 2.0);
+    double current_price = prices.back();
+    if (upper != lower) {
+        signals.bb_position = (current_price - lower) / (upper - lower);
+    }
+    
+    // Volume ratio (current vs 20-period average)
+    if (volumes.size() >= 20) {
+        double avg_vol = calculate_sma(volumes, 20);
+        signals.volume_ratio = avg_vol > 0 ? volumes.back() / avg_vol : 1.0;
+    }
+    
+    // Order flow imbalance (bid-ask spread analysis)
+    double mid = (current_bid + current_ask) / 2;
+    double spread = current_ask - current_bid;
+    if (mid > 0 && spread > 0) {
+        // If current price is closer to ask, buyers are more aggressive
+        signals.order_flow_imbalance = (current_price - current_bid) / spread * 2 - 1;
+    }
+    
+    // Momentum score: combine RSI, MACD, and BB position
+    double rsi_score = (signals.rsi - 50) / 50;  // -1 to 1
+    double macd_score = signals.macd_histogram > 0 ? 0.5 : -0.5;
+    double bb_score = (signals.bb_position - 0.5) * 2;  // -1 to 1
+    signals.momentum_score = (rsi_score * 0.4) + (macd_score * 0.3) + (bb_score * 0.3);
+    
+    // Market regime detection
+    double sma20 = calculate_sma(prices, 20);
+    double sma50 = prices.size() >= 50 ? calculate_sma(prices, 50) : sma20;
+    double price_vs_sma = (current_price - sma20) / sma20 * 100;
+    
+    if (sma20 > sma50 && price_vs_sma > 1.0) {
+        signals.market_regime = 1;  // Uptrend
+    } else if (sma20 < sma50 && price_vs_sma < -1.0) {
+        signals.market_regime = -1;  // Downtrend
+    } else {
+        signals.market_regime = 0;  // Consolidation
+    }
+    
+    // Composite score
+    signals.composite_score = (signals.momentum_score + signals.order_flow_imbalance) / 2;
+    signals.composite_score = std::max(-1.0, std::min(1.0, signals.composite_score));
+    
+    return signals;
+}
+
+json LearningEngine::analyze_indicator_effectiveness() const {
+    json results;
+    
+    if (trade_history.size() < 10) {
+        results["error"] = "Need at least 10 trades for indicator analysis";
+        return results;
+    }
+    
+    // Analyze which indicator values correlate with wins
+    struct IndicatorBucket {
+        int count = 0;
+        int wins = 0;
+        double avg_pnl = 0;
+    };
+    
+    // RSI buckets: oversold (0-30), neutral (30-70), overbought (70-100)
+    std::map<std::string, IndicatorBucket> rsi_buckets = {
+        {"oversold", {}}, {"neutral", {}}, {"overbought", {}}
+    };
+    
+    // MACD buckets: negative, positive
+    std::map<std::string, IndicatorBucket> macd_buckets = {
+        {"negative", {}}, {"positive", {}}
+    };
+    
+    // BB position buckets: near_lower, middle, near_upper
+    std::map<std::string, IndicatorBucket> bb_buckets = {
+        {"near_lower", {}}, {"middle", {}}, {"near_upper", {}}
+    };
+    
+    for (const auto& trade : trade_history) {
+        // RSI analysis
+        std::string rsi_bucket = trade.rsi < 30 ? "oversold" : 
+                                  (trade.rsi > 70 ? "overbought" : "neutral");
+        rsi_buckets[rsi_bucket].count++;
+        if (trade.is_win()) rsi_buckets[rsi_bucket].wins++;
+        rsi_buckets[rsi_bucket].avg_pnl += trade.pnl;
+        
+        // MACD analysis
+        std::string macd_bucket = trade.macd_histogram > 0 ? "positive" : "negative";
+        macd_buckets[macd_bucket].count++;
+        if (trade.is_win()) macd_buckets[macd_bucket].wins++;
+        macd_buckets[macd_bucket].avg_pnl += trade.pnl;
+        
+        // BB analysis
+        std::string bb_bucket = trade.bb_position < 0.3 ? "near_lower" :
+                                (trade.bb_position > 0.7 ? "near_upper" : "middle");
+        bb_buckets[bb_bucket].count++;
+        if (trade.is_win()) bb_buckets[bb_bucket].wins++;
+        bb_buckets[bb_bucket].avg_pnl += trade.pnl;
+    }
+    
+    // Build results
+    json rsi_results;
+    for (auto& [bucket, data] : rsi_buckets) {
+        if (data.count > 0) {
+            rsi_results[bucket]["count"] = data.count;
+            rsi_results[bucket]["win_rate"] = (double)data.wins / data.count * 100;
+            rsi_results[bucket]["avg_pnl"] = data.avg_pnl / data.count;
+        }
+    }
+    results["rsi"] = rsi_results;
+    
+    json macd_results;
+    for (auto& [bucket, data] : macd_buckets) {
+        if (data.count > 0) {
+            macd_results[bucket]["count"] = data.count;
+            macd_results[bucket]["win_rate"] = (double)data.wins / data.count * 100;
+            macd_results[bucket]["avg_pnl"] = data.avg_pnl / data.count;
+        }
+    }
+    results["macd"] = macd_results;
+    
+    json bb_results;
+    for (auto& [bucket, data] : bb_buckets) {
+        if (data.count > 0) {
+            bb_results[bucket]["count"] = data.count;
+            bb_results[bucket]["win_rate"] = (double)data.wins / data.count * 100;
+            bb_results[bucket]["avg_pnl"] = data.avg_pnl / data.count;
+        }
+    }
+    results["bollinger_bands"] = bb_results;
+    
+    return results;
+}
+
+void LearningEngine::analyze_indicator_patterns() {
+    std::cout << "\n📊 INDICATOR EFFECTIVENESS ANALYSIS:" << std::endl;
+    
+    auto results = analyze_indicator_effectiveness();
+    
+    if (results.contains("error")) {
+        std::cout << "  ⏳ " << results["error"].get<std::string>() << std::endl;
+        return;
+    }
+    
+    // RSI
+    if (results.contains("rsi")) {
+        std::cout << "  RSI:" << std::endl;
+        for (auto& [bucket, data] : results["rsi"].items()) {
+            if (data.contains("count") && data["count"].get<int>() > 0) {
+                std::cout << "    " << bucket << ": " 
+                          << data["count"] << " trades, "
+                          << std::fixed << std::setprecision(1) 
+                          << data["win_rate"].get<double>() << "% WR, "
+                          << "$" << std::setprecision(2) << data["avg_pnl"].get<double>() << " avg"
+                          << std::endl;
+            }
+        }
+    }
+    
+    // MACD
+    if (results.contains("macd")) {
+        std::cout << "  MACD:" << std::endl;
+        for (auto& [bucket, data] : results["macd"].items()) {
+            if (data.contains("count") && data["count"].get<int>() > 0) {
+                std::cout << "    " << bucket << ": " 
+                          << data["count"] << " trades, "
+                          << std::fixed << std::setprecision(1) 
+                          << data["win_rate"].get<double>() << "% WR, "
+                          << "$" << std::setprecision(2) << data["avg_pnl"].get<double>() << " avg"
+                          << std::endl;
+            }
+        }
+    }
+    
+    // Bollinger Bands
+    if (results.contains("bollinger_bands")) {
+        std::cout << "  Bollinger Bands:" << std::endl;
+        for (auto& [bucket, data] : results["bollinger_bands"].items()) {
+            if (data.contains("count") && data["count"].get<int>() > 0) {
+                std::cout << "    " << bucket << ": " 
+                          << data["count"] << " trades, "
+                          << std::fixed << std::setprecision(1) 
+                          << data["win_rate"].get<double>() << "% WR, "
+                          << "$" << std::setprecision(2) << data["avg_pnl"].get<double>() << " avg"
+                          << std::endl;
+            }
+        }
+    }
 }

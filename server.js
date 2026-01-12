@@ -48,6 +48,80 @@ let learningData = {
     last_update: Date.now()
 };
 
+/**
+ * Load training data from trade_log.json to preserve learning across restarts
+ */
+function loadTrainingData() {
+    const tradeLogPath = path.join(__dirname, 'bot', 'build', 'trade_log.json');
+    try {
+        if (fs.existsSync(tradeLogPath)) {
+            const data = JSON.parse(fs.readFileSync(tradeLogPath, 'utf8'));
+            if (data && Array.isArray(data.trades)) {
+                const validTrades = data.trades.filter(t => 
+                    t && typeof t.pnl === 'number' && Math.abs(t.pnl) < 10000
+                );
+                
+                let totalPnl = 0;
+                let wins = 0;
+                let losses = 0;
+                let tpExits = 0;
+                let slExits = 0;
+                let trailingExits = 0;
+                let timeoutExits = 0;
+                let bestTrade = 0;
+                let worstTrade = 0;
+                
+                validTrades.forEach(trade => {
+                    totalPnl += trade.pnl;
+                    if (trade.pnl > 0) wins++;
+                    else losses++;
+                    if (trade.pnl > bestTrade) bestTrade = trade.pnl;
+                    if (trade.pnl < worstTrade) worstTrade = trade.pnl;
+                    
+                    const reason = trade.exit_reason || '';
+                    if (reason === 'take_profit') tpExits++;
+                    else if (reason === 'stop_loss') slExits++;
+                    else if (reason === 'trailing_stop') trailingExits++;
+                    else if (reason === 'timeout') timeoutExits++;
+                });
+                
+                learningData.total_trades = validTrades.length;
+                learningData.winning_trades = wins;
+                learningData.losing_trades = losses;
+                learningData.total_pnl = parseFloat(totalPnl.toFixed(2));
+                learningData.win_rate = validTrades.length > 0 ? (wins / validTrades.length * 100) : 0;
+                learningData.tp_exits = tpExits;
+                learningData.sl_exits = slExits;
+                learningData.trailing_exits = trailingExits;
+                learningData.timeout_exits = timeoutExits;
+                learningData.best_trade = bestTrade;
+                learningData.worst_trade = worstTrade;
+                
+                // Load recent trades for display
+                learningData.recent_trades = validTrades.slice(-20).reverse().map(t => ({
+                    pair: t.pair,
+                    direction: 'LONG',
+                    entry_time: t.timestamp || Date.now(),
+                    exit_time: t.timestamp || Date.now(),
+                    hold_time_seconds: t.hold_time || 0,
+                    timestamp: t.timestamp || Date.now(),
+                    status: 'completed',
+                    pnl: t.pnl,
+                    exit_reason: t.exit_reason,
+                    result: t.exit_reason
+                }));
+                
+                console.log(`Loaded ${validTrades.length} trades from trade_log.json (P&L: $${learningData.total_pnl.toFixed(2)})`);
+            }
+        }
+    } catch (error) {
+        console.error('Error loading training data:', error.message);
+    }
+}
+
+// Load training data on startup
+loadTrainingData();
+
 // MIME types for static files
 const MIME_TYPES = {
     '.html': 'text/html',
@@ -394,34 +468,37 @@ const server = http.createServer(async (req, res) => {
                     }
                     
                     // Parse P&L line: "  P&L: $1.50 (+1.5%)" - individual trade P&L (not summary with fees)
+                    // Only count P&L when associated with a trade exit (status === 'exiting')
                     const tradePnlMatch = output.match(/P&L: \$([\-\d.]+)/);
                     if (tradePnlMatch && !output.includes('(fees:')) {
                         const tradePnl = parseFloat(tradePnlMatch[1]);
                         if (!isNaN(tradePnl) && Math.abs(tradePnl) < 10000) {
-                            botStatus.trades_completed++;
-                            learningData.total_trades++;
-                            learningData.total_pnl += tradePnl;
-                            botStatus.current_pnl = learningData.total_pnl;
-                            
-                            if (tradePnl > 0) {
-                                learningData.winning_trades++;
-                                if (tradePnl > learningData.best_trade) learningData.best_trade = tradePnl;
-                            } else {
-                                learningData.losing_trades++;
-                                if (tradePnl < learningData.worst_trade) learningData.worst_trade = tradePnl;
-                            }
-                            
-                            learningData.win_rate = learningData.total_trades > 0 
-                                ? (learningData.winning_trades / learningData.total_trades * 100) 
-                                : 0;
-                            
+                            // Only process P&L if there's a trade in 'exiting' state (prevents double-counting)
                             const trade = learningData.recent_trades.find(t => t.status === 'exiting');
                             if (trade) {
                                 trade.pnl = tradePnl;
                                 trade.status = 'completed';
+                                
+                                // Only count towards totals when completing a trade
+                                botStatus.trades_completed++;
+                                learningData.total_trades++;
+                                learningData.total_pnl += tradePnl;
+                                botStatus.current_pnl = learningData.total_pnl;
+                                
+                                if (tradePnl > 0) {
+                                    learningData.winning_trades++;
+                                    if (tradePnl > learningData.best_trade) learningData.best_trade = tradePnl;
+                                } else {
+                                    learningData.losing_trades++;
+                                    if (tradePnl < learningData.worst_trade) learningData.worst_trade = tradePnl;
+                                }
+                                
+                                learningData.win_rate = learningData.total_trades > 0 
+                                    ? (learningData.winning_trades / learningData.total_trades * 100) 
+                                    : 0;
+                                
+                                learningData.last_update = Date.now();
                             }
-                            
-                            learningData.last_update = Date.now();
                         }
                     }
                     

@@ -48,6 +48,18 @@ struct TradeRecord {
     double max_loss;       // Peak unrealized loss
     double trend_direction; // 1.0 = up, -1.0 = down, 0.0 = neutral
     
+    // NEW: Technical indicators at entry (from awesome-systematic-trading research)
+    double rsi = 50.0;              // Relative Strength Index (0-100)
+    double macd_histogram = 0.0;     // MACD histogram value
+    double macd_signal = 0.0;        // MACD signal line
+    double bb_position = 0.5;        // Position within Bollinger Bands (0=lower, 1=upper)
+    double volume_ratio = 1.0;       // Current volume / average volume
+    double momentum_score = 0.0;     // Composite momentum (-1 to 1)
+    double order_flow_imbalance = 0.0; // Buy vs sell pressure (-1 to 1)
+    double atr_pct = 0.0;            // Average True Range as % of price
+    double vwap_deviation = 0.0;     // Price deviation from VWAP
+    int market_regime = 0;           // 0=consolidation, 1=uptrend, -1=downtrend
+    
     bool is_win() const { return pnl > 0; }
     double roi() const { return (pnl / position_size) * 100; }
 };
@@ -140,11 +152,38 @@ public:
     json get_statistics_json() const;
     void print_summary() const;
     
+    // NEW: Technical indicator analysis methods (from awesome-systematic-trading research)
+    struct TechnicalSignals {
+        double rsi = 50.0;
+        double macd_histogram = 0.0;
+        double macd_signal = 0.0;
+        double bb_position = 0.5;
+        double volume_ratio = 1.0;
+        double momentum_score = 0.0;
+        double order_flow_imbalance = 0.0;
+        double atr_pct = 0.0;
+        int market_regime = 0;
+        double composite_score = 0.0;  // Overall signal strength (-1 to 1)
+    };
+    
+    // Get technical signals for a pair based on historical price data
+    TechnicalSignals calculate_signals(const std::vector<double>& prices, 
+                                        const std::vector<double>& volumes,
+                                        double current_bid, double current_ask) const;
+    
+    // Analyze which indicators are most predictive of wins
+    json analyze_indicator_effectiveness() const;
+    
 private:
     // Trade history
     std::deque<TradeRecord> trade_history;
     std::map<std::string, std::vector<TradeRecord>> trades_by_pair;
     std::map<std::string, std::vector<TradeRecord>> trades_by_strategy;  // pattern key
+    
+    // Price history for indicator calculation (per pair)
+    std::map<std::string, std::deque<double>> price_history;
+    std::map<std::string, std::deque<double>> volume_history;
+    static const size_t MAX_HISTORY_SIZE = 200;  // Store last 200 data points
     
     // Learned patterns
     std::map<std::string, PatternMetrics> pattern_database;  // key = "pair_leverage_timeframe"
@@ -157,11 +196,25 @@ private:
     double calculate_max_drawdown(const std::vector<double>& returns) const;
     double calculate_confidence_score(const PatternMetrics& metrics) const;
     
+    // NEW: Technical indicator calculations (from awesome-systematic-trading)
+    double calculate_rsi(const std::vector<double>& prices, int period = 14) const;
+    std::pair<double, double> calculate_macd(const std::vector<double>& prices, 
+                                              int fast = 12, int slow = 26, int signal = 9) const;
+    std::tuple<double, double, double> calculate_bollinger_bands(const std::vector<double>& prices, 
+                                                                   int period = 20, double std_dev = 2.0) const;
+    double calculate_atr(const std::vector<double>& highs, const std::vector<double>& lows, 
+                         const std::vector<double>& closes, int period = 14) const;
+    double calculate_ema(const std::vector<double>& prices, int period) const;
+    double calculate_sma(const std::vector<double>& prices, int period) const;
+    
     // Pattern matching
     std::string generate_pattern_key(const std::string& pair, double leverage, int timeframe) const;
     void identify_winning_patterns();
     void correlate_patterns();
     void detect_regime_shifts();
+    
+    // Indicator-based pattern analysis
+    void analyze_indicator_patterns();  // Find which indicator combos predict wins
     
     // Outlier handling
     std::vector<double> remove_outliers(std::vector<double> values) const;

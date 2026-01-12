@@ -303,6 +303,37 @@ std::vector<std::string> KrakenAPI::get_trading_pairs() {
     }
 }
 
+std::vector<OHLC> KrakenAPI::get_ohlc(const std::string& pair, int interval) {
+    std::vector<OHLC> result;
+    try {
+        std::string endpoint = "/api/ohlc/" + pair + "?interval=" + std::to_string(interval);
+        auto response = http_get(endpoint);
+
+        if (response.contains("result")) {
+            for (const auto& [key, value] : response["result"].items()) {
+                if (key == "last") continue;  // Skip the "last" timestamp field
+                if (value.is_array()) {
+                    for (const auto& candle : value) {
+                        if (candle.is_array() && candle.size() >= 6) {
+                            OHLC ohlc;
+                            ohlc.timestamp = candle[0].get<long>();
+                            ohlc.open = std::stod(candle[1].get<std::string>());
+                            ohlc.high = std::stod(candle[2].get<std::string>());
+                            ohlc.low = std::stod(candle[3].get<std::string>());
+                            ohlc.close = std::stod(candle[4].get<std::string>());
+                            ohlc.volume = std::stod(candle[6].get<std::string>());
+                            result.push_back(ohlc);
+                        }
+                    }
+                }
+            }
+        }
+    } catch (const std::exception& e) {
+        // Silently fail - trend confirmation is optional
+    }
+    return result;
+}
+
 bool KrakenAPI::deploy_live() {
     if (paper_mode) {
         std::cout << "Switching from paper trading to live trading..." << std::endl;

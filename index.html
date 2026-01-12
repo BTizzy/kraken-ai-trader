@@ -1,1147 +1,285 @@
-<!DOCTYPE html><!DOCTYPE html>
-
-<html lang="en"><html lang="en">
-
-<head><head>
-
-    <meta charset="UTF-8">    <meta charset="UTF-8">
-
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <title>Kraken AI Trading Bot v2.0</title>    <meta name="description" content="AI-powered Kraken trading bot with real-time price updates and paper trading">
-
-    <style>    <title>Kraken AI Trading Bot</title>
-
-        * { margin: 0; padding: 0; box-sizing: border-box; }    <link rel="stylesheet" href="styles.css">
-
-        </head>
-
-        body {<body>
-
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;    <div class="container">
-
-            background: #0f0f1a;        <header>
-
-            color: #e0e0e0;            <h1>🚀 Kraken AI Trading Bot</h1>
-
-            min-height: 100vh;            <p>High-frequency volatility scraper and mean reversion trader</p>
-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kraken AI Trader</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #0c0d10;
+            --bg-secondary: #13141a;
+            --bg-tertiary: #1a1c24;
+            --bg-elevated: #21232d;
+            --border: #2a2d3a;
+            --border-light: #353849;
+            --text-primary: #e8e9ed;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --green: #10b981;
+            --green-bg: rgba(16, 185, 129, 0.12);
+            --red: #ef4444;
+            --red-bg: rgba(239, 68, 68, 0.12);
+            --blue: #3b82f6;
+            --blue-bg: rgba(59, 130, 246, 0.12);
+            --yellow: #f59e0b;
+            --font-sans: 'IBM Plex Sans', -apple-system, sans-serif;
+            --font-mono: 'IBM Plex Mono', monospace;
         }
-
-                    <!-- Header Stats -->
-
-        .container {            <div class="stats-bar">
-
-            max-width: 1600px;                <div class="stat-item">
-
-            margin: 0 auto;                    <span class="stat-label">Bankroll:</span>
-
-            padding: 20px;                    <span class="stat-value" id="bankroll">$1,000</span>
-
-        }                </div>
-
-                        <div class="stat-item">
-
-        /* Header */                    <span class="stat-label">Total P&L:</span>
-
-        header {                    <span class="stat-value" id="total-pnl">$0</span>
-
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);                </div>
-
-            border-radius: 16px;                <div class="stat-item">
-
-            padding: 24px;                    <span class="stat-label">Win Rate:</span>
-
-            margin-bottom: 20px;                    <span class="stat-value" id="win-rate">0%</span>
-
-            border: 1px solid #2d3a4f;                </div>
-
-        }                <div class="stat-item">
-
-                            <span class="stat-label">Trades:</span>
-
-        header h1 {                    <span class="stat-value" id="trade-count">0</span>
-
-            font-size: 28px;                </div>
-
-            color: #00d4aa;            </div>
-
-            margin-bottom: 8px;        </header>
-
-            display: flex;
-
-            align-items: center;        <!-- Bot Status Panel -->
-
-            gap: 10px;        <div class="bot-status-panel">
-
-        }            <h2>🤖 Bot Status</h2>
-
-                    <div class="bot-status-content">
-
-        header p {                <div class="bot-status-item">
-
-            color: #8892a0;                    <span class="status-label">Status:</span>
-
-            font-size: 14px;                    <span class="status-value" id="bot-status">🔴 Offline</span>
-
-        }                </div>
-
-                        <div class="bot-status-item">
-
-        /* Main Grid */                    <span class="status-label">Mode:</span>
-
-        .main-grid {                    <span class="status-value" id="bot-mode">Unknown</span>
-
-            display: grid;                </div>
-
-            grid-template-columns: 1fr 1fr 1fr;                <div class="bot-status-item">
-
-            gap: 20px;                    <span class="status-label">Pairs Scanned:</span>
-
-            margin-bottom: 20px;                    <span class="status-value" id="pairs-scanned">0</span>
-
-        }                </div>
-
-                        <div class="bot-status-item">
-
-        @media (max-width: 1200px) {                    <span class="status-label">Trades Completed:</span>
-
-            .main-grid { grid-template-columns: 1fr 1fr; }                    <span class="status-value" id="trades-completed">0</span>
-
-        }                </div>
-
-                        <div class="bot-status-item">
-
-        @media (max-width: 800px) {                    <span class="status-label">Current P&L:</span>
-
-            .main-grid { grid-template-columns: 1fr; }                    <span class="status-value" id="current-pnl">$0.00</span>
-
-        }                </div>
-
-                        <div class="bot-activity" id="bot-activity">Waiting for bot status...</div>
-
-        /* Cards */            </div>
-
-        .card {            <div class="bot-controls">
-
-            background: #1a1a2e;                <button id="start-bot" class="btn-primary">▶️ Start Bot</button>
-
-            border-radius: 12px;                <button id="stop-bot" class="btn-secondary" disabled>⏹️ Stop Bot</button>
-
-            padding: 20px;                <button id="show-settings" class="btn-secondary">⚙️ Settings</button>
-
-            border: 1px solid #2d3a4f;            </div>
-
-        }        </div>
-
-        
-
-        .card h2 {        <!-- Learning Dashboard -->
-
-            font-size: 16px;        <div class="learning-dashboard">
-
-            color: #8892a0;            <h2>🧠 AI Learning Dashboard</h2>
-
-            margin-bottom: 16px;            <div class="learning-grid">
-
-            display: flex;                <div class="learning-card">
-
-            align-items: center;                    <h3>📊 Performance Metrics</h3>
-
-            gap: 8px;                    <div class="metric-row">
-
-        }                        <span class="metric-label">Total Trades:</span>
-
-                                <span class="metric-value" id="learning-total-trades">0</span>
-
-        /* Bot Status */                    </div>
-
-        .status-indicator {                    <div class="metric-row">
-
-            display: inline-flex;                        <span class="metric-label">Win Rate:</span>
-
-            align-items: center;                        <span class="metric-value" id="learning-win-rate">0.0%</span>
-
-            gap: 8px;                    </div>
-
-            padding: 6px 14px;                    <div class="metric-row">
-
-            border-radius: 20px;                        <span class="metric-label">Total P&L:</span>
-
-            font-size: 14px;                        <span class="metric-value" id="learning-total-pnl">$0.00</span>
-
-            font-weight: 600;                    </div>
-
-        }                </div>
-
-                        <div class="learning-card">
-
-        .status-indicator.running {                    <h3>🔧 Adaptive Parameters</h3>
-
-            background: rgba(0, 212, 170, 0.15);                    <div class="metric-row">
-
-            color: #00d4aa;                        <span class="metric-label">Position Size:</span>
-
-        }                        <span class="metric-value" id="learning-position-size">$100.00</span>
-
-                            </div>
-
-        .status-indicator.stopped {                    <div class="metric-row">
-
-            background: rgba(255, 107, 107, 0.15);                        <span class="metric-label">Target Leverage:</span>
-
-            color: #ff6b6b;                        <span class="metric-value" id="learning-leverage">2.00x</span>
-
-        }                    </div>
-
-                            <div class="param-bar-container">
-
-        .status-dot {                        <div class="param-bar" id="position-bar" style="width: 100%"></div>
-
-            width: 8px;                    </div>
-
-            height: 8px;                </div>
-
-            border-radius: 50%;            </div>
-
-            animation: pulse 2s infinite;            <div class="recent-trades-section">
-
-        }                <h3>📜 Recent Trades</h3>
-
-                        <div class="trades-list" id="recent-trades-list">
-
-        .status-indicator.running .status-dot { background: #00d4aa; }                    <div class="trade-item empty">No trades recorded yet...</div>
-
-        .status-indicator.stopped .status-dot { background: #ff6b6b; animation: none; }                </div>
-
-                    </div>
-
-        @keyframes pulse {        </div>
-
-            0%, 100% { opacity: 1; }
-
-            50% { opacity: 0.5; }        <!-- Settings Panel -->
-
-        }        <div class="settings-panel" id="settings-panel" style="display: none;">
-
-                    <h2>⚙️ Trading Configuration</h2>
-
-        /* Big Numbers */            <div class="settings-group">
-
-        .big-number {                <label for="groq-api-key">
-
-            font-size: 36px;                    <strong>Groq API Key</strong>
-
-            font-weight: 700;                    <input type="password" id="groq-api-key" placeholder="Enter your Groq API key">
-
-            margin: 8px 0;                </label>
-
-        }                <button id="save-api-key" class="btn-secondary">Save API Key</button>
-
-                    </div>
-
-        .big-number.positive { color: #00d4aa; }            <div class="settings-group">
-
-        .big-number.negative { color: #ff6b6b; }                <label for="ai-threshold">
-
-        .big-number.neutral { color: #e0e0e0; }                    <strong>AI Confidence Threshold:</strong>
-
-                            <input type="range" id="ai-threshold" min="0.1" max="0.9" step="0.1" value="0.7">
-
-        .sub-text {                    <span id="ai-threshold-value">0.7</span>
-
-            font-size: 13px;                </label>
-
-            color: #6b7280;            </div>
-
-        }            <div class="settings-group">
-
-                        <label for="timer-duration">
-
-        /* Stats Grid */                    <strong>Trade Timer (seconds):</strong>
-
-        .stats-grid {                    <input type="number" id="timer-duration" min="10" max="300" value="60">
-
-            display: grid;                </label>
-
-            grid-template-columns: repeat(2, 1fr);            </div>
-
-            gap: 16px;            <div class="settings-group">
-
-        }                <label for="realistic-mode">
-
-                            <input type="checkbox" id="realistic-mode">
-
-        .stat-item {                    <strong>Realistic Mode</strong> - Enable fees & slippage
-
-            background: #12121f;                </label>
-
-            padding: 14px;            </div>
-
-            border-radius: 8px;            <div class="settings-group">
-
-        }                <label for="ai-bias">
-
-                            <input type="checkbox" id="ai-bias" checked>
-
-        .stat-label {                    <strong>AI Confidence Bias</strong> - High-confidence trades trend upward
-
-            font-size: 12px;                </label>
-
-            color: #6b7280;                <p class="settings-hint">Disable for random market simulation (harder).</p>
-
-            text-transform: uppercase;            </div>
-
-            letter-spacing: 0.5px;            <button id="close-settings">Close Settings</button>
-
-            margin-bottom: 4px;        </div>
-
+        html { font-size: 14px; -webkit-font-smoothing: antialiased; }
+        body { font-family: var(--font-sans); background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; }
+
+        .app { display: flex; flex-direction: column; min-height: 100vh; }
+
+        /* Top Bar */
+        .topbar {
+            height: 56px; background: var(--bg-secondary); border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between; padding: 0 24px;
+            position: sticky; top: 0; z-index: 100;
         }
+        .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; }
+        .logo-icon { width: 32px; height: 32px; background: linear-gradient(135deg, var(--blue), #8b5cf6); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+        .topbar-stats { display: flex; gap: 8px; }
+        .topbar-stat { display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: var(--bg-tertiary); border-radius: 6px; font-size: 13px; }
+        .topbar-stat .label { color: var(--text-muted); }
+        .topbar-stat .value { font-family: var(--font-mono); font-weight: 500; }
+        .topbar-stat .value.positive { color: var(--green); }
+        .topbar-stat .value.negative { color: var(--red); }
+        .topbar-right { display: flex; align-items: center; gap: 12px; }
+        .status { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 500; }
+        .status.online { background: var(--green-bg); color: var(--green); }
+        .status.offline { background: var(--red-bg); color: var(--red); }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+        .status.online .status-dot { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        /* Main Grid */
+        .main { flex: 1; display: grid; grid-template-columns: 1fr 360px; grid-template-rows: auto 1fr; gap: 1px; background: var(--border); }
+        @media (max-width: 1100px) { .main { grid-template-columns: 1fr; } }
+        .panel { background: var(--bg-secondary); }
+        .panel-header { height: 48px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+        .panel-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+        .panel-body { padding: 20px; }
+
+        /* Metrics */
+        .metrics-panel { grid-column: 1 / -1; }
+        .metrics-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; }
+        @media (max-width: 1200px) { .metrics-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 600px) { .metrics-grid { grid-template-columns: repeat(2, 1fr); } }
+        .metric { background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+        .metric:hover { border-color: var(--border-light); }
+        .metric .label { font-size: 11px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+        .metric .value { font-size: 28px; font-weight: 700; font-family: var(--font-mono); }
+        .metric .value.lg { font-size: 32px; }
+        .metric .value.positive { color: var(--green); }
+        .metric .value.negative { color: var(--red); }
+        .metric .sub { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+
+        /* Table */
+        .table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .table th { text-align: left; padding: 12px 16px; font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); background: var(--bg-tertiary); border-bottom: 1px solid var(--border); position: sticky; top: 0; }
+        .table td { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+        .table tr:hover { background: var(--bg-tertiary); }
+        .table tr:last-child td { border-bottom: none; }
+        .pair-cell { display: flex; align-items: center; gap: 10px; }
+        .pair-icon { width: 32px; height: 32px; border-radius: 50%; background: var(--bg-elevated); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); }
+        .pair-name { font-weight: 600; font-family: var(--font-mono); }
+        .price { font-family: var(--font-mono); font-weight: 500; }
+        .pnl { font-family: var(--font-mono); font-weight: 600; }
+        .pnl.positive { color: var(--green); }
+        .pnl.negative { color: var(--red); }
+        .badge { display: inline-block; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+        .badge.tp { background: var(--green-bg); color: var(--green); }
+        .badge.sl { background: var(--red-bg); color: var(--red); }
+        .badge.trailing { background: var(--blue-bg); color: var(--blue); }
+        .badge.timeout { background: var(--bg-elevated); color: var(--text-secondary); }
+
+        /* Stats Sidebar */
+        .sidebar { grid-row: span 2; overflow-y: auto; }
+        .stats-section { margin-bottom: 24px; }
+        .stats-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 12px; }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .stat-box { background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+        .stat-box .label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+        .stat-box .value { font-size: 18px; font-weight: 600; font-family: var(--font-mono); }
+        .stat-box .value.green { color: var(--green); }
+        .stat-box .value.red { color: var(--red); }
+        .progress { height: 6px; background: var(--bg-elevated); border-radius: 3px; overflow: hidden; margin-top: 8px; }
+        .progress-bar { height: 100%; background: var(--green); border-radius: 3px; transition: width 0.3s; }
+        .progress-bar.low { background: var(--red); }
+        .progress-bar.med { background: var(--yellow); }
+
+        /* Activity */
+        .activity { display: flex; flex-direction: column; }
+        .activity-item { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+        .activity-item:last-child { border-bottom: none; }
+        .activity-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+        .activity-icon.buy { background: var(--green-bg); }
+        .activity-icon.sell { background: var(--red-bg); }
+        .activity-icon.info { background: var(--blue-bg); }
+        .activity-content { flex: 1; min-width: 0; }
+        .activity-title { font-weight: 500; font-size: 13px; }
+        .activity-desc { font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .activity-time { font-size: 11px; font-family: var(--font-mono); color: var(--text-muted); }
+
+        /* Buttons */
+        .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border: none; border-radius: 6px; font-family: var(--font-sans); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+        .btn-primary { background: var(--green); color: #fff; }
+        .btn-primary:hover { filter: brightness(1.1); }
+        .btn-danger { background: var(--red); color: #fff; }
+        .btn-danger:hover { filter: brightness(1.1); }
+        .btn-ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); }
+        .btn-ghost:hover { background: var(--bg-tertiary); }
+        .btn-icon { width: 36px; height: 36px; padding: 0; justify-content: center; }
+
+        /* Empty */
+        .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center; }
+        .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.4; }
+        .empty-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+        .empty-desc { font-size: 13px; color: var(--text-muted); }
 
-                <!-- Risk Warning Banner -->
-
-        .stat-value {        <div class="risk-warning" id="risk-warning">
-
-            font-size: 20px;            <div class="risk-warning-content">
-
-            font-weight: 600;                <span class="warning-icon">⚠️</span>
-
-            color: #e0e0e0;                <div class="warning-text">
-
-        }                    <strong>PAPER TRADING MODE</strong> - No real money at risk
-
-                            <br>
-
-        .stat-value.positive { color: #00d4aa; }                    <small id="price-source-indicator">Price source: <span id="price-source-label">Checking...</span></small>
-
-        .stat-value.negative { color: #ff6b6b; }                </div>
-
-                        <button id="check-live-readiness" class="btn-small">Check Live Readiness</button>
-
-        /* Progress Bars */            </div>
-
-        .progress-container {        </div>
-
-            margin: 16px 0;
-
-        }        <!-- Live Readiness Modal -->
-
-                <div class="modal" id="readiness-modal">
-
-        .progress-label {            <div class="modal-content">
-
-            display: flex;                <h2>📊 Live Trading Readiness Check</h2>
-
-            justify-content: space-between;                <div id="readiness-results"></div>
-
-            font-size: 12px;                <button id="close-readiness-modal" class="btn-secondary">Close</button>
-
-            margin-bottom: 6px;            </div>
-
-        }        </div>
-
-        
-
-        .progress-bar {        <!-- Status Message -->
-
-            height: 8px;        <div class="status-message" id="status-message"></div>
-
-            background: #12121f;
-
-            border-radius: 4px;        <!-- Active Trade Panel -->
-
-            overflow: hidden;        <div class="active-trade-panel" id="active-trade-panel" style="display: none;">
-
-        }            <h3>🎯 Active Trade</h3>
-
-                    <div class="trade-info">
-
-        .progress-fill {                <div class="trade-row">
-
-            height: 100%;                    <span class="trade-label">Question:</span>
-
-            border-radius: 4px;                    <span class="trade-value" id="trade-question">Loading...</span>
-
-            transition: width 0.5s ease;                </div>
-
-        }                <div class="trade-row">
-
-                            <span class="trade-label">Entry Price:</span>
-
-        .progress-fill.green { background: linear-gradient(90deg, #00d4aa, #00ff88); }                    <span class="trade-value" id="entry-price">$0.00</span>
-
-        .progress-fill.red { background: linear-gradient(90deg, #ff6b6b, #ff4444); }                </div>
-
-        .progress-fill.blue { background: linear-gradient(90deg, #4dabf7, #228be6); }                <div class="trade-row">
-
-                            <span class="trade-label">Current Price:</span>
-
-        /* Exit Breakdown */                    <span class="trade-value" id="current-price">$0.00</span>
-
-        .exit-breakdown {                </div>
-
-            display: flex;                <div class="trade-row">
-
-            gap: 8px;                    <span class="trade-label">Position Size:</span>
-
-            flex-wrap: wrap;                    <span class="trade-value" id="position-size">$100</span>
-
-            margin-top: 12px;                </div>
-
-        }                <div class="trade-row">
-
-                            <span class="trade-label">P&L:</span>
-
-        .exit-tag {                    <span class="trade-value" id="pnl-display">$0.00</span>
-
-            padding: 6px 12px;                </div>
-
-            border-radius: 6px;                <div class="trade-row">
-
-            font-size: 12px;                    <span class="trade-label">Time Left:</span>
-
-            font-weight: 500;                    <span class="trade-value" id="timer-display">60s</span>
-
-        }                </div>
-
-                        <div class="trade-row">
-
-        .exit-tag.tp { background: rgba(0, 212, 170, 0.2); color: #00d4aa; }                    <span class="trade-label">Momentum:</span>
-
-        .exit-tag.sl { background: rgba(255, 107, 107, 0.2); color: #ff6b6b; }                    <span class="trade-value" id="momentum-indicator">Neutral</span>
-
-        .exit-tag.trail { background: rgba(77, 171, 247, 0.2); color: #4dabf7; }                </div>
-
-        .exit-tag.timeout { background: rgba(134, 142, 150, 0.2); color: #868e96; }                <div class="trade-row">
-
-                            <span class="trade-label">Take Profit:</span>
-
-        /* Recent Trades */                    <span class="trade-value" id="take-profit-target">$0.00</span>
-
-        .trades-list {                </div>
-
-            max-height: 400px;                <div class="trade-row">
-
-            overflow-y: auto;                    <span class="trade-label">Stop Loss:</span>
-
-        }                    <span class="trade-value" id="stop-loss-target">$0.00</span>
-
-                        </div>
-
-        .trade-item {            </div>
-
-            display: flex;            <div class="trade-controls">
-
-            justify-content: space-between;                <button id="start-trade" class="btn-primary">Start Trade</button>
-
-            align-items: center;                <button id="sell-now" class="btn-warning">Sell Now</button>
-
-            padding: 12px;                <button id="close-trade" class="btn-secondary">Close Trade</button>
-
-            background: #12121f;            </div>
-
-            border-radius: 8px;        </div>
-
-            margin-bottom: 8px;
-
-        }        <!-- Market Grid -->
-
-                <div class="market-grid" id="market-grid">
-
-        .trade-pair {            <div class="loading">Loading markets...</div>
-
-            font-weight: 600;        </div>
-
-            color: #e0e0e0;
-
-        }        <!-- Session Report -->
-
-                <div class="session-report" id="session-report" style="display: none;">
-
-        .trade-direction {            <h3>📊 Session Report</h3>
-
-            font-size: 11px;            <div class="report-stats">
-
-            padding: 2px 6px;                <div class="report-item">
-
-            border-radius: 4px;                    <span class="report-label">Total P&L:</span>
-
-            margin-left: 8px;                    <span class="report-value" id="report-pnl">$0</span>
-
-        }                </div>
-
-                        <div class="report-item">
-
-        .trade-direction.long { background: rgba(0, 212, 170, 0.2); color: #00d4aa; }                    <span class="report-label">Win Rate:</span>
-
-        .trade-direction.short { background: rgba(255, 107, 107, 0.2); color: #ff6b6b; }                    <span class="report-value" id="report-win-rate">0%</span>
-
-                        </div>
-
-        .trade-result {                <div class="report-item">
-
-            font-weight: 600;                    <span class="report-label">Total Trades:</span>
-
-            font-size: 14px;                    <span class="report-value" id="report-trades">0</span>
-
-        }                </div>
-
-                        <div class="report-item">
-
-        .trade-result.win { color: #00d4aa; }                    <span class="report-label">Best Trade:</span>
-
-        .trade-result.loss { color: #ff6b6b; }                    <span class="report-value" id="report-best">$0</span>
-
-        .trade-result.pending { color: #ffd43b; }                </div>
-
-                        <div class="report-item">
-
-        .trade-time {                    <span class="report-label">Worst Trade:</span>
-
-            font-size: 11px;                    <span class="report-value" id="report-worst">$0</span>
-
-            color: #6b7280;                </div>
-
-        }            </div>
-
-                    <div class="trade-history">
-
-        /* Buttons */                <h4>Trade History</h4>
-
-        .btn {                <ul id="trade-history-list"></ul>
-
-            padding: 12px 24px;            </div>
-
-            border: none;            <button id="new-session" class="btn-primary">Start New Session</button>
-
-            border-radius: 8px;        </div>
-
-            font-size: 14px;    </div>
-
-            font-weight: 600;        <div class="active-trade-panel" id="active-trade-panel">
-
-            cursor: pointer;            <div class="trade-header">
-
-            transition: all 0.2s;                <h3 id="trade-question">Market Question</h3>
-
-            display: inline-flex;                <button id="close-trade" class="close-btn">✕</button>
-
-            align-items: center;            </div>
-
-            gap: 8px;            <div class="trade-info">
-
-        }                <div class="info-row">
-
-                            <span class="label">Entry Price:</span>
-
-        .btn-primary {                    <span class="value" id="entry-price">$0.00</span>
-
-            background: linear-gradient(135deg, #00d4aa 0%, #00b894 100%);                </div>
-
-            color: #0f0f1a;                <div class="info-row">
-
-        }                    <span class="label">Current Price:</span>
-
-                            <span class="value" id="current-price">$0.00</span>
-
-        .btn-primary:hover {                </div>
-
-            transform: translateY(-2px);                <div class="info-row">
-
-            box-shadow: 0 4px 12px rgba(0, 212, 170, 0.3);                    <span class="label">Position Size:</span>
-
-        }                    <span class="value" id="position-size">0 shares</span>
-
-                        </div>
-
-        .btn-danger {                <div class="info-row">
-
-            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a5a 100%);                    <span class="label">Momentum:</span>
-
-            color: white;                    <span class="value" id="momentum-indicator">⏸️ Neutral</span>
-
-        }                </div>
-
-                    </div>
-
-        .btn-danger:hover {            <div class="pnl-display" id="pnl-display">$0.00</div>
-
-            transform: translateY(-2px);            <div class="trade-targets" id="trade-targets">
-
-            box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);                <span class="target-label">🎯 TP: <span id="take-profit-target">+$0</span></span>
-
-        }                <span class="target-label">⛔ SL: <span id="stop-loss-target">-$0</span></span>
-
-                    </div>
-
-        .btn:disabled {            <div class="timer-display" id="timer-display">20s</div>
-
-            opacity: 0.5;            <div class="trade-controls">
-
-            cursor: not-allowed;                <button id="start-trade" class="btn-start">Start Trade <span class="shortcut-hint">Enter</span></button>
-
-            transform: none !important;                <button id="sell-now" class="btn-sell">Sell Now <span class="shortcut-hint">Space</span></button>
-
-        }            </div>
-
-                </div>
-
-        .controls {
-
-            display: flex;        <!-- Session Report -->
-
-            gap: 12px;        <div class="session-report" id="session-report">
-
-            margin-top: 16px;            <h2>📊 Session Report</h2>
-
-        }            <div class="report-stats">
-
-                        <div class="report-stat">
-
-        /* Learning Insights */                    <span class="label">Total P&L:</span>
-
-        .insight-item {                    <span class="value" id="report-pnl">$0.00</span>
-
-            background: #12121f;                </div>
-
-            padding: 12px;                <div class="report-stat">
-
-            border-radius: 8px;                    <span class="label">Win Rate:</span>
-
-            margin-bottom: 8px;                    <span class="value" id="report-win-rate">0%</span>
-
-            border-left: 3px solid #4dabf7;                </div>
-
-        }                <div class="report-stat">
-
-                            <span class="label">Total Trades:</span>
-
-        .insight-title {                    <span class="value" id="report-trades">0</span>
-
-            font-size: 13px;                </div>
-
-            font-weight: 600;                <div class="report-stat">
-
-            color: #e0e0e0;                    <span class="label">Best Trade:</span>
-
-            margin-bottom: 4px;                    <span class="value" id="report-best">$0.00</span>
-
-        }                </div>
-
-                        <div class="report-stat">
-
-        .insight-text {                    <span class="label">Worst Trade:</span>
-
-            font-size: 12px;                    <span class="value" id="report-worst">$0.00</span>
-
-            color: #8892a0;                </div>
-
-        }            </div>
-
-                    <div class="trade-history">
-
-        /* Strategy Display */                <h3>Trade History</h3>
-
-        .strategy-params {                <div id="trade-history-list"></div>
-
-            display: grid;            </div>
-
-            grid-template-columns: repeat(2, 1fr);            <button id="new-session" class="btn-primary">Start New Session</button>
-
-            gap: 12px;        </div>
-
-            margin-top: 12px;    </div>
-
-        }
-
-            <script src="config.js"></script>
-
-        .param-item {    <script src="api.js"></script>
-
-            background: #12121f;    <script src="save-logs.js"></script>
-
-            padding: 10px;    <script src="game.js"></script>
-
-            border-radius: 6px;</body>
-
-        }</html>
-
-        
-        .param-label {
-            font-size: 11px;
-            color: #6b7280;
-        }
-        
-        .param-value {
-            font-size: 16px;
-            font-weight: 600;
-            color: #4dabf7;
-        }
-        
-        /* Full Width Section */
-        .full-width {
-            grid-column: 1 / -1;
-        }
-        
-        /* Activity Log */
-        .activity-log {
-            font-family: 'Monaco', 'Consolas', monospace;
-            font-size: 12px;
-            background: #0a0a12;
-            padding: 16px;
-            border-radius: 8px;
-            max-height: 200px;
-            overflow-y: auto;
-            color: #8892a0;
-        }
-        
-        .log-entry {
-            margin-bottom: 4px;
-        }
-        
-        .log-time {
-            color: #4dabf7;
-        }
-        
-        /* Warning Banner */
-        .warning-banner {
-            background: linear-gradient(135deg, rgba(255, 212, 59, 0.1) 0%, rgba(255, 169, 77, 0.1) 100%);
-            border: 1px solid rgba(255, 212, 59, 0.3);
-            border-radius: 8px;
-            padding: 12px 16px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 20px;
-        }
-        
-        .warning-banner span {
-            color: #ffd43b;
-            font-size: 14px;
-        }
-        
         /* Scrollbar */
-        ::-webkit-scrollbar {
-            width: 6px;
-        }
-        
-        ::-webkit-scrollbar-track {
-            background: #12121f;
-        }
-        
-        ::-webkit-scrollbar-thumb {
-            background: #2d3a4f;
-            border-radius: 3px;
-        }
-        
-        ::-webkit-scrollbar-thumb:hover {
-            background: #3d4a5f;
-        }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <!-- Header -->
-        <header>
-            <h1>🤖 Kraken AI Trading Bot <span style="font-size: 14px; color: #4dabf7;">v2.0</span></h1>
-            <p>Momentum-based trading with adaptive learning • Real-time TP/SL/Trailing stops</p>
+    <div class="app">
+        <header class="topbar">
+            <div class="logo"><div class="logo-icon">🐙</div><span>Kraken AI Trader</span></div>
+            <div class="topbar-stats">
+                <div class="topbar-stat"><span class="label">P&L</span><span class="value" id="hdr-pnl">$0.00</span></div>
+                <div class="topbar-stat"><span class="label">Win Rate</span><span class="value" id="hdr-wr">0%</span></div>
+                <div class="topbar-stat"><span class="label">Trades</span><span class="value" id="hdr-trades">0</span></div>
+            </div>
+            <div class="topbar-right">
+                <button class="btn btn-primary" id="btn-start" onclick="startBot()">▶ Start</button>
+                <button class="btn btn-danger" id="btn-stop" onclick="stopBot()" style="display:none">■ Stop</button>
+                <button class="btn btn-ghost btn-icon" onclick="refresh()" title="Refresh">↻</button>
+                <div class="status offline" id="status"><span class="status-dot"></span><span id="status-txt">Offline</span></div>
+            </div>
         </header>
-        
-        <!-- Warning Banner -->
-        <div class="warning-banner" id="mode-banner">
-            <span>⚠️</span>
-            <span><strong>PAPER TRADING MODE</strong> - No real money at risk. Connect wallet when confident.</span>
-        </div>
-        
-        <!-- Main Grid -->
-        <div class="main-grid">
-            <!-- Bot Status Card -->
-            <div class="card">
-                <h2>📡 Bot Status</h2>
-                <div id="status-indicator" class="status-indicator stopped">
-                    <div class="status-dot"></div>
-                    <span id="status-text">Offline</span>
-                </div>
-                <p id="status-message" class="sub-text" style="margin-top: 12px;">Bot not started</p>
-                <div class="stats-grid" style="margin-top: 16px;">
-                    <div class="stat-item">
-                        <div class="stat-label">Pairs Scanned</div>
-                        <div class="stat-value" id="pairs-scanned">0</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Trades Today</div>
-                        <div class="stat-value" id="trades-completed">0</div>
+
+        <main class="main">
+            <section class="panel metrics-panel">
+                <div class="panel-body">
+                    <div class="metrics-grid">
+                        <div class="metric"><div class="label">Total P&L</div><div class="value lg" id="m-pnl">$0.00</div><div class="sub" id="m-pnl-sub">0 trades</div></div>
+                        <div class="metric"><div class="label">Win Rate</div><div class="value" id="m-wr">0.0%</div><div class="sub" id="m-wl">0W / 0L</div></div>
+                        <div class="metric"><div class="label">Best Trade</div><div class="value positive" id="m-best">$0.00</div><div class="sub">Highest profit</div></div>
+                        <div class="metric"><div class="label">Worst Trade</div><div class="value negative" id="m-worst">$0.00</div><div class="sub">Largest loss</div></div>
+                        <div class="metric"><div class="label">Position</div><div class="value" id="m-pos">—</div><div class="sub" id="m-pos-sub">No active trade</div></div>
+                        <div class="metric"><div class="label">Pairs Scanned</div><div class="value" id="m-pairs">0</div><div class="sub">Scanning market</div></div>
                     </div>
                 </div>
-                <div class="controls">
-                    <button class="btn btn-primary" id="start-btn" onclick="startBot()">▶️ Start Bot</button>
-                    <button class="btn btn-danger" id="stop-btn" onclick="stopBot()" disabled>⏹️ Stop Bot</button>
+            </section>
+
+            <section class="panel">
+                <div class="panel-header"><h2 class="panel-title">Recent Trades</h2><span style="color:var(--text-muted);font-size:12px" id="trades-cnt">0 trades</span></div>
+                <div class="panel-body" style="padding:0;overflow:auto;max-height:500px">
+                    <table class="table"><thead><tr><th>Pair</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Type</th><th>Time</th></tr></thead><tbody id="trades-body">
+                        <tr><td colspan="6"><div class="empty"><div class="empty-icon">📊</div><div class="empty-title">No trades yet</div><div class="empty-desc">Start the bot to begin</div></div></td></tr>
+                    </tbody></table>
                 </div>
-            </div>
-            
-            <!-- P&L Card -->
-            <div class="card">
-                <h2>💰 Performance</h2>
-                <div class="big-number neutral" id="total-pnl">$0.00</div>
-                <p class="sub-text">Total Profit/Loss</p>
-                <div class="stats-grid" style="margin-top: 16px;">
-                    <div class="stat-item">
-                        <div class="stat-label">Best Trade</div>
-                        <div class="stat-value positive" id="best-trade">$0.00</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Worst Trade</div>
-                        <div class="stat-value negative" id="worst-trade">$0.00</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Avg Win</div>
-                        <div class="stat-value positive" id="avg-win">$0.00</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Avg Loss</div>
-                        <div class="stat-value negative" id="avg-loss">$0.00</div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Win Rate Card -->
-            <div class="card">
-                <h2>📊 Win Rate</h2>
-                <div class="big-number neutral" id="win-rate-display">0%</div>
-                <div class="progress-container">
-                    <div class="progress-label">
-                        <span id="wins-count">0 wins</span>
-                        <span id="losses-count">0 losses</span>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill green" id="win-rate-bar" style="width: 0%"></div>
-                    </div>
-                </div>
-                <div class="stats-grid" style="margin-top: 16px;">
-                    <div class="stat-item">
-                        <div class="stat-label">Profit Factor</div>
-                        <div class="stat-value" id="profit-factor">1.00</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Blacklisted</div>
-                        <div class="stat-value" id="blacklisted">0 pairs</div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Exit Analysis Card -->
-            <div class="card">
-                <h2>🎯 Exit Analysis</h2>
-                <p class="sub-text">How trades are closing</p>
-                <div class="exit-breakdown" id="exit-breakdown">
-                    <div class="exit-tag tp">🎉 TP: <span id="tp-count">0</span></div>
-                    <div class="exit-tag sl">⛔ SL: <span id="sl-count">0</span></div>
-                    <div class="exit-tag trail">📈 Trail: <span id="trail-count">0</span></div>
-                    <div class="exit-tag timeout">⏱️ Timeout: <span id="timeout-count">0</span></div>
-                </div>
-                <div class="progress-container" style="margin-top: 20px;">
-                    <div class="progress-label">
-                        <span>Take Profit Rate</span>
-                        <span id="tp-rate">0%</span>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill green" id="tp-bar" style="width: 0%"></div>
-                    </div>
-                </div>
-                <div class="progress-container">
-                    <div class="progress-label">
-                        <span>Stop Loss Rate</span>
-                        <span id="sl-rate">0%</span>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill red" id="sl-bar" style="width: 0%"></div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Strategy Card -->
-            <div class="card">
-                <h2>⚙️ Current Strategy</h2>
-                <div class="strategy-params">
-                    <div class="param-item">
-                        <div class="param-label">Position Size</div>
-                        <div class="param-value" id="position-size">$100</div>
-                    </div>
-                    <div class="param-item">
-                        <div class="param-label">Hold Time</div>
-                        <div class="param-value">3-30 min</div>
-                    </div>
-                    <div class="param-item">
-                        <div class="param-label">Take Profit</div>
-                        <div class="param-value">1.5%</div>
-                    </div>
-                    <div class="param-item">
-                        <div class="param-label">Stop Loss</div>
-                        <div class="param-value">0.5%</div>
-                    </div>
-                    <div class="param-item">
-                        <div class="param-label">Min Volatility</div>
-                        <div class="param-value">2%</div>
-                    </div>
-                    <div class="param-item">
-                        <div class="param-label">Max Spread</div>
-                        <div class="param-value">0.15%</div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Learning Insights Card -->
-            <div class="card">
-                <h2>🧠 Learning Insights</h2>
-                <div id="insights-container">
-                    <div class="insight-item">
-                        <div class="insight-title">Momentum Strategy</div>
-                        <div class="insight-text">Following 24h trends with 0.5%+ momentum threshold</div>
-                    </div>
-                    <div class="insight-item">
-                        <div class="insight-title">Risk Management</div>
-                        <div class="insight-text">3:1 risk/reward ratio with trailing stops at 0.8% profit</div>
-                    </div>
-                    <div class="insight-item">
-                        <div class="insight-title">Pair Filtering</div>
-                        <div class="insight-text">Auto-blacklisting pairs with 3+ consecutive losses</div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Recent Trades Card -->
-            <div class="card full-width">
-                <h2>📜 Recent Trades</h2>
-                <div class="trades-list" id="trades-list">
-                    <div class="trade-item" style="justify-content: center; color: #6b7280;">
-                        No trades yet. Start the bot to begin trading.
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <script>
-        // State
-        let botRunning = false;
-        
-        // Format currency
-        function formatCurrency(val) {
-            const num = parseFloat(val) || 0;
-            const sign = num >= 0 ? '' : '-';
-            return sign + '$' + Math.abs(num).toFixed(2);
-        }
-        
-        // Format time ago
-        function timeAgo(timestamp) {
-            const seconds = Math.floor((Date.now() - timestamp) / 1000);
-            if (seconds < 60) return seconds + 's ago';
-            if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
-            return Math.floor(seconds / 3600) + 'h ago';
-        }
-        
-        // Update UI with data
-        function updateUI(status, learning) {
-            // Debug logging for data processing
-            console.log('📊 Updating UI with P&L:', learning.total_pnl, 'Trades:', learning.total_trades, 'Win Rate:', learning.win_rate);
-            
-            // Bot status with existence checks
-            const indicator = document.getElementById('status-indicator');
-            const statusText = document.getElementById('status-text');
-            const statusMsg = document.getElementById('status-message');
-            
-            if (indicator && statusText && statusMsg) {
-                if (status.running) {
-                    indicator.className = 'status-indicator running';
-                    statusText.textContent = 'Running';
-                    const startBtn = document.getElementById('start-btn');
-                    const stopBtn = document.getElementById('stop-btn');
-                    if (startBtn) startBtn.disabled = true;
-                    if (stopBtn) stopBtn.disabled = false;
-                } else {
-                    indicator.className = 'status-indicator stopped';
-                    statusText.textContent = 'Offline';
-                    const startBtn = document.getElementById('start-btn');
-                    const stopBtn = document.getElementById('stop-btn');
-                    if (startBtn) startBtn.disabled = false;
-                    if (stopBtn) stopBtn.disabled = true;
-                }
-                
-                statusMsg.textContent = status.message || 'Waiting...';
-            }
-            
-            const pairsScannedEl = document.getElementById('pairs-scanned');
-            if (pairsScannedEl) pairsScannedEl.textContent = status.pairs_scanned || 0;
-            
-            const tradesCompletedEl = document.getElementById('trades-completed');
-            if (tradesCompletedEl) tradesCompletedEl.textContent = status.trades_completed || 0;
-            
-            // P&L with existence checks
-            const pnl = learning.total_pnl || 0;
-            const pnlEl = document.getElementById('total-pnl');
-            if (pnlEl) {
-                pnlEl.textContent = formatCurrency(pnl);
-                pnlEl.className = 'big-number ' + (pnl > 0 ? 'positive' : pnl < 0 ? 'negative' : 'neutral');
-            }
-            
-            const bestTradeEl = document.getElementById('best-trade');
-            if (bestTradeEl) bestTradeEl.textContent = formatCurrency(learning.best_trade || 0);
-            
-            const worstTradeEl = document.getElementById('worst-trade');
-            if (worstTradeEl) worstTradeEl.textContent = formatCurrency(learning.worst_trade || 0);
-            
-            const avgWinEl = document.getElementById('avg-win');
-            if (avgWinEl) avgWinEl.textContent = formatCurrency(learning.avg_win || 0);
-            
-            const avgLossEl = document.getElementById('avg-loss');
-            if (avgLossEl) avgLossEl.textContent = formatCurrency(learning.avg_loss || 0);
-            
-            // Win rate with existence checks
-            const wr = learning.win_rate || 0;
-            const wrEl = document.getElementById('win-rate-display');
-            if (wrEl) {
-                wrEl.textContent = wr.toFixed(1) + '%';
-                wrEl.className = 'big-number ' + (wr >= 50 ? 'positive' : wr > 0 ? 'negative' : 'neutral');
-            }
-            
-            const wrBarEl = document.getElementById('win-rate-bar');
-            if (wrBarEl) wrBarEl.style.width = wr + '%';
-            
-            const winsCountEl = document.getElementById('wins-count');
-            if (winsCountEl) winsCountEl.textContent = (learning.winning_trades || 0) + ' wins';
-            
-            const lossesCountEl = document.getElementById('losses-count');
-            if (lossesCountEl) lossesCountEl.textContent = (learning.losing_trades || 0) + ' losses';
-            
-            const pf = learning.profit_factor || 1;
-            const pfEl = document.getElementById('profit-factor');
-            if (pfEl) {
-                pfEl.textContent = pf.toFixed(2);
-                pfEl.className = 'stat-value ' + (pf >= 1 ? 'positive' : 'negative');
-            }
-            
-            const blacklistedEl = document.getElementById('blacklisted');
-            if (blacklistedEl) blacklistedEl.textContent = (learning.blacklisted_pairs || 0) + ' pairs';
-            
-            // Exit breakdown
-            const tp = learning.tp_exits || 0;
-            const sl = learning.sl_exits || 0;
-            const trail = learning.trailing_exits || 0;
-            const timeout = learning.timeout_exits || 0;
-            const total = tp + sl + trail + timeout || 1;
-            
-            document.getElementById('tp-count').textContent = tp;
-            document.getElementById('sl-count').textContent = sl;
-            document.getElementById('trail-count').textContent = trail;
-            document.getElementById('timeout-count').textContent = timeout;
-            
-            const tpRate = (tp / total * 100);
-            const slRate = (sl / total * 100);
-            document.getElementById('tp-rate').textContent = tpRate.toFixed(0) + '%';
-            document.getElementById('sl-rate').textContent = slRate.toFixed(0) + '%';
-            document.getElementById('tp-bar').style.width = tpRate + '%';
-            document.getElementById('sl-bar').style.width = slRate + '%';
-            
-            // Recent trades
-            const trades = learning.recent_trades || [];
-            const tradesList = document.getElementById('trades-list');
-            
-            if (trades.length > 0) {
-                tradesList.innerHTML = trades.slice(0, 20).map(t => {
-                    const dirClass = t.direction === 'LONG' ? 'long' : 'short';
-                    let resultClass = 'pending';
-                    let resultText = '⏳ Active';
-                    
-                    if (t.status === 'completed' && t.result) {
-                        if (t.result === 'take_profit' || t.result === 'trailing_stop') {
-                            resultClass = 'win';
-                            resultText = '✅ ' + t.result.replace(/_/g, ' ');
-                        } else {
-                            resultClass = 'loss';
-                            resultText = '❌ ' + t.result.replace(/_/g, ' ');
-                        }
-                    } else if (t.exit_reason) {
-                        if (t.exit_reason === 'take_profit' || t.exit_reason === 'trailing_stop') {
-                            resultClass = 'win';
-                            resultText = '✅ ' + t.exit_reason.replace(/_/g, ' ');
-                        } else {
-                            resultClass = 'loss';
-                            resultText = '❌ ' + t.exit_reason.replace(/_/g, ' ');
-                        }
-                    } else if (t.status === 'exiting') {
-                        resultText = '⏳ Exiting...';
-                    }
-                    
-                    return `
-                        <div class="trade-item">
-                            <div>
-                                <span class="trade-pair">${t.pair}</span>
-                                <span class="trade-direction ${dirClass}">${t.direction}</span>
-                            </div>
-                            <div style="text-align: right;">
-                                <div class="trade-result ${resultClass}">${resultText}</div>
-                                <div class="trade-time">${timeAgo(t.timestamp)}</div>
-                            </div>
+            </section>
+
+            <aside class="panel sidebar">
+                <div class="panel-header"><h2 class="panel-title">Stats & Activity</h2></div>
+                <div class="panel-body">
+                    <div class="stats-section">
+                        <div class="stats-title">Exit Types</div>
+                        <div class="stats-grid">
+                            <div class="stat-box"><div class="label">Take Profit</div><div class="value green" id="s-tp">0</div></div>
+                            <div class="stat-box"><div class="label">Stop Loss</div><div class="value red" id="s-sl">0</div></div>
+                            <div class="stat-box"><div class="label">Trailing</div><div class="value" id="s-trail">0</div></div>
+                            <div class="stat-box"><div class="label">Timeout</div><div class="value" id="s-timeout">0</div></div>
                         </div>
-                    `;
-                }).join('');
-            }
+                    </div>
+                    <div class="stats-section">
+                        <div class="stats-title">Win Rate</div>
+                        <div class="stat-box">
+                            <div style="display:flex;justify-content:space-between"><div class="value" id="s-wr">0%</div><span style="color:var(--text-muted);font-size:12px" id="s-wr-detail">0/0</span></div>
+                            <div class="progress"><div class="progress-bar low" id="wr-bar" style="width:0%"></div></div>
+                        </div>
+                    </div>
+                    <div class="stats-section">
+                        <div class="stats-title">Config</div>
+                        <div class="stats-grid">
+                            <div class="stat-box"><div class="label">Position Size</div><div class="value" id="s-size">$100</div></div>
+                            <div class="stat-box"><div class="label">Profit Factor</div><div class="value" id="s-pf">0.00</div></div>
+                        </div>
+                    </div>
+                    <div class="stats-section">
+                        <div class="stats-title">Activity</div>
+                        <div class="activity" id="activity"><div class="activity-item"><div class="activity-icon info">📡</div><div class="activity-content"><div class="activity-title">Waiting</div><div class="activity-desc">Start bot for activity</div></div></div></div>
+                    </div>
+                </div>
+            </aside>
+        </main>
+    </div>
+    <script>
+        let activityLog=[], lastMsg='';
+        const fmt = v => { const n=parseFloat(v)||0; return (n>=0?'$':'-$')+Math.abs(n).toFixed(2); };
+        const fmtP = v => { const n=parseFloat(v)||0; if(n===0)return'—'; if(n<0.01)return n.toFixed(8); if(n<1)return n.toFixed(6); return n.toFixed(4); };
+        const fmtT = d => d.toLocaleTimeString('en-US',{hour12:false});
+        const getBadge = r => { if(!r)return'timeout'; r=r.toLowerCase(); if(r.includes('tp')||r.includes('profit'))return'tp'; if(r.includes('sl')||r.includes('stop'))return'sl'; if(r.includes('trail'))return'trailing'; return'timeout'; };
+
+        function addAct(icon,type,title,desc){ activityLog.unshift({icon,type,title,desc,time:fmtT(new Date())}); if(activityLog.length>12)activityLog.pop(); renderAct(); }
+        function renderAct(){ document.getElementById('activity').innerHTML=activityLog.length?activityLog.map(a=>'<div class="activity-item"><div class="activity-icon '+a.type+'">'+a.icon+'</div><div class="activity-content"><div class="activity-title">'+a.title+'</div><div class="activity-desc">'+a.desc+'</div></div><div class="activity-time">'+a.time+'</div></div>').join(''):'<div class="activity-item"><div class="activity-icon info">📡</div><div class="activity-content"><div class="activity-title">Waiting</div><div class="activity-desc">Start bot for activity</div></div></div>'; }
+
+        async function updateStatus(){
+            try{
+                const r=await fetch('/api/bot/status'), d=await r.json();
+                const s=document.getElementById('status'), t=document.getElementById('status-txt'), btnS=document.getElementById('btn-start'), btnE=document.getElementById('btn-stop');
+                if(d.running){ s.className='status online'; t.textContent='Running'; btnS.style.display='none'; btnE.style.display='inline-flex'; }
+                else{ s.className='status offline'; t.textContent='Stopped'; btnS.style.display='inline-flex'; btnE.style.display='none'; }
+                document.getElementById('m-pairs').textContent=d.pairs_scanned||0;
+                const msg=d.message||'', pos=document.getElementById('m-pos'), psub=document.getElementById('m-pos-sub');
+                if(msg.includes('Entered')){ pos.textContent=msg.replace('Entered ',''); pos.style.color='var(--green)'; psub.textContent='Active'; }
+                else{ pos.textContent='—'; pos.style.color='var(--text-primary)'; psub.textContent=d.running?'Scanning':'Idle'; }
+                if(msg!==lastMsg && msg){ lastMsg=msg; if(msg.includes('Entered'))addAct('📈','buy','Entered',msg); else if(msg.includes('Exited'))addAct('📉','sell','Exited',msg); }
+            }catch(e){ console.error(e); }
         }
-        
-        // Fetch data
-        async function fetchData() {
-            try {
-                const [statusRes, learningRes] = await Promise.all([
-                    fetch('/api/bot/status'),
-                    fetch('/api/bot/learning')
-                ]);
-                
-                const status = await statusRes.json();
-                const learning = await learningRes.json();
-                
-                // ADD THIS: Debug logging to console
-                console.log('🔄 UI Update - Bot Status:', status);
-                console.log('🔄 UI Update - Learning Data:', learning);
-                
-                updateUI(status, learning);
-            } catch (err) {
-                console.error('❌ Fetch error:', err);
-            }
+
+        async function updateLearning(){
+            try{
+                const r=await fetch('/api/bot/learning'), d=await r.json();
+                const pnl=parseFloat(d.total_pnl)||0, cls=pnl>=0?'positive':'negative';
+                document.getElementById('m-pnl').textContent=fmt(pnl); document.getElementById('m-pnl').className='value lg '+cls;
+                document.getElementById('m-pnl-sub').textContent=(d.total_trades||0)+' trades';
+                document.getElementById('hdr-pnl').textContent=fmt(pnl); document.getElementById('hdr-pnl').className='value '+cls;
+                const wr=parseFloat(d.win_rate)||0, w=d.winning_trades||0, l=d.losing_trades||0;
+                document.getElementById('m-wr').textContent=wr.toFixed(1)+'%'; document.getElementById('m-wl').textContent=w+'W / '+l+'L';
+                document.getElementById('hdr-wr').textContent=wr.toFixed(1)+'%'; document.getElementById('hdr-trades').textContent=d.total_trades||0;
+                document.getElementById('s-wr').textContent=wr.toFixed(1)+'%'; document.getElementById('s-wr-detail').textContent=w+'/'+(w+l);
+                const bar=document.getElementById('wr-bar'); bar.style.width=Math.min(wr,100)+'%'; bar.className='progress-bar '+(wr<30?'low':wr<50?'med':'');
+                document.getElementById('m-best').textContent=fmt(d.best_trade||0); document.getElementById('m-worst').textContent=fmt(d.worst_trade||0);
+                document.getElementById('s-tp').textContent=d.tp_exits||0; document.getElementById('s-sl').textContent=d.sl_exits||0;
+                document.getElementById('s-trail').textContent=d.trailing_exits||0; document.getElementById('s-timeout').textContent=d.timeout_exits||0;
+                document.getElementById('s-size').textContent='$'+(d.position_size||100); document.getElementById('s-pf').textContent=(d.profit_factor||0).toFixed(2);
+                document.getElementById('trades-cnt').textContent=(d.total_trades||0)+' trades';
+                renderTrades(d.recent_trades||[]);
+            }catch(e){ console.error(e); }
         }
-        
-        // Start bot
-        async function startBot() {
-            try {
-                const res = await fetch('/api/bot/start', { method: 'POST' });
-                const data = await res.json();
-                if (data.success) {
-                    console.log('Bot started');
-                } else {
-                    alert('Failed to start: ' + (data.error || 'Unknown error'));
-                }
-            } catch (err) {
-                alert('Error: ' + err.message);
-            }
+
+        function renderTrades(trades){
+            const tbody=document.getElementById('trades-body');
+            if(!trades.length){ tbody.innerHTML='<tr><td colspan="6"><div class="empty"><div class="empty-icon">📊</div><div class="empty-title">No trades yet</div><div class="empty-desc">Start the bot</div></div></td></tr>'; return; }
+            tbody.innerHTML=trades.slice(0,20).map(t=>{
+                const pnl=parseFloat(t.pnl)||0, cls=pnl>=0?'positive':'negative', reason=t.reason||t.exit_reason||'timeout', badge=getBadge(reason);
+                const ts=t.entry_time||t.timestamp||0;
+                const timeStr=ts?new Date(ts).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false}):'—';
+                return '<tr><td><div class="pair-cell"><div class="pair-icon">'+(t.pair||'??').replace('USD','').slice(0,3)+'</div><span class="pair-name">'+(t.pair||'N/A')+'</span></div></td><td class="price">'+fmtP(t.entry||t.entry_price)+'</td><td class="price">'+fmtP(t.exit||t.exit_price)+'</td><td class="pnl '+cls+'">'+fmt(pnl)+'</td><td><span class="badge '+badge+'">'+reason+'</span></td><td style="font-family:var(--font-mono);color:var(--text-muted);font-size:12px">'+timeStr+'</td></tr>';
+            }).join('');
         }
-        
-        // Stop bot
-        async function stopBot() {
-            try {
-                const res = await fetch('/api/bot/stop', { method: 'POST' });
-                const data = await res.json();
-                if (data.success) {
-                    console.log('Bot stopped');
-                } else {
-                    alert('Failed to stop: ' + (data.error || 'Unknown error'));
-                }
-            } catch (err) {
-                alert('Error: ' + err.message);
-            }
-        }
-        
-        // Initialize
-        fetchData();
-        setInterval(fetchData, 2000);  // Update every 2 seconds
+
+        async function startBot(){ try{ const r=await fetch('/api/bot/start',{method:'POST'}), d=await r.json(); if(d.success){ addAct('🚀','info','Started','Bot is now running'); updateStatus(); } }catch(e){} }
+        async function stopBot(){ try{ const r=await fetch('/api/bot/stop',{method:'POST'}), d=await r.json(); if(d.success){ addAct('🛑','info','Stopped','Bot stopped'); updateStatus(); } }catch(e){} }
+        function refresh(){ updateStatus(); updateLearning(); addAct('🔄','info','Refreshed','Data updated'); }
+
+        document.addEventListener('DOMContentLoaded',()=>{ updateStatus(); updateLearning(); addAct('👋','info','Ready','Dashboard loaded'); setInterval(updateStatus,1000); setInterval(updateLearning,2000); });
     </script>
 </body>
 </html>

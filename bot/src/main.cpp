@@ -31,13 +31,13 @@ struct BotConfig {
     int min_hold_seconds = 180;
     int max_hold_seconds = 1800;
     int default_hold_seconds = 600;
-    double min_volatility_pct = 2.0;
-    double max_volatility_pct = 30.0;
-    double max_spread_pct = 0.15;
-    double min_momentum_pct = 0.5;
-    double min_volume_usd = 100000.0;
-    double take_profit_pct = 1.5;
-    double stop_loss_pct = 0.5;
+    double min_volatility_pct = 1.5;      // Lowered to get more trades
+    double max_volatility_pct = 25.0;     // Avoid extreme volatility
+    double max_spread_pct = 0.15;         // Standard spread
+    double min_momentum_pct = 0.4;        // Lowered from 0.7 - still filters noise
+    double min_volume_usd = 50000.0;      // Lowered from 100k for more pairs
+    double take_profit_pct = 1.5;         // Reasonable TP
+    double stop_loss_pct = 0.6;           // Tighter SL for faster learning
     double trailing_start_pct = 0.8;
     double trailing_stop_pct = 0.3;
     double trailing_distance_pct = 0.3;
@@ -226,7 +226,8 @@ public:
 
                 auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
                     std::chrono::system_clock::now() - cycle_start).count();
-                int sleep = std::max(30, 60 - (int)elapsed);
+                // Scan every 20s for faster opportunity detection (was 60s)
+                int sleep = std::max(10, 20 - (int)elapsed);
                 std::cout << "Next scan in " << sleep << "s..." << std::endl;
                 std::this_thread::sleep_for(std::chrono::seconds(sleep));
 
@@ -279,16 +280,55 @@ private:
 
             if (std::abs(result.momentum_pct) < config.min_momentum_pct) return result;
 
-            bool bullish = (result.momentum_pct > config.min_momentum_pct && result.range_position > 0.3 && result.range_position < 0.85);
-            bool bearish = (result.momentum_pct < -config.min_momentum_pct && result.range_position > 0.15 && result.range_position < 0.7);
+            // TREND CONFIRMATION: Check if longer-term trend aligns with entry
+            // Get OHLC data to analyze recent price action
+            double trend_score = 0.0;
+            try {
+                auto ohlc = api->get_ohlc(pair, 15);  // 15-minute candles
+                if (!ohlc.empty() && ohlc.size() >= 4) {
+                    // Check last 4 candles (1 hour of 15-min data)
+                    int bullish_candles = 0;
+                    int bearish_candles = 0;
+                    for (size_t i = ohlc.size() - 4; i < ohlc.size(); i++) {
+                        double candle_open = ohlc[i].open;
+                        double candle_close = ohlc[i].close;
+                        if (candle_close > candle_open) bullish_candles++;
+                        else if (candle_close < candle_open) bearish_candles++;
+                    }
+                    
+                    // Bonus for bullish trend, penalty for bearish (but don't block)
+                    if (bullish_candles >= 3) trend_score = 0.15;  // Strong uptrend
+                    else if (bullish_candles >= 2) trend_score = 0.08;  // Moderate uptrend
+                    else if (bearish_candles >= 3) trend_score = -0.1;  // Penalty but allow
+                    
+                    // Also check if price is above recent lows (support)
+                    double recent_low = ohlc[ohlc.size()-1].low;
+                    for (size_t i = ohlc.size() - 4; i < ohlc.size(); i++) {
+                        if (ohlc[i].low < recent_low) recent_low = ohlc[i].low;
+                    }
+                    if (price > recent_low * 1.01) trend_score += 0.05;  // Price holding above support
+                }
+            } catch (...) {
+                // If OHLC fails, continue without trend adjustment
+            }
+
+            // ENTRY CRITERIA: Must have positive momentum and not be overextended
+            // Bullish: upward momentum, not at extreme highs
+            bool bullish = (result.momentum_pct > config.min_momentum_pct && 
+                           result.range_position > 0.25 &&   // Relaxed from 0.4
+                           result.range_position < 0.85);    // Relaxed from 0.75
+            
+            // DISABLED bearish trades - long-only strategy for now
+            bool bearish = false;
 
             if (!bullish && !bearish) return result;
             result.is_bullish = bullish;
 
-            double mom_score = std::min(1.0, std::abs(result.momentum_pct) / 3.0);
-            double vol_score = std::min(1.0, result.volatility_pct / 10.0);
+            // Scoring - momentum weighted heavily
+            double mom_score = std::min(1.0, std::abs(result.momentum_pct) / 2.0);  // Scale to 2% for max (was 4%)
+            double vol_score = std::min(1.0, result.volatility_pct / 5.0);          // Lower bar (was 8%)
             double spread_score = 1.0 - (result.spread_pct / config.max_spread_pct);
-            double volume_score = std::min(1.0, result.volume_usd / 1000000.0);
+            double volume_score = std::min(1.0, result.volume_usd / 200000.0);      // Lowered (was 500k)
 
             double history_bonus = 0.0;
             if (config.pair_trade_counts.count(pair) && config.pair_trade_counts[pair] >= 3) {
@@ -296,23 +336,29 @@ private:
                 history_bonus = (wr - 0.5) * 0.5;
             }
 
-            result.signal_strength = mom_score * 0.35 + vol_score * 0.25 + spread_score * 0.25 + volume_score * 0.15 + history_bonus;
+            // Reweighted: momentum 40%, volume 20%, trend 15%, spread 10%, volatility 10%, history 5%
+            result.signal_strength = mom_score * 0.40 + volume_score * 0.20 + trend_score + spread_score * 0.10 + vol_score * 0.10 + history_bonus * 0.05;
+            
+            // MINIMUM SIGNAL THRESHOLD - filter out weakest signals only
+            if (result.signal_strength < 0.35) return result;  // Lowered from 0.45
 
+            // Adjusted TP/SL based on volatility - aim for 2:1 R:R minimum
             if (result.volatility_pct > 10) {
                 result.suggested_hold_seconds = config.min_hold_seconds;
-                result.suggested_tp_pct = result.volatility_pct * 0.15;
-                result.suggested_sl_pct = result.volatility_pct * 0.05;
+                result.suggested_tp_pct = result.volatility_pct * 0.20;  // 20% of volatility
+                result.suggested_sl_pct = result.volatility_pct * 0.08;  // 8% of volatility (2.5:1 R:R)
             } else if (result.volatility_pct > 5) {
                 result.suggested_hold_seconds = config.default_hold_seconds;
-                result.suggested_tp_pct = result.volatility_pct * 0.2;
-                result.suggested_sl_pct = result.volatility_pct * 0.07;
+                result.suggested_tp_pct = result.volatility_pct * 0.25;  // 25% of volatility
+                result.suggested_sl_pct = result.volatility_pct * 0.10;  // 10% of volatility (2.5:1 R:R)
             } else {
                 result.suggested_hold_seconds = config.max_hold_seconds / 2;
-                result.suggested_tp_pct = std::max(1.2, result.volatility_pct * 0.3);
-                result.suggested_sl_pct = std::max(0.4, result.volatility_pct * 0.1);
+                result.suggested_tp_pct = std::max(1.5, result.volatility_pct * 0.35);
+                result.suggested_sl_pct = std::max(0.6, result.volatility_pct * 0.15);
             }
 
-            result.suggested_tp_pct = std::max(result.suggested_tp_pct, 0.8);
+            result.suggested_tp_pct = std::max(result.suggested_tp_pct, 1.2);  // Min 1.2% TP
+            result.suggested_sl_pct = std::max(result.suggested_sl_pct, 0.6);  // Min 0.6% SL
             result.valid = true;
         } catch (...) {}
         return result;
@@ -320,18 +366,49 @@ private:
 
     void execute_trade(const ScanResult& opp) {
         std::string trade_id = "T" + std::to_string(std::time(nullptr)) + "_" + opp.pair;
-        double position_usd = config.base_position_size_usd;
-        double amount = position_usd / opp.current_price;
+        
+        // LEARNING ENGINE INTEGRATION: Get optimal strategy from learned patterns
+        StrategyConfig learned_config;
+        {
+            std::lock_guard<std::mutex> lock(learning_mutex);
+            learned_config = learning_engine->get_optimal_strategy(opp.pair, opp.volatility_pct);
+        }
+        
+        // Use learned position size if available, otherwise default
+        double position_usd = learned_config.position_size_usd > 0 ? 
+                              learned_config.position_size_usd : config.base_position_size_usd;
+        
+        // CRITICAL FIX: Get a fresh confirmed price before entering the trade
+        // This prevents fake trades where we can't track the price during the hold period
+        double confirmed_entry_price = 0;
+        try {
+            auto ticker = api->get_ticker(opp.pair);
+            confirmed_entry_price = std::stod(std::string(ticker["c"][0]));
+        } catch (const std::exception& e) {
+            std::cerr << "Cannot get fresh price for " << opp.pair << ", skipping trade: " << e.what() << std::endl;
+            return;  // Don't enter if we can't even get the current price
+        }
+        
+        // Use the confirmed price, not the scan price
+        double amount = position_usd / confirmed_entry_price;
 
-        double tp_pct = opp.suggested_tp_pct > 0 ? opp.suggested_tp_pct : config.take_profit_pct;
-        double sl_pct = opp.suggested_sl_pct > 0 ? opp.suggested_sl_pct : config.stop_loss_pct;
-        int hold_time = opp.suggested_hold_seconds > 0 ? opp.suggested_hold_seconds : config.default_hold_seconds;
+        // LEARNING ENGINE: Override TP/SL with learned values if available
+        double tp_pct = learned_config.take_profit_pct > 0 ? learned_config.take_profit_pct * 100.0 : 
+                       (opp.suggested_tp_pct > 0 ? opp.suggested_tp_pct : config.take_profit_pct);
+        double sl_pct = learned_config.stop_loss_pct > 0 ? learned_config.stop_loss_pct * 100.0 :
+                       (opp.suggested_sl_pct > 0 ? opp.suggested_sl_pct : config.stop_loss_pct);
+        int hold_time = learned_config.timeframe_seconds > 0 ? learned_config.timeframe_seconds :
+                       (opp.suggested_hold_seconds > 0 ? opp.suggested_hold_seconds : config.default_hold_seconds);
         hold_time = std::max(config.min_hold_seconds, std::min(hold_time, config.max_hold_seconds));
 
         std::cout << "\n--- ENTER " << opp.pair << " ---" << std::endl;
-        std::cout << "  Price: $" << std::fixed << std::setprecision(6) << opp.current_price << std::endl;
+        std::cout << "  Price: $" << std::fixed << std::setprecision(6) << confirmed_entry_price << std::endl;
         std::cout << "  Position: $" << position_usd << " (" << amount << " units)" << std::endl;
         std::cout << "  TP: " << tp_pct << "% | SL: " << sl_pct << "% | Max: " << hold_time << "s" << std::endl;
+        if (learned_config.is_validated) {
+            std::cout << "  🧠 USING LEARNED STRATEGY | Edge: " << std::setprecision(1) 
+                      << learned_config.estimated_edge << "%" << std::endl;
+        }
 
         Order entry_order = api->place_market_order(opp.pair, "buy", amount);
         if (entry_order.status == "error") {
@@ -339,7 +416,7 @@ private:
             return;
         }
 
-        double entry_price = opp.current_price;
+        double entry_price = confirmed_entry_price;  // Use the confirmed price
         double tp_price = entry_price * (1.0 + tp_pct / 100.0);
         double sl_price = entry_price * (1.0 - sl_pct / 100.0);
         double trailing_start = entry_price * (1.0 + config.trailing_start_pct / 100.0);
@@ -350,6 +427,10 @@ private:
         auto entry_time = std::chrono::system_clock::now();
         std::string exit_reason = "timeout";
         double exit_price = entry_price;
+        double last_valid_price = entry_price;  // Track last known valid price
+        int successful_price_updates = 0;  // Track how many times we got a valid price
+        int consecutive_errors = 0;
+        const int max_consecutive_errors = 10;  // Max errors before force exit
 
         while (true) {
             std::this_thread::sleep_for(std::chrono::seconds(5));
@@ -360,6 +441,9 @@ private:
             try {
                 auto ticker = api->get_ticker(opp.pair);
                 double current = std::stod(std::string(ticker["c"][0]));
+                last_valid_price = current;  // Update last valid price on success
+                successful_price_updates++;  // Track successful updates
+                consecutive_errors = 0;  // Reset error counter on success
 
                 if (current > highest_price) {
                     highest_price = current;
@@ -407,11 +491,37 @@ private:
                 }
 
             } catch (const std::exception& e) {
-                std::cerr << "Monitor error " << opp.pair << ": " << e.what() << std::endl;
+                consecutive_errors++;
+                std::cerr << "Monitor error " << opp.pair << " (" << consecutive_errors << "/" 
+                          << max_consecutive_errors << "): " << e.what() << std::endl;
+                
+                // If too many consecutive errors, exit with last known price
+                if (consecutive_errors >= max_consecutive_errors) {
+                    exit_price = last_valid_price;
+                    exit_reason = "error_exit";
+                    std::cerr << "  [" << opp.pair << "] Exiting due to repeated errors. Using last price: $" 
+                              << last_valid_price << std::endl;
+                    break;
+                }
             }
         }
 
+        // Use last valid price if exit_price wasn't set (e.g., timeout without final price)
+        if (exit_price == entry_price && last_valid_price != entry_price) {
+            exit_price = last_valid_price;
+        }
+
         Order exit_order = api->place_market_order(opp.pair, "sell", amount);
+
+        // A trade is only valid if we got at least one price update during monitoring
+        // Since we confirm price at entry, this means the API worked at least once
+        // If we never got updates, something went very wrong - skip recording
+        if (successful_price_updates == 0) {
+            std::cerr << "\n--- INVALID TRADE " << opp.pair << " ---" << std::endl;
+            std::cerr << "  No price updates received during " << hold_time << "s monitoring period" << std::endl;
+            std::cerr << "  This trade will NOT be recorded to preserve data integrity" << std::endl;
+            return;  // Don't record - we have no valid data
+        }
 
         double pnl_pct = ((exit_price - entry_price) / entry_price) * 100.0;
         double pnl_usd = position_usd * (pnl_pct / 100.0);

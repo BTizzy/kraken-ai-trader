@@ -23,14 +23,23 @@ void LearningEngine::record_trade(const TradeRecord& trade) {
     
     // Default to LONG for legacy trades without direction
     std::string direction = trade.direction.empty() ? "LONG" : trade.direction;
-    std::string key = generate_pattern_key(trade.pair, direction, trade.leverage, timeframe_bucket);
-    trades_by_strategy[key].push_back(trade);
+    
+    // Generate both basic and enhanced pattern keys
+    std::string basic_key = generate_pattern_key(trade.pair, direction, trade.leverage, timeframe_bucket);
+    std::string enhanced_key = generate_enhanced_pattern_key(trade.pair, direction, trade.leverage, 
+                                                              timeframe_bucket, trade.volatility_at_entry, 
+                                                              trade.market_regime);
+    
+    // Store in both for compatibility and granularity
+    trades_by_strategy[basic_key].push_back(trade);
+    trades_by_strategy[enhanced_key].push_back(trade);
     
     // Print what we learned from this trade
     std::cout << "📝 Trade recorded: " << trade.pair << " " << direction
               << " | " << (trade.is_win() ? "WIN ✅" : "LOSS ❌")
               << " | ROI: " << std::fixed << std::setprecision(2) << trade.roi() << "%" 
-              << " | Pattern: " << key << std::endl;
+              << " | Pattern: " << basic_key 
+              << " | Enhanced: " << enhanced_key << std::endl;
     
     // Auto-analyze every 25 trades
     if (trade_history.size() % 25 == 0) {
@@ -48,7 +57,7 @@ void LearningEngine::analyze_patterns() {
     
     std::cout << "🤖 LEARNING ENGINE: Analyzing " << trade_history.size() << " trades..." << std::endl;
     
-    // 1. GROUP TRADES BY PATTERN
+    // 1. GROUP TRADES BY PATTERN (both basic and enhanced)
     std::map<std::string, std::vector<TradeRecord>> patterns;
     for (const auto& trade : trade_history) {
         int timeframe_bucket;
@@ -59,9 +68,19 @@ void LearningEngine::analyze_patterns() {
         
         // Default to LONG for legacy trades without direction
         std::string direction = trade.direction.empty() ? "LONG" : trade.direction;
-        std::string key = generate_pattern_key(trade.pair, direction, trade.leverage, timeframe_bucket);
-        patterns[key].push_back(trade);
+        
+        // Generate basic key
+        std::string basic_key = generate_pattern_key(trade.pair, direction, trade.leverage, timeframe_bucket);
+        patterns[basic_key].push_back(trade);
+        
+        // Generate enhanced key with volatility and regime
+        std::string enhanced_key = generate_enhanced_pattern_key(trade.pair, direction, trade.leverage, 
+                                                                  timeframe_bucket, trade.volatility_at_entry, 
+                                                                  trade.market_regime);
+        patterns[enhanced_key].push_back(trade);
     }
+    
+    std::cout << "📊 Generated " << patterns.size() << " unique patterns from " << trade_history.size() << " trades" << std::endl;
     
     // 2. CALCULATE METRICS FOR EACH PATTERN
     for (auto& [pattern_key, trades] : patterns) {
@@ -176,6 +195,31 @@ void LearningEngine::analyze_patterns() {
 
 std::string LearningEngine::generate_pattern_key(const std::string& pair, const std::string& direction, double leverage, int timeframe) const {
     return pair + "_" + direction + "_" + std::to_string((int)leverage) + "x_" + std::to_string(timeframe);
+}
+
+// NEW: Enhanced pattern key with volatility and regime for more granular patterns
+std::string LearningEngine::generate_enhanced_pattern_key(const std::string& pair, const std::string& direction, 
+                                                           double leverage, int timeframe, 
+                                                           double volatility, int regime) const {
+    // Volatility buckets: 0=low(<2%), 1=med(2-5%), 2=high(5-10%), 3=extreme(>10%)
+    int vol_bucket = 0;
+    if (volatility < 2.0) vol_bucket = 0;
+    else if (volatility < 5.0) vol_bucket = 1;
+    else if (volatility < 10.0) vol_bucket = 2;
+    else vol_bucket = 3;
+    
+    // Regime: 0=quiet, 1=ranging, 2=trending, 3=volatile
+    std::string regime_str;
+    switch (regime) {
+        case 0: regime_str = "Q"; break;  // Quiet
+        case 1: regime_str = "R"; break;  // Ranging
+        case 2: regime_str = "T"; break;  // Trending
+        case 3: regime_str = "V"; break;  // Volatile
+        default: regime_str = "U"; break; // Unknown
+    }
+    
+    return pair + "_" + direction + "_" + std::to_string((int)leverage) + "x_" + 
+           std::to_string(timeframe) + "_V" + std::to_string(vol_bucket) + "_" + regime_str;
 }
 
 void LearningEngine::identify_winning_patterns() {
@@ -535,6 +579,81 @@ void LearningEngine::save_to_file(const std::string& filepath) {
     file.close();
     
     std::cout << "💾 Saved " << trade_history.size() << " trades to " << filepath << std::endl;
+}
+
+void LearningEngine::backup_trade_log(const std::string& filepath) {
+    // Create backup filename with timestamp
+    auto now = std::chrono::system_clock::now();
+    auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(
+        now.time_since_epoch()).count();
+    
+    // Extract directory and filename
+    size_t last_slash = filepath.find_last_of('/');
+    std::string dir = (last_slash != std::string::npos) ? filepath.substr(0, last_slash + 1) : "";
+    std::string backup_path = dir + "trade_log_backup_" + std::to_string(timestamp) + ".json";
+    
+    // Copy file contents
+    std::ifstream src(filepath, std::ios::binary);
+    if (!src.good()) {
+        std::cerr << "⚠️ Cannot backup - source file not found: " << filepath << std::endl;
+        return;
+    }
+    
+    std::ofstream dst(backup_path, std::ios::binary);
+    dst << src.rdbuf();
+    
+    src.close();
+    dst.close();
+    
+    std::cout << "💾 Backup created: " << backup_path << std::endl;
+    
+    // Clean up old backups (keep last 5)
+    // This would require directory listing - skipping for simplicity
+}
+
+bool LearningEngine::validate_trade(const TradeRecord& trade) {
+    // Validate required fields
+    if (trade.pair.empty()) {
+        std::cerr << "❌ Trade validation failed: empty pair" << std::endl;
+        return false;
+    }
+    if (trade.entry_price <= 0) {
+        std::cerr << "❌ Trade validation failed: invalid entry_price " << trade.entry_price << std::endl;
+        return false;
+    }
+    if (trade.exit_price <= 0) {
+        std::cerr << "❌ Trade validation failed: invalid exit_price " << trade.exit_price << std::endl;
+        return false;
+    }
+    if (trade.position_size <= 0) {
+        std::cerr << "❌ Trade validation failed: invalid position_size " << trade.position_size << std::endl;
+        return false;
+    }
+    if (trade.timeframe_seconds <= 0) {
+        std::cerr << "❌ Trade validation failed: invalid timeframe_seconds " << trade.timeframe_seconds << std::endl;
+        return false;
+    }
+    
+    // Validate timestamp is not in the future
+    auto now = std::chrono::system_clock::now();
+    if (trade.timestamp > now) {
+        std::cerr << "❌ Trade validation failed: timestamp in future" << std::endl;
+        return false;
+    }
+    
+    // Validate direction
+    if (!trade.direction.empty() && trade.direction != "LONG" && trade.direction != "SHORT") {
+        std::cerr << "❌ Trade validation failed: invalid direction " << trade.direction << std::endl;
+        return false;
+    }
+    
+    // Validate P&L is reasonable (within 50% of position size)
+    if (std::abs(trade.pnl) > trade.position_size * 0.5) {
+        std::cerr << "⚠️ Trade validation warning: P&L " << trade.pnl << " is >50% of position" << std::endl;
+        // Don't fail, just warn
+    }
+    
+    return true;
 }
 
 void LearningEngine::save_pattern_database_to_file(const std::string& filepath) {

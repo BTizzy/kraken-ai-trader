@@ -93,6 +93,10 @@ private:
     json http_post(const std::string& endpoint, const json& data);
     std::string hmac_sha256(const std::string& message);
     
+    // Retry with exponential backoff
+    template<typename Func>
+    auto retry_with_backoff(Func&& func, int max_retries = 3, int base_delay_ms = 1000) -> decltype(func());
+    
     // Mock data
     std::map<std::string, double> mock_prices;
 };

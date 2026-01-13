@@ -31371,6 +31371,6 @@
       "fees_paid": 1.7374271119843407
     }
   ],
-  "enriched_at": 1768334077291,
+  "enriched_at": 1768333487514,
   "enrichment_notes": "Added volatility_at_entry, market_regime, timeframe_seconds, position_size estimates"
 }

@@ -1,0 +1,94 @@
+{
+  "_comment": "Unified Bot Configuration - Single Source of Truth",
+  "_version": "2.0.0",
+  "_updated": "2026-01-13",
+  
+  "trading": {
+    "mode": "paper",
+    "enable_learning": true,
+    "max_concurrent_trades": 2,
+    "scan_interval_seconds": 20
+  },
+  
+  "position_sizing": {
+    "base_position_usd": 100.0,
+    "min_position_usd": 25.0,
+    "max_position_usd": 500.0,
+    "kelly_fraction": 0.25,
+    "_comment": "kelly_fraction: Use 25% of full Kelly for safety"
+  },
+  
+  "risk_management": {
+    "take_profit_pct": 1.5,
+    "stop_loss_pct": 0.6,
+    "trailing_start_pct": 0.8,
+    "trailing_stop_pct": 0.3,
+    "max_drawdown_pct": 10.0
+  },
+  
+  "hold_times": {
+    "min_seconds": 180,
+    "max_seconds": 1800,
+    "default_seconds": 600
+  },
+  
+  "filters": {
+    "min_volatility_pct": 1.5,
+    "max_volatility_pct": 25.0,
+    "max_spread_pct": 0.15,
+    "min_momentum_pct": 0.4,
+    "min_volume_usd": 50000.0,
+    "min_confidence_threshold": 0.65,
+    "_comment": "Increased confidence threshold to reduce overtrading"
+  },
+  
+  "fees": {
+    "taker_fee_pct": 0.4,
+    "maker_fee_pct": 0.0,
+    "min_profit_after_fees_pct": 0.5,
+    "_comment": "Only trade if expected profit > fees + 0.1% buffer"
+  },
+  
+  "learning": {
+    "cycle_trades": 10,
+    "min_trades_to_blacklist": 3,
+    "min_pair_winrate": 0.35,
+    "min_pair_trades_for_stats": 5
+  },
+  
+  "backup": {
+    "enabled": true,
+    "interval_trades": 50,
+    "max_backups": 5,
+    "_comment": "Backup every 50 trades, keep last 5 backups"
+  },
+  
+  "logging": {
+    "level": "INFO",
+    "levels": ["DEBUG", "INFO", "WARN", "ERROR"],
+    "log_to_file": true,
+    "log_file": "bot.log",
+    "max_log_size_mb": 10
+  },
+  
+  "api": {
+    "kraken_rest_url": "https://api.kraken.com/0",
+    "rate_limit_requests_per_second": 1,
+    "retry_max_attempts": 3,
+    "retry_base_delay_ms": 1000,
+    "timeout_ms": 10000
+  },
+  
+  "alerts": {
+    "enabled": true,
+    "pnl_drop_threshold_usd": -50.0,
+    "no_trades_threshold_minutes": 60,
+    "error_rate_threshold_pct": 5.0
+  },
+  
+  "server": {
+    "port": 8000,
+    "enable_health_check": true,
+    "health_check_interval_ms": 30000
+  }
+}

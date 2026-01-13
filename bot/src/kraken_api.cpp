@@ -5,6 +5,33 @@
 #include <iomanip>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
+#include <chrono>
+#include <thread>
+
+// Retry with exponential backoff implementation
+template<typename Func>
+auto KrakenAPI::retry_with_backoff(Func&& func, int max_retries, int base_delay_ms) -> decltype(func()) {
+    int delay = base_delay_ms;
+    std::exception_ptr last_exception;
+    
+    for (int attempt = 0; attempt < max_retries; attempt++) {
+        try {
+            return func();
+        } catch (const std::exception& e) {
+            last_exception = std::current_exception();
+            
+            if (attempt < max_retries - 1) {
+                std::cerr << "⚠️ API call failed (attempt " << (attempt + 1) << "/" << max_retries 
+                          << "): " << e.what() << " - Retrying in " << delay << "ms..." << std::endl;
+                std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+                delay *= 2;  // Exponential backoff
+            }
+        }
+    }
+    
+    // All retries exhausted
+    std::rethrow_exception(last_exception);
+}
 
 // Callback for CURL write operations
 size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
@@ -201,7 +228,8 @@ double KrakenAPI::get_current_price(const std::string& pair) {
 }
 
 json KrakenAPI::get_ticker(const std::string& pair) {
-    try {
+    // Use retry logic for API calls
+    return retry_with_backoff([this, &pair]() -> json {
         std::string endpoint = "/api/ticker/" + pair;
         auto response = http_get(endpoint);
 
@@ -209,34 +237,8 @@ json KrakenAPI::get_ticker(const std::string& pair) {
             return response["result"][pair];
         }
 
-        // Return mock data if API fails
-        return {
-            {"a", {"100.0", "1", "1.0"}},  // ask
-            {"b", {"99.0", "1", "1.0"}},   // bid
-            {"c", {"99.5", "0.001"}},      // last trade
-            {"v", {"1000.0", "2000.0"}},   // volume
-            {"p", {"99.0", "98.0"}},       // vwap
-            {"t", {100, 200}},            // trade count
-            {"l", {"95.0", "95.0"}},      // low
-            {"h", {"105.0", "105.0"}},    // high
-            {"o", "100.0"}                // open
-        };
-
-    } catch (const std::exception& e) {
-        std::cerr << "Error fetching ticker for " << pair << ": " << e.what() << std::endl;
-        // Return mock data
-        return {
-            {"a", {"100.0", "1", "1.0"}},
-            {"b", {"99.0", "1", "1.0"}},
-            {"c", {"99.5", "0.001"}},
-            {"v", {"1000.0", "2000.0"}},
-            {"p", {"99.0", "98.0"}},
-            {"t", {100, 200}},
-            {"l", {"95.0", "95.0"}},
-            {"h", {"105.0", "105.0"}},
-            {"o", "100.0"}
-        };
-    }
+        throw std::runtime_error("No ticker data for " + pair);
+    }, 3, 500);  // 3 retries, starting at 500ms delay
 }
 
 double KrakenAPI::get_bid_ask_spread(const std::string& pair) {

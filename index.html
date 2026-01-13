@@ -270,7 +270,7 @@
             tbody.innerHTML=trades.slice(0,20).map(t=>{
                 const pnl=parseFloat(t.pnl)||0, cls=pnl>=0?'positive':'negative', reason=t.reason||t.exit_reason||'timeout', badge=getBadge(reason);
                 const ts=t.entry_time||t.timestamp||0;
-                const timeStr=ts?new Date(ts).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false}):'—';
+                const timeStr=ts?new Date(ts).toLocaleString('en-US',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}):'—';
                 return '<tr><td><div class="pair-cell"><div class="pair-icon">'+(t.pair||'??').replace('USD','').slice(0,3)+'</div><span class="pair-name">'+(t.pair||'N/A')+'</span></div></td><td class="price">'+fmtP(t.entry||t.entry_price)+'</td><td class="price">'+fmtP(t.exit||t.exit_price)+'</td><td class="pnl '+cls+'">'+fmt(pnl)+'</td><td><span class="badge '+badge+'">'+reason+'</span></td><td style="font-family:var(--font-mono);color:var(--text-muted);font-size:12px">'+timeStr+'</td></tr>';
             }).join('');
         }

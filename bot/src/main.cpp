@@ -130,6 +130,8 @@ struct ScanResult {
     double volume_usd = 0.0;
     double range_position = 0.0;
     bool is_bullish = false;
+    bool is_bearish = false;   // NEW: Support SHORT trades
+    std::string direction = "LONG";  // NEW: "LONG" or "SHORT"
     double signal_strength = 0.0;
     int suggested_hold_seconds = 600;
     double suggested_tp_pct = 1.5;
@@ -312,23 +314,33 @@ private:
                 // If OHLC fails, continue without trend adjustment
             }
 
-            // ENTRY CRITERIA: Must have positive momentum and not be overextended
-            // Bullish: upward momentum, not at extreme highs
+            // ENTRY CRITERIA: Must have momentum and not be overextended
+            // Bullish (LONG): upward momentum, not at extreme highs
             bool bullish = (result.momentum_pct > config.min_momentum_pct && 
-                           result.range_position > 0.25 &&   // Relaxed from 0.4
-                           result.range_position < 0.85);    // Relaxed from 0.75
+                           result.range_position > 0.25 &&   // Not at lows (bounce zone)
+                           result.range_position < 0.85);    // Not at extreme highs
             
-            // DISABLED bearish trades - long-only strategy for now
-            bool bearish = false;
+            // Bearish (SHORT): downward momentum, not at extreme lows
+            // Mirror the long criteria but inverted
+            bool bearish = (result.momentum_pct < -config.min_momentum_pct &&  // Negative momentum
+                           result.range_position < 0.75 &&   // Not at extreme highs (bounce zone)
+                           result.range_position > 0.15);    // Not at extreme lows (potential reversal)
 
             if (!bullish && !bearish) return result;
             result.is_bullish = bullish;
+            result.is_bearish = bearish;
+            result.direction = bullish ? "LONG" : "SHORT";
 
-            // Scoring - momentum weighted heavily
+            // Scoring - momentum weighted heavily (use absolute value for both directions)
             double mom_score = std::min(1.0, std::abs(result.momentum_pct) / 2.0);  // Scale to 2% for max (was 4%)
             double vol_score = std::min(1.0, result.volatility_pct / 5.0);          // Lower bar (was 8%)
             double spread_score = 1.0 - (result.spread_pct / config.max_spread_pct);
             double volume_score = std::min(1.0, result.volume_usd / 200000.0);      // Lowered (was 500k)
+
+            // For shorts, adjust trend score (negative trend is good)
+            if (bearish) {
+                trend_score = -trend_score;  // Flip trend bonus for shorts
+            }
 
             double history_bonus = 0.0;
             if (config.pair_trade_counts.count(pair) && config.pair_trade_counts[pair] >= 3) {
@@ -366,6 +378,7 @@ private:
 
     void execute_trade(const ScanResult& opp) {
         std::string trade_id = "T" + std::to_string(std::time(nullptr)) + "_" + opp.pair;
+        bool is_short = opp.direction == "SHORT";
         
         // LEARNING ENGINE INTEGRATION: Get optimal strategy from learned patterns
         StrategyConfig learned_config;
@@ -401,7 +414,8 @@ private:
                        (opp.suggested_hold_seconds > 0 ? opp.suggested_hold_seconds : config.default_hold_seconds);
         hold_time = std::max(config.min_hold_seconds, std::min(hold_time, config.max_hold_seconds));
 
-        std::cout << "\n--- ENTER " << opp.pair << " ---" << std::endl;
+        std::cout << "\n--- ENTER " << opp.direction << " " << opp.pair << " ---" << std::endl;
+        std::cout << "  Direction: " << (is_short ? "📉 SHORT" : "📈 LONG") << std::endl;
         std::cout << "  Price: $" << std::fixed << std::setprecision(6) << confirmed_entry_price << std::endl;
         std::cout << "  Position: $" << position_usd << " (" << amount << " units)" << std::endl;
         std::cout << "  TP: " << tp_pct << "% | SL: " << sl_pct << "% | Max: " << hold_time << "s" << std::endl;
@@ -410,17 +424,32 @@ private:
                       << learned_config.estimated_edge << "%" << std::endl;
         }
 
-        Order entry_order = api->place_market_order(opp.pair, "buy", amount);
+        // For LONG: buy first, sell to close
+        // For SHORT: sell first, buy to close (simulated in paper trading)
+        std::string entry_side = is_short ? "sell" : "buy";
+        Order entry_order = api->place_market_order(opp.pair, entry_side, amount);
         if (entry_order.status == "error") {
             std::cerr << "Entry failed: " << entry_order.order_id << std::endl;
             return;
         }
 
         double entry_price = confirmed_entry_price;  // Use the confirmed price
-        double tp_price = entry_price * (1.0 + tp_pct / 100.0);
-        double sl_price = entry_price * (1.0 - sl_pct / 100.0);
-        double trailing_start = entry_price * (1.0 + config.trailing_start_pct / 100.0);
-        double highest_price = entry_price;
+        
+        // TP/SL prices are different for LONG vs SHORT
+        // LONG: TP is above entry, SL is below entry
+        // SHORT: TP is below entry (price drops = profit), SL is above entry (price rises = loss)
+        double tp_price, sl_price, trailing_start;
+        if (is_short) {
+            tp_price = entry_price * (1.0 - tp_pct / 100.0);  // TP when price drops
+            sl_price = entry_price * (1.0 + sl_pct / 100.0);  // SL when price rises
+            trailing_start = entry_price * (1.0 - config.trailing_start_pct / 100.0);  // Trailing starts on drop
+        } else {
+            tp_price = entry_price * (1.0 + tp_pct / 100.0);  // TP when price rises
+            sl_price = entry_price * (1.0 - sl_pct / 100.0);  // SL when price drops
+            trailing_start = entry_price * (1.0 + config.trailing_start_pct / 100.0);  // Trailing starts on rise
+        }
+        
+        double best_price = entry_price;  // Track best price (highest for long, lowest for short)
         bool trailing_active = false;
         double trailing_stop = 0;
 
@@ -445,39 +474,82 @@ private:
                 successful_price_updates++;  // Track successful updates
                 consecutive_errors = 0;  // Reset error counter on success
 
-                if (current > highest_price) {
-                    highest_price = current;
-                    if (trailing_active) {
-                        trailing_stop = highest_price * (1.0 - config.trailing_stop_pct / 100.0);
+                // Update best price and trailing stop based on direction
+                if (is_short) {
+                    // For SHORT: track lowest price (best for us)
+                    if (current < best_price) {
+                        best_price = current;
+                        if (trailing_active) {
+                            trailing_stop = best_price * (1.0 + config.trailing_stop_pct / 100.0);
+                        }
                     }
-                }
+                    
+                    // Activate trailing when price drops enough
+                    if (!trailing_active && current <= trailing_start) {
+                        trailing_active = true;
+                        trailing_stop = current * (1.0 + config.trailing_stop_pct / 100.0);
+                        std::cout << "  [" << opp.pair << " SHORT] Trailing activated at $" << current << std::endl;
+                    }
+                    
+                    // SHORT TP: price dropped to target
+                    if (current <= tp_price) {
+                        exit_reason = "take_profit";
+                        exit_price = current;
+                        std::cout << "  [" << opp.pair << " SHORT] TP HIT at $" << current << std::endl;
+                        break;
+                    }
+                    
+                    // SHORT SL: price rose against us
+                    if (current >= sl_price) {
+                        exit_reason = "stop_loss";
+                        exit_price = current;
+                        std::cout << "  [" << opp.pair << " SHORT] SL HIT at $" << current << std::endl;
+                        break;
+                    }
+                    
+                    // SHORT trailing: price bounced up from our best
+                    if (trailing_active && current >= trailing_stop) {
+                        exit_reason = "trailing_stop";
+                        exit_price = current;
+                        std::cout << "  [" << opp.pair << " SHORT] TRAIL HIT at $" << current << std::endl;
+                        break;
+                    }
+                } else {
+                    // For LONG: track highest price (best for us)
+                    if (current > best_price) {
+                        best_price = current;
+                        if (trailing_active) {
+                            trailing_stop = best_price * (1.0 - config.trailing_stop_pct / 100.0);
+                        }
+                    }
 
-                if (!trailing_active && current >= trailing_start) {
-                    trailing_active = true;
-                    trailing_stop = current * (1.0 - config.trailing_stop_pct / 100.0);
-                    std::cout << "  [" << opp.pair << "] Trailing activated at $" << current << std::endl;
-                }
+                    if (!trailing_active && current >= trailing_start) {
+                        trailing_active = true;
+                        trailing_stop = current * (1.0 - config.trailing_stop_pct / 100.0);
+                        std::cout << "  [" << opp.pair << " LONG] Trailing activated at $" << current << std::endl;
+                    }
 
-                if (current >= tp_price) {
-                    exit_reason = "take_profit";
-                    exit_price = current;
-                    std::cout << "  [" << opp.pair << "] TP HIT at $" << current << std::endl;
-                    break;
-                }
+                    if (current >= tp_price) {
+                        exit_reason = "take_profit";
+                        exit_price = current;
+                        std::cout << "  [" << opp.pair << " LONG] TP HIT at $" << current << std::endl;
+                        break;
+                    }
 
-                if (current <= sl_price) {
-                    exit_reason = "stop_loss";
-                    exit_price = current;
-                    std::cout << "  [" << opp.pair << "] SL HIT at $" << current << std::endl;
-                    break;
-                }
+                    if (current <= sl_price) {
+                        exit_reason = "stop_loss";
+                        exit_price = current;
+                        std::cout << "  [" << opp.pair << " LONG] SL HIT at $" << current << std::endl;
+                        break;
+                    }
 
-                if (trailing_active && current <= trailing_stop) {
-                    exit_reason = "trailing_stop";
-                    exit_price = current;
-                    std::cout << "  [" << opp.pair << "] TRAIL HIT at $" << current << std::endl;
-                    break;
-                }
+                    if (trailing_active && current <= trailing_stop) {
+                        exit_reason = "trailing_stop";
+                        exit_price = current;
+                        std::cout << "  [" << opp.pair << " LONG] TRAIL HIT at $" << current << std::endl;
+                        break;
+                    }
+                }  // end of LONG-specific logic
 
                 if (elapsed >= hold_time) {
                     exit_price = current;
@@ -485,8 +557,14 @@ private:
                 }
 
                 if (elapsed % 30 == 0 && elapsed > 0) {
-                    double change_pct = ((current - entry_price) / entry_price) * 100.0;
-                    std::cout << "  [" << opp.pair << "] " << elapsed << "s: $" << current 
+                    // P&L display is different for LONG vs SHORT
+                    double change_pct;
+                    if (is_short) {
+                        change_pct = ((entry_price - current) / entry_price) * 100.0;  // SHORT: profit when price drops
+                    } else {
+                        change_pct = ((current - entry_price) / entry_price) * 100.0;  // LONG: profit when price rises
+                    }
+                    std::cout << "  [" << opp.pair << " " << opp.direction << "] " << elapsed << "s: $" << current 
                               << " (" << (change_pct >= 0 ? "+" : "") << change_pct << "%)" << std::endl;
                 }
 
@@ -511,7 +589,9 @@ private:
             exit_price = last_valid_price;
         }
 
-        Order exit_order = api->place_market_order(opp.pair, "sell", amount);
+        // Exit order: For LONG we sell, for SHORT we buy to close
+        std::string exit_side = is_short ? "buy" : "sell";
+        Order exit_order = api->place_market_order(opp.pair, exit_side, amount);
 
         // A trade is only valid if we got at least one price update during monitoring
         // Since we confirm price at entry, this means the API worked at least once
@@ -523,16 +603,24 @@ private:
             return;  // Don't record - we have no valid data
         }
 
-        double pnl_pct = ((exit_price - entry_price) / entry_price) * 100.0;
+        // P&L calculation: LONG profits when price goes up, SHORT profits when price goes down
+        double pnl_pct;
+        if (is_short) {
+            pnl_pct = ((entry_price - exit_price) / entry_price) * 100.0;  // SHORT: profit when price drops
+        } else {
+            pnl_pct = ((exit_price - entry_price) / entry_price) * 100.0;  // LONG: profit when price rises
+        }
         double pnl_usd = position_usd * (pnl_pct / 100.0);
         double fees = position_usd * 0.004;
         double net_pnl = pnl_usd - fees;
         bool is_win = net_pnl > 0;
 
+        std::string direction = is_short ? "SHORT" : "LONG";
+
         auto hold_duration = std::chrono::duration_cast<std::chrono::seconds>(
             std::chrono::system_clock::now() - entry_time).count();
 
-        std::cout << "\n--- EXIT " << opp.pair << " [" << exit_reason << "] ---" << std::endl;
+        std::cout << "\n--- EXIT " << direction << " " << opp.pair << " [" << exit_reason << "] ---" << std::endl;
         std::cout << "  Entry: $" << entry_price << " -> Exit: $" << exit_price << std::endl;
         std::cout << "  P&L: $" << std::fixed << std::setprecision(2) << net_pnl 
                   << " (" << (pnl_pct >= 0 ? "+" : "") << pnl_pct << "%)" << std::endl;
@@ -555,6 +643,7 @@ private:
             std::lock_guard<std::mutex> lock(learning_mutex);
             TradeRecord trade;
             trade.pair = opp.pair;
+            trade.direction = direction;  // "LONG" or "SHORT"
             trade.entry_price = entry_price;
             trade.exit_price = exit_price;
             trade.leverage = 1.0;

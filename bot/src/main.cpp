@@ -490,6 +490,29 @@ private:
         // Use the confirmed price, not the scan price
         double amount = position_usd / confirmed_entry_price;
 
+        // PATTERN EDGE FILTER: Only trade if pattern has proven edge
+        // Generate pattern key and check if it exists with positive edge
+        {
+            std::lock_guard<std::mutex> lock(learning_mutex);
+            // Use default hold time for pattern lookup (will be refined below)
+            int default_hold = learned_config.timeframe_seconds > 0 ? learned_config.timeframe_seconds : config.default_hold_seconds;
+            int timeframe_bucket = default_hold < 30 ? 0 : default_hold < 60 ? 1 : default_hold < 120 ? 2 : 3;
+            
+            // Use the existing public get_pattern_metrics method
+            auto pattern_metrics = learning_engine->get_pattern_metrics(opp.pair, 1.0, timeframe_bucket);
+            
+            if (pattern_metrics.total_trades >= 5) {  // Need at least 5 trades for pattern
+                if (!pattern_metrics.has_edge || pattern_metrics.win_rate < 0.40) {
+                    std::cout << "⚠️ Skipping " << opp.pair << ": Pattern has no edge (WR: " 
+                              << (pattern_metrics.win_rate * 100) << "%, PF: " 
+                              << pattern_metrics.profit_factor << ")" << std::endl;
+                    return;
+                }
+                std::cout << "✅ Pattern has edge! WR: " << (pattern_metrics.win_rate * 100) 
+                          << "%, PF: " << pattern_metrics.profit_factor << std::endl;
+            }
+        }
+
         // LEARNING ENGINE: Override TP/SL with learned values if available
         double tp_pct = learned_config.take_profit_pct > 0 ? learned_config.take_profit_pct * 100.0 : 
                        (opp.suggested_tp_pct > 0 ? opp.suggested_tp_pct : config.take_profit_pct);

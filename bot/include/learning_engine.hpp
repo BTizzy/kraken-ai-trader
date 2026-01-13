@@ -30,6 +30,7 @@ using namespace std::chrono;
 
 struct TradeRecord {
     std::string pair;
+    std::string direction;     // "LONG" or "SHORT" - NEW: track trade direction
     double entry_price;
     double exit_price;
     double leverage;
@@ -146,6 +147,7 @@ public:
     
     // Load/save
     void save_to_file(const std::string& filepath);
+    void save_pattern_database_to_file(const std::string& filepath);
     void load_from_file(const std::string& filepath);
     
     // Debug/monitoring
@@ -208,7 +210,7 @@ private:
     double calculate_sma(const std::vector<double>& prices, int period) const;
     
     // Pattern matching
-    std::string generate_pattern_key(const std::string& pair, double leverage, int timeframe) const;
+    std::string generate_pattern_key(const std::string& pair, const std::string& direction, double leverage, int timeframe) const;
     void identify_winning_patterns();
     void correlate_patterns();
     void detect_regime_shifts();

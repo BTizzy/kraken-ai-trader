@@ -14,18 +14,20 @@ void LearningEngine::record_trade(const TradeRecord& trade) {
     trade_history.push_back(trade);
     trades_by_pair[trade.pair].push_back(trade);
     
-    // Generate pattern key for this trade
+    // Generate pattern key for this trade (includes direction: LONG or SHORT)
     int timeframe_bucket;
     if (trade.timeframe_seconds < 30) timeframe_bucket = 0;
     else if (trade.timeframe_seconds < 60) timeframe_bucket = 1;
     else if (trade.timeframe_seconds < 120) timeframe_bucket = 2;
     else timeframe_bucket = 3;
     
-    std::string key = generate_pattern_key(trade.pair, trade.leverage, timeframe_bucket);
+    // Default to LONG for legacy trades without direction
+    std::string direction = trade.direction.empty() ? "LONG" : trade.direction;
+    std::string key = generate_pattern_key(trade.pair, direction, trade.leverage, timeframe_bucket);
     trades_by_strategy[key].push_back(trade);
     
     // Print what we learned from this trade
-    std::cout << "📝 Trade recorded: " << trade.pair 
+    std::cout << "📝 Trade recorded: " << trade.pair << " " << direction
               << " | " << (trade.is_win() ? "WIN ✅" : "LOSS ❌")
               << " | ROI: " << std::fixed << std::setprecision(2) << trade.roi() << "%" 
               << " | Pattern: " << key << std::endl;
@@ -55,7 +57,9 @@ void LearningEngine::analyze_patterns() {
         else if (trade.timeframe_seconds < 120) timeframe_bucket = 2;
         else timeframe_bucket = 3;
         
-        std::string key = generate_pattern_key(trade.pair, trade.leverage, timeframe_bucket);
+        // Default to LONG for legacy trades without direction
+        std::string direction = trade.direction.empty() ? "LONG" : trade.direction;
+        std::string key = generate_pattern_key(trade.pair, direction, trade.leverage, timeframe_bucket);
         patterns[key].push_back(trade);
     }
     
@@ -83,12 +87,35 @@ void LearningEngine::analyze_patterns() {
             metrics.total_fees += t.fees_paid;
         }
         
-        // Parse pattern key
+        // Parse pattern key: PAIR_DIRECTION_LEVERAGEx_TIMEFRAME
+        // e.g., "BTCUSD_LONG_1x_2" or legacy "BTCUSD_1x_2"
         size_t pos1 = pattern_key.find('_');
         size_t pos2 = pattern_key.find('_', pos1 + 1);
+        size_t pos3 = pattern_key.find('_', pos2 + 1);
+        
         metrics.pair = pattern_key.substr(0, pos1);
-        metrics.leverage = std::stod(pattern_key.substr(pos1 + 1, pos2 - pos1 - 1));
-        metrics.timeframe_bucket = std::stoi(pattern_key.substr(pos2 + 1));
+        
+        // Check if this is the new format with direction or legacy format
+        std::string second_part = pattern_key.substr(pos1 + 1, pos2 - pos1 - 1);
+        if (second_part == "LONG" || second_part == "SHORT") {
+            // New format: PAIR_DIRECTION_LEVERAGEx_TIMEFRAME
+            std::string leverage_str = pattern_key.substr(pos2 + 1, pos3 - pos2 - 1);
+            // Remove the 'x' suffix if present
+            if (!leverage_str.empty() && leverage_str.back() == 'x') {
+                leverage_str.pop_back();
+            }
+            metrics.leverage = leverage_str.empty() ? 1.0 : std::stod(leverage_str);
+            metrics.timeframe_bucket = std::stoi(pattern_key.substr(pos3 + 1));
+        } else {
+            // Legacy format: PAIR_LEVERAGEx_TIMEFRAME
+            std::string leverage_str = second_part;
+            // Remove the 'x' suffix if present
+            if (!leverage_str.empty() && leverage_str.back() == 'x') {
+                leverage_str.pop_back();
+            }
+            metrics.leverage = leverage_str.empty() ? 1.0 : std::stod(leverage_str);
+            metrics.timeframe_bucket = std::stoi(pattern_key.substr(pos2 + 1));
+        }
         
         // Win rate
         metrics.win_rate = (double)metrics.winning_trades / metrics.total_trades;
@@ -142,10 +169,13 @@ void LearningEngine::analyze_patterns() {
     
     // 7. UPDATE STRATEGY DATABASE
     update_strategy_database();
+    
+    // 8. SAVE PATTERN DATABASE FOR API ACCESS
+    save_pattern_database_to_file("pattern_database.json");
 }
 
-std::string LearningEngine::generate_pattern_key(const std::string& pair, double leverage, int timeframe) const {
-    return pair + "_" + std::to_string((int)leverage) + "x_" + std::to_string(timeframe);
+std::string LearningEngine::generate_pattern_key(const std::string& pair, const std::string& direction, double leverage, int timeframe) const {
+    return pair + "_" + direction + "_" + std::to_string((int)leverage) + "x_" + std::to_string(timeframe);
 }
 
 void LearningEngine::identify_winning_patterns() {
@@ -487,11 +517,16 @@ void LearningEngine::save_to_file(const std::string& filepath) {
     for (const auto& t : trade_history) {
         json trade_json;
         trade_json["pair"] = t.pair;
+        trade_json["direction"] = t.direction.empty() ? "LONG" : t.direction;
         trade_json["entry"] = t.entry_price;
         trade_json["exit"] = t.exit_price;
         trade_json["leverage"] = t.leverage;
         trade_json["pnl"] = t.pnl;
         trade_json["reason"] = t.exit_reason;
+        // Save timestamp as milliseconds since epoch
+        auto timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            t.timestamp.time_since_epoch()).count();
+        trade_json["timestamp"] = timestamp_ms;
         data["trades"].push_back(trade_json);
     }
     
@@ -500,6 +535,48 @@ void LearningEngine::save_to_file(const std::string& filepath) {
     file.close();
     
     std::cout << "💾 Saved " << trade_history.size() << " trades to " << filepath << std::endl;
+}
+
+void LearningEngine::save_pattern_database_to_file(const std::string& filepath) {
+    json data;
+    data["version"] = "1.0";
+    data["total_patterns"] = pattern_database.size();
+    data["last_updated"] = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    
+    // Convert pattern database to JSON
+    json patterns_json = json::object();
+    for (const auto& [key, metrics] : pattern_database) {
+        json pattern_json;
+        pattern_json["pair"] = metrics.pair;
+        pattern_json["leverage"] = metrics.leverage;
+        pattern_json["timeframe_bucket"] = metrics.timeframe_bucket;
+        pattern_json["total_trades"] = metrics.total_trades;
+        pattern_json["winning_trades"] = metrics.winning_trades;
+        pattern_json["losing_trades"] = metrics.losing_trades;
+        pattern_json["win_rate"] = metrics.win_rate;
+        pattern_json["avg_win"] = metrics.avg_win;
+        pattern_json["avg_loss"] = metrics.avg_loss;
+        pattern_json["profit_factor"] = metrics.profit_factor;
+        pattern_json["sharpe_ratio"] = metrics.sharpe_ratio;
+        pattern_json["sortino_ratio"] = metrics.sortino_ratio;
+        pattern_json["max_drawdown"] = metrics.max_drawdown;
+        pattern_json["confidence_score"] = metrics.confidence_score;
+        pattern_json["has_edge"] = metrics.has_edge;
+        pattern_json["edge_percentage"] = metrics.edge_percentage;
+        pattern_json["total_pnl"] = metrics.total_pnl;
+        pattern_json["total_fees"] = metrics.total_fees;
+        
+        patterns_json[key] = pattern_json;
+    }
+    
+    data["pattern_database"] = patterns_json;
+    
+    std::ofstream file(filepath);
+    file << data.dump(2) << std::endl;
+    file.close();
+    
+    std::cout << "🧠 Saved " << pattern_database.size() << " patterns to " << filepath << std::endl;
 }
 
 void LearningEngine::load_from_file(const std::string& filepath) {
@@ -513,8 +590,60 @@ void LearningEngine::load_from_file(const std::string& filepath) {
     file >> data;
     file.close();
     
-    // TODO: Parse and load
-    std::cout << "📂 Loaded learning data from " << filepath << std::endl;
+    // Parse and load trade history
+    if (data.contains("trades") && data["trades"].is_array()) {
+        trade_history.clear();
+        trades_by_pair.clear();
+        trades_by_strategy.clear();
+        
+        for (const auto& trade_json : data["trades"]) {
+            TradeRecord trade;
+            trade.pair = trade_json.value("pair", "");
+            trade.direction = trade_json.value("direction", "LONG");  // Default to LONG for legacy trades
+            trade.entry_price = trade_json.value("entry", 0.0);
+            trade.exit_price = trade_json.value("exit", 0.0);
+            trade.leverage = trade_json.value("leverage", 1.0);
+            trade.pnl = trade_json.value("pnl", 0.0);
+            trade.exit_reason = trade_json.value("reason", "unknown");
+            
+            // Load timestamp from milliseconds since epoch, or use current time for legacy trades
+            if (trade_json.contains("timestamp")) {
+                auto timestamp_ms = trade_json["timestamp"].get<long long>();
+                trade.timestamp = system_clock::time_point(std::chrono::milliseconds(timestamp_ms));
+            } else {
+                trade.timestamp = std::chrono::system_clock::now();  // Fallback for legacy trades
+            }
+            
+            // Set defaults for required fields
+            trade.timeframe_seconds = 60;  // Default 1 minute
+            trade.position_size = 100.0;   // Default $100
+            trade.gross_pnl = trade.pnl;   // Assume no fees if not saved
+            trade.fees_paid = 0.0;
+            trade.volatility_at_entry = 0.0;
+            trade.bid_ask_spread = 0.0;
+            
+            trade_history.push_back(trade);
+            
+            // Update auxiliary data structures
+            trades_by_pair[trade.pair].push_back(trade);
+            
+            int timeframe_bucket = 1;  // Default bucket for 60s
+            // Default to LONG for legacy trades without direction
+            std::string direction = trade.direction.empty() ? "LONG" : trade.direction;
+            std::string key = generate_pattern_key(trade.pair, direction, trade.leverage, timeframe_bucket);
+            trades_by_strategy[key].push_back(trade);
+        }
+        
+        std::cout << "📂 Loaded " << trade_history.size() << " trades from " << filepath << std::endl;
+        
+        // Run analysis if we have enough data
+        if (trade_history.size() >= MIN_TRADES_FOR_ANALYSIS) {
+            std::cout << "🔄 Running initial pattern analysis..." << std::endl;
+            analyze_patterns();
+        }
+    } else {
+        std::cout << "⚠️  No trades found in " << filepath << std::endl;
+    }
 }
 
 json LearningEngine::get_statistics_json() const {

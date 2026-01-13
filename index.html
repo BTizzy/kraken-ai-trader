@@ -179,8 +179,8 @@
             <section class="panel">
                 <div class="panel-header"><h2 class="panel-title">Recent Trades</h2><span style="color:var(--text-muted);font-size:12px" id="trades-cnt">0 trades</span></div>
                 <div class="panel-body" style="padding:0;overflow:auto;max-height:500px">
-                    <table class="table"><thead><tr><th>Pair</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Type</th><th>Time</th></tr></thead><tbody id="trades-body">
-                        <tr><td colspan="6"><div class="empty"><div class="empty-icon">📊</div><div class="empty-title">No trades yet</div><div class="empty-desc">Start the bot to begin</div></div></td></tr>
+                    <table class="table"><thead><tr><th>Pair</th><th>Dir</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Type</th><th>Time</th></tr></thead><tbody id="trades-body">
+                        <tr><td colspan="7"><div class="empty"><div class="empty-icon">📊</div><div class="empty-title">No trades yet</div><div class="empty-desc">Start the bot to begin</div></div></td></tr>
                     </tbody></table>
                 </div>
             </section>
@@ -209,6 +209,13 @@
                         <div class="stats-grid">
                             <div class="stat-box"><div class="label">Position Size</div><div class="value" id="s-size">$100</div></div>
                             <div class="stat-box"><div class="label">Profit Factor</div><div class="value" id="s-pf">0.00</div></div>
+                        </div>
+                    </div>
+                    <div class="stats-section">
+                        <div class="stats-title">Learning Engine</div>
+                        <div class="stats-grid">
+                            <div class="stat-box"><div class="label">Total Patterns</div><div class="value" id="s-patterns">0</div></div>
+                            <div class="stat-box"><div class="label">With Edge</div><div class="value green" id="s-edge">0</div></div>
                         </div>
                     </div>
                     <div class="stats-section">
@@ -259,6 +266,8 @@
                 document.getElementById('s-tp').textContent=d.tp_exits||0; document.getElementById('s-sl').textContent=d.sl_exits||0;
                 document.getElementById('s-trail').textContent=d.trailing_exits||0; document.getElementById('s-timeout').textContent=d.timeout_exits||0;
                 document.getElementById('s-size').textContent='$'+(d.position_size||100); document.getElementById('s-pf').textContent=(d.profit_factor||0).toFixed(2);
+                document.getElementById('s-patterns').textContent=d.total_patterns||0;
+                document.getElementById('s-edge').textContent=d.edge_patterns||0;
                 document.getElementById('trades-cnt').textContent=(d.total_trades||0)+' trades';
                 renderTrades(d.recent_trades||[]);
             }catch(e){ console.error(e); }
@@ -266,12 +275,14 @@
 
         function renderTrades(trades){
             const tbody=document.getElementById('trades-body');
-            if(!trades.length){ tbody.innerHTML='<tr><td colspan="6"><div class="empty"><div class="empty-icon">📊</div><div class="empty-title">No trades yet</div><div class="empty-desc">Start the bot</div></div></td></tr>'; return; }
+            if(!trades.length){ tbody.innerHTML='<tr><td colspan="7"><div class="empty"><div class="empty-icon">📊</div><div class="empty-title">No trades yet</div><div class="empty-desc">Start the bot</div></div></td></tr>'; return; }
             tbody.innerHTML=trades.slice(0,20).map(t=>{
                 const pnl=parseFloat(t.pnl)||0, cls=pnl>=0?'positive':'negative', reason=t.reason||t.exit_reason||'timeout', badge=getBadge(reason);
                 const ts=t.entry_time||t.timestamp||0;
                 const timeStr=ts?new Date(ts).toLocaleString('en-US',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}):'—';
-                return '<tr><td><div class="pair-cell"><div class="pair-icon">'+(t.pair||'??').replace('USD','').slice(0,3)+'</div><span class="pair-name">'+(t.pair||'N/A')+'</span></div></td><td class="price">'+fmtP(t.entry||t.entry_price)+'</td><td class="price">'+fmtP(t.exit||t.exit_price)+'</td><td class="pnl '+cls+'">'+fmt(pnl)+'</td><td><span class="badge '+badge+'">'+reason+'</span></td><td style="font-family:var(--font-mono);color:var(--text-muted);font-size:12px">'+timeStr+'</td></tr>';
+                const dir=t.direction||'LONG';
+                const dirCls=dir==='SHORT'?'red':'green';
+                return '<tr><td><div class="pair-cell"><div class="pair-icon">'+(t.pair||'??').replace('USD','').slice(0,3)+'</div><span class="pair-name">'+(t.pair||'N/A')+'</span></div></td><td style="font-weight:600;color:var(--'+dirCls+')">'+dir+'</td><td class="price">'+fmtP(t.entry||t.entry_price)+'</td><td class="price">'+fmtP(t.exit||t.exit_price)+'</td><td class="pnl '+cls+'">'+fmt(pnl)+'</td><td><span class="badge '+badge+'">'+reason+'</span></td><td style="font-family:var(--font-mono);color:var(--text-muted);font-size:12px">'+timeStr+'</td></tr>';
             }).join('');
         }
 

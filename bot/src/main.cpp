@@ -102,6 +102,40 @@ struct PerformanceMetrics {
         int wins = std::count_if(recent_pnl.begin(), recent_pnl.end(), [](double p) { return p > 0; });
         return (double)wins / recent_pnl.size();
     }
+    
+    // Kelly Criterion position sizing
+    // Returns optimal fraction of bankroll to bet (0.0 to 1.0)
+    double get_kelly_fraction() const {
+        if (total_trades < 10 || winning_trades == 0 || losing_trades == 0) {
+            return 0.25;  // Default conservative 25% until we have data
+        }
+        
+        // Kelly formula: f* = (p * b - q) / b
+        // Where: p = win probability, q = loss probability (1-p)
+        //        b = average win / average loss ratio
+        double p = win_rate;
+        double q = 1.0 - p;
+        double b = std::abs(avg_win / avg_loss);
+        
+        double kelly = (p * b - q) / b;
+        
+        // Clamp and use fractional Kelly (25-50% of full Kelly for safety)
+        const double KELLY_FRACTION = 0.25;  // Use 25% of full Kelly
+        kelly = std::max(0.0, std::min(1.0, kelly));
+        kelly *= KELLY_FRACTION;
+        
+        // Never bet more than 25% of bankroll
+        return std::min(0.25, kelly);
+    }
+    
+    // Calculate optimal position size based on Kelly and bankroll
+    double get_optimal_position_size(double bankroll, double min_size, double max_size) const {
+        double kelly = get_kelly_fraction();
+        double optimal = bankroll * kelly;
+        
+        // Clamp to min/max
+        return std::max(min_size, std::min(max_size, optimal));
+    }
 
     double get_profit_factor() const {
         double gross_wins = avg_win * winning_trades;
@@ -121,6 +155,19 @@ struct PerformanceMetrics {
     }
 };
 
+// Market Regime enumeration
+enum class MarketRegime { TRENDING, RANGING, VOLATILE, QUIET };
+
+std::string regime_to_string(MarketRegime regime) {
+    switch (regime) {
+        case MarketRegime::TRENDING: return "TRENDING";
+        case MarketRegime::RANGING: return "RANGING";
+        case MarketRegime::VOLATILE: return "VOLATILE";
+        case MarketRegime::QUIET: return "QUIET";
+        default: return "UNKNOWN";
+    }
+}
+
 struct ScanResult {
     std::string pair;
     double current_price = 0.0;
@@ -136,6 +183,7 @@ struct ScanResult {
     int suggested_hold_seconds = 600;
     double suggested_tp_pct = 1.5;
     double suggested_sl_pct = 0.5;
+    MarketRegime regime = MarketRegime::RANGING;  // NEW: Market regime
     bool valid = false;
 };
 
@@ -285,12 +333,12 @@ private:
             // TREND CONFIRMATION: Check if longer-term trend aligns with entry
             // Get OHLC data to analyze recent price action
             double trend_score = 0.0;
+            int bullish_candles = 0;
+            int bearish_candles = 0;
             try {
                 auto ohlc = api->get_ohlc(pair, 15);  // 15-minute candles
                 if (!ohlc.empty() && ohlc.size() >= 4) {
                     // Check last 4 candles (1 hour of 15-min data)
-                    int bullish_candles = 0;
-                    int bearish_candles = 0;
                     for (size_t i = ohlc.size() - 4; i < ohlc.size(); i++) {
                         double candle_open = ohlc[i].open;
                         double candle_close = ohlc[i].close;
@@ -312,6 +360,22 @@ private:
                 }
             } catch (...) {
                 // If OHLC fails, continue without trend adjustment
+            }
+
+            // MARKET REGIME DETECTION
+            // Determine current market conditions to adjust strategy
+            const double HIGH_VOL_THRESHOLD = 8.0;   // >8% = volatile
+            const double LOW_VOL_THRESHOLD = 2.0;    // <2% = quiet
+            const double TREND_THRESHOLD = 0.10;     // >10% trend score = trending
+            
+            if (result.volatility_pct > HIGH_VOL_THRESHOLD) {
+                result.regime = MarketRegime::VOLATILE;
+            } else if (result.volatility_pct < LOW_VOL_THRESHOLD) {
+                result.regime = MarketRegime::QUIET;
+            } else if (std::abs(trend_score) > TREND_THRESHOLD || bullish_candles >= 3 || bearish_candles >= 3) {
+                result.regime = MarketRegime::TRENDING;
+            } else {
+                result.regime = MarketRegime::RANGING;
             }
 
             // ENTRY CRITERIA: Must have momentum and not be overextended
@@ -351,8 +415,10 @@ private:
             // Reweighted: momentum 40%, volume 20%, trend 15%, spread 10%, volatility 10%, history 5%
             result.signal_strength = mom_score * 0.40 + volume_score * 0.20 + trend_score + spread_score * 0.10 + vol_score * 0.10 + history_bonus * 0.05;
             
-            // MINIMUM SIGNAL THRESHOLD - filter out weakest signals only
-            if (result.signal_strength < 0.35) return result;  // Lowered from 0.45
+            // MINIMUM CONFIDENCE THRESHOLD - increased to reduce overtrading
+            // Was 0.35, now 0.55 to only take high-confidence trades
+            const double MIN_CONFIDENCE_THRESHOLD = 0.55;
+            if (result.signal_strength < MIN_CONFIDENCE_THRESHOLD) return result;
 
             // Adjusted TP/SL based on volatility - aim for 2:1 R:R minimum
             if (result.volatility_pct > 10) {
@@ -387,9 +453,28 @@ private:
             learned_config = learning_engine->get_optimal_strategy(opp.pair, opp.volatility_pct);
         }
         
-        // Use learned position size if available, otherwise default
-        double position_usd = learned_config.position_size_usd > 0 ? 
-                              learned_config.position_size_usd : config.base_position_size_usd;
+        // KELLY CRITERION POSITION SIZING
+        // Use Kelly-based position size if we have enough data, otherwise learned/default
+        double position_usd;
+        {
+            std::lock_guard<std::mutex> lock(metrics_mutex);
+            if (metrics.total_trades >= 10) {
+                // We have enough data for Kelly calculation
+                // Assume a conservative bankroll of $1000 for paper trading
+                const double ASSUMED_BANKROLL = 1000.0;
+                position_usd = metrics.get_optimal_position_size(
+                    ASSUMED_BANKROLL, 
+                    config.min_position_size_usd, 
+                    config.max_position_size_usd
+                );
+                std::cout << "  📊 Kelly position size: $" << std::fixed << std::setprecision(2) 
+                          << position_usd << " (Kelly: " << (metrics.get_kelly_fraction() * 100) << "%)" << std::endl;
+            } else if (learned_config.position_size_usd > 0) {
+                position_usd = learned_config.position_size_usd;
+            } else {
+                position_usd = config.base_position_size_usd;
+            }
+        }
         
         // CRITICAL FIX: Get a fresh confirmed price before entering the trade
         // This prevents fake trades where we can't track the price during the hold period
@@ -414,11 +499,59 @@ private:
                        (opp.suggested_hold_seconds > 0 ? opp.suggested_hold_seconds : config.default_hold_seconds);
         hold_time = std::max(config.min_hold_seconds, std::min(hold_time, config.max_hold_seconds));
 
+        // REGIME-BASED STRATEGY ADJUSTMENT
+        // Modify position size and targets based on market regime
+        switch (opp.regime) {
+            case MarketRegime::VOLATILE:
+                // In volatile markets, reduce position size and widen stops
+                position_usd *= 0.5;  // Half size
+                sl_pct *= 1.5;        // Wider stop
+                std::cout << "📊 VOLATILE regime - reducing position, widening stops" << std::endl;
+                break;
+            case MarketRegime::QUIET:
+                // In quiet markets, skip trading (low opportunity)
+                std::cout << "⚠️ Skipping " << opp.pair << ": QUIET market regime - waiting for opportunity" << std::endl;
+                return;
+            case MarketRegime::TRENDING:
+                // In trending markets, use momentum strategy with trailing stops
+                hold_time = std::min(hold_time * 2, config.max_hold_seconds);  // Hold longer
+                std::cout << "📈 TRENDING regime - extended hold time, momentum strategy" << std::endl;
+                break;
+            case MarketRegime::RANGING:
+                // In ranging markets, use mean reversion with tighter targets
+                tp_pct *= 0.8;  // Tighter TP
+                std::cout << "↔️ RANGING regime - tighter targets, mean reversion" << std::endl;
+                break;
+        }
+
+        // FEE-AWARE TRADING: Only trade if expected profit > fees
+        // Fee is 0.4% of position, so we need TP to exceed that with a buffer
+        const double FEE_RATE = 0.004;  // 0.4%
+        const double MIN_PROFIT_BUFFER = 0.001;  // 0.1% buffer above fees
+        double expected_fees_pct = FEE_RATE * 100.0;  // Convert to percentage
+        double min_required_tp = expected_fees_pct + (MIN_PROFIT_BUFFER * 100.0);
+        
+        if (tp_pct < min_required_tp) {
+            std::cout << "⚠️ Skipping " << opp.pair << ": TP " << tp_pct << "% < min required " 
+                      << min_required_tp << "% (fees + buffer)" << std::endl;
+            return;
+        }
+        
+        // Also check if expected profit (TP * win_rate - SL * loss_rate) > fees
+        double estimated_win_rate = learned_config.is_validated ? 0.55 : 0.50;  // Conservative estimate
+        double expected_profit = (tp_pct * estimated_win_rate) - (sl_pct * (1.0 - estimated_win_rate));
+        if (expected_profit < expected_fees_pct) {
+            std::cout << "⚠️ Skipping " << opp.pair << ": Expected profit " << expected_profit 
+                      << "% < fees " << expected_fees_pct << "%" << std::endl;
+            return;
+        }
+
         std::cout << "\n--- ENTER " << opp.direction << " " << opp.pair << " ---" << std::endl;
         std::cout << "  Direction: " << (is_short ? "📉 SHORT" : "📈 LONG") << std::endl;
         std::cout << "  Price: $" << std::fixed << std::setprecision(6) << confirmed_entry_price << std::endl;
         std::cout << "  Position: $" << position_usd << " (" << amount << " units)" << std::endl;
         std::cout << "  TP: " << tp_pct << "% | SL: " << sl_pct << "% | Max: " << hold_time << "s" << std::endl;
+        std::cout << "  📊 Expected profit: " << std::setprecision(2) << expected_profit << "% (after " << expected_fees_pct << "% fees)" << std::endl;
         if (learned_config.is_validated) {
             std::cout << "  🧠 USING LEARNED STRATEGY | Edge: " << std::setprecision(1) 
                       << learned_config.estimated_edge << "%" << std::endl;
@@ -656,7 +789,19 @@ private:
             trade.exit_reason = exit_reason;
             trade.volatility_at_entry = opp.volatility_pct;
             trade.bid_ask_spread = opp.spread_pct;
-            learning_engine->record_trade(trade);
+            
+            // Validate trade before recording
+            if (!LearningEngine::validate_trade(trade)) {
+                std::cerr << "⚠️ Trade failed validation - not recording to preserve data integrity" << std::endl;
+            } else {
+                learning_engine->record_trade(trade);
+                
+                // Periodic backup every 50 trades
+                if (learning_engine->get_trade_count() % 50 == 0) {
+                    std::cout << "📦 Creating periodic backup at trade #" << learning_engine->get_trade_count() << std::endl;
+                    learning_engine->backup_trade_log(config.trade_log_file);
+                }
+            }
             
             if (!config.pair_trade_counts.count(opp.pair)) {
                 config.pair_trade_counts[opp.pair] = 0;

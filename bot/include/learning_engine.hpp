@@ -150,6 +150,11 @@ public:
     void save_pattern_database_to_file(const std::string& filepath);
     void load_from_file(const std::string& filepath);
     
+    // NEW: Backup and validation
+    void backup_trade_log(const std::string& filepath);
+    static bool validate_trade(const TradeRecord& trade);
+    int get_trade_count() const { return trade_history.size(); }
+    
     // Debug/monitoring
     json get_statistics_json() const;
     void print_summary() const;
@@ -211,6 +216,9 @@ private:
     
     // Pattern matching
     std::string generate_pattern_key(const std::string& pair, const std::string& direction, double leverage, int timeframe) const;
+    std::string generate_enhanced_pattern_key(const std::string& pair, const std::string& direction, 
+                                               double leverage, int timeframe, 
+                                               double volatility, int regime) const;
     void identify_winning_patterns();
     void correlate_patterns();
     void detect_regime_shifts();

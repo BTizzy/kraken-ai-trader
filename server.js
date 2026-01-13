@@ -11,6 +11,25 @@ const url = require('url');
 const { spawn } = require('child_process');
 
 const PORT = 8000;
+const SERVER_START_TIME = Date.now();
+
+/**
+ * Format uptime in human-readable format
+ */
+function formatUptime(seconds) {
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    
+    const parts = [];
+    if (days > 0) parts.push(`${days}d`);
+    if (hours > 0) parts.push(`${hours}h`);
+    if (minutes > 0) parts.push(`${minutes}m`);
+    if (secs > 0 || parts.length === 0) parts.push(`${secs}s`);
+    
+    return parts.join(' ');
+}
 
 // Global bot process tracking
 let botProcess = null;
@@ -64,6 +83,8 @@ function loadTrainingData() {
                 let totalPnl = 0;
                 let wins = 0;
                 let losses = 0;
+                let grossWins = 0;
+                let grossLosses = 0;
                 let tpExits = 0;
                 let slExits = 0;
                 let trailingExits = 0;
@@ -73,8 +94,13 @@ function loadTrainingData() {
                 
                 validTrades.forEach(trade => {
                     totalPnl += trade.pnl;
-                    if (trade.pnl > 0) wins++;
-                    else losses++;
+                    if (trade.pnl > 0) {
+                        wins++;
+                        grossWins += trade.pnl;
+                    } else {
+                        losses++;
+                        grossLosses += Math.abs(trade.pnl);
+                    }
                     if (trade.pnl > bestTrade) bestTrade = trade.pnl;
                     if (trade.pnl < worstTrade) worstTrade = trade.pnl;
                     
@@ -85,11 +111,15 @@ function loadTrainingData() {
                     else if (reason === 'timeout') timeoutExits++;
                 });
                 
+                // Calculate profit factor
+                const profitFactor = grossLosses > 0 ? grossWins / grossLosses : (grossWins > 0 ? 999 : 0);
+                
                 learningData.total_trades = validTrades.length;
                 learningData.winning_trades = wins;
                 learningData.losing_trades = losses;
                 learningData.total_pnl = parseFloat(totalPnl.toFixed(2));
                 learningData.win_rate = validTrades.length > 0 ? (wins / validTrades.length * 100) : 0;
+                learningData.profit_factor = parseFloat(profitFactor.toFixed(2));
                 learningData.tp_exits = tpExits;
                 learningData.sl_exits = slExits;
                 learningData.trailing_exits = trailingExits;
@@ -138,6 +168,81 @@ const MIME_TYPES = {
 
 // Kraken API endpoints
 const KRAKEN_API_BASE = 'https://api.kraken.com/0';
+
+// ============================================
+// RATE LIMITER
+// ============================================
+const rateLimiter = {
+    requests: new Map(),  // IP -> { count, resetTime }
+    maxRequests: 300,     // Max requests per window (increased for dashboard polling)
+    windowMs: 60000,      // 1 minute window
+    
+    // Endpoints exempt from rate limiting (internal dashboard endpoints)
+    exemptPaths: ['/api/bot/status', '/api/bot/learning', '/api/health', '/api/ticker'],
+    
+    /**
+     * Check if request should be allowed
+     * @param {string} ip - Client IP address
+     * @param {string} path - Request path
+     * @returns {object} { allowed: boolean, remaining: number, resetIn: number }
+     */
+    check(ip, path = '') {
+        // Skip rate limiting for exempt paths
+        if (this.exemptPaths.some(p => path.startsWith(p))) {
+            return { allowed: true, remaining: this.maxRequests, resetIn: 0 };
+        }
+        
+        const now = Date.now();
+        let record = this.requests.get(ip);
+        
+        // Create or reset if window expired
+        if (!record || now > record.resetTime) {
+            record = { count: 0, resetTime: now + this.windowMs };
+            this.requests.set(ip, record);
+        }
+        
+        // Check limit
+        if (record.count >= this.maxRequests) {
+            return {
+                allowed: false,
+                remaining: 0,
+                resetIn: Math.ceil((record.resetTime - now) / 1000)
+            };
+        }
+        
+        // Increment and allow
+        record.count++;
+        return {
+            allowed: true,
+            remaining: this.maxRequests - record.count,
+            resetIn: Math.ceil((record.resetTime - now) / 1000)
+        };
+    },
+    
+    /**
+     * Clean up old entries periodically
+     */
+    cleanup() {
+        const now = Date.now();
+        for (const [ip, record] of this.requests.entries()) {
+            if (now > record.resetTime + this.windowMs) {
+                this.requests.delete(ip);
+            }
+        }
+    }
+};
+
+// Cleanup rate limiter every 5 minutes
+setInterval(() => rateLimiter.cleanup(), 5 * 60 * 1000);
+
+/**
+ * Get client IP from request
+ */
+function getClientIP(req) {
+    return req.headers['x-forwarded-for']?.split(',')[0].trim() || 
+           req.socket?.remoteAddress || 
+           'unknown';
+}
 
 /**
  * Make HTTPS request and return promise
@@ -237,8 +342,33 @@ const server = http.createServer(async (req, res) => {
     try {
         const parsedUrl = new URL(req.url, `http://localhost:8000`);
         const pathname = parsedUrl.pathname;
+        const clientIP = getClientIP(req);
 
-        console.log(`${new Date().toISOString()} ${req.method} ${pathname}`);
+        console.log(`${new Date().toISOString()} ${req.method} ${pathname} [${clientIP}]`);
+
+        // Rate limiting for API routes (exempt paths handled inside check())
+        if (pathname.startsWith('/api/')) {
+            const rateCheck = rateLimiter.check(clientIP, pathname);
+            
+            // Add rate limit headers
+            res.setHeader('X-RateLimit-Limit', rateLimiter.maxRequests);
+            res.setHeader('X-RateLimit-Remaining', rateCheck.remaining);
+            res.setHeader('X-RateLimit-Reset', rateCheck.resetIn);
+            
+            if (!rateCheck.allowed) {
+                res.writeHead(429, {
+                    'Content-Type': 'application/json',
+                    'Retry-After': rateCheck.resetIn,
+                    'Access-Control-Allow-Origin': '*'
+                });
+                res.end(JSON.stringify({
+                    error: 'Too many requests',
+                    message: `Rate limit exceeded. Try again in ${rateCheck.resetIn} seconds.`,
+                    retryAfter: rateCheck.resetIn
+                }));
+                return;
+            }
+        }
 
         // API Proxy routes
         if (pathname.startsWith('/api/')) {
@@ -347,6 +477,90 @@ const server = http.createServer(async (req, res) => {
             return;
         }
 
+        // Health check endpoint - comprehensive system health
+        if (apiPath === 'health') {
+            const tradeLogPath = path.join(__dirname, 'bot', 'build', 'trade_log.json');
+            let lastTradeTimestamp = null;
+            let tradeCount = 0;
+            let totalPnl = 0;
+            
+            try {
+                if (fs.existsSync(tradeLogPath)) {
+                    const data = JSON.parse(fs.readFileSync(tradeLogPath, 'utf8'));
+                    if (data && Array.isArray(data.trades)) {
+                        tradeCount = data.trades.length;
+                        if (tradeCount > 0) {
+                            const lastTrade = data.trades[data.trades.length - 1];
+                            lastTradeTimestamp = lastTrade.timestamp || null;
+                            totalPnl = data.trades.reduce((sum, t) => sum + (t.pnl || 0), 0);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('Error reading trade log for health check:', e.message);
+            }
+            
+            const memUsage = process.memoryUsage();
+            const health = {
+                status: 'ok',
+                timestamp: Date.now(),
+                uptime_seconds: Math.floor(process.uptime()),
+                uptime_formatted: formatUptime(process.uptime()),
+                bot: {
+                    running: botProcess && !botProcess.killed,
+                    mode: botStatus.mode,
+                    last_update: botStatus.last_update
+                },
+                trades: {
+                    total_count: tradeCount,
+                    last_trade_timestamp: lastTradeTimestamp,
+                    total_pnl: parseFloat(totalPnl.toFixed(2)),
+                    minutes_since_last_trade: lastTradeTimestamp ? 
+                        Math.floor((Date.now() - lastTradeTimestamp) / 60000) : null
+                },
+                memory: {
+                    heap_used_mb: Math.round(memUsage.heapUsed / 1024 / 1024),
+                    heap_total_mb: Math.round(memUsage.heapTotal / 1024 / 1024),
+                    rss_mb: Math.round(memUsage.rss / 1024 / 1024),
+                    usage_percent: Math.round((memUsage.heapUsed / memUsage.heapTotal) * 100)
+                },
+                alerts: []
+            };
+            
+            // Check for alert conditions
+            if (health.trades.minutes_since_last_trade > 60) {
+                health.alerts.push({
+                    type: 'no_trades',
+                    message: `No trades for ${health.trades.minutes_since_last_trade} minutes`,
+                    severity: 'warning'
+                });
+            }
+            if (health.memory.usage_percent > 80) {
+                health.alerts.push({
+                    type: 'high_memory',
+                    message: `Memory usage at ${health.memory.usage_percent}%`,
+                    severity: 'warning'
+                });
+            }
+            if (health.trades.total_pnl < -50) {
+                health.alerts.push({
+                    type: 'pnl_drop',
+                    message: `Total P&L is $${health.trades.total_pnl}`,
+                    severity: 'critical'
+                });
+            }
+            
+            health.status = health.alerts.some(a => a.severity === 'critical') ? 'critical' :
+                           health.alerts.length > 0 ? 'warning' : 'ok';
+            
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            });
+            res.end(JSON.stringify(health, null, 2));
+            return;
+        }
+
         // Bot learning data endpoint
         if (apiPath === 'bot/learning') {
             learningData.last_update = Date.now();
@@ -358,9 +572,21 @@ const server = http.createServer(async (req, res) => {
                 if (fs.existsSync(patternFile)) {
                     console.log('Pattern file exists, reading...');
                     const patternData = JSON.parse(fs.readFileSync(patternFile, 'utf8'));
-                    learningData.pattern_database = patternData.pattern_database || {};
-                    learningData.total_patterns = patternData.total_patterns || 0;
-                    console.log('Loaded', learningData.total_patterns, 'patterns');
+                    // Support both old format (pattern_database) and new format (patterns)
+                    learningData.pattern_database = patternData.patterns || patternData.pattern_database || {};
+                    learningData.total_patterns = patternData.total_patterns || Object.keys(learningData.pattern_database).length;
+                    
+                    // Calculate edge patterns if not in file
+                    if (patternData.edge_patterns !== undefined) {
+                        learningData.edge_patterns = patternData.edge_patterns;
+                    } else {
+                        // Count patterns with has_edge: true
+                        learningData.edge_patterns = Object.values(learningData.pattern_database).filter(p => p.has_edge).length;
+                    }
+                    
+                    learningData.basic_patterns = patternData.basic_patterns || 0;
+                    learningData.enhanced_patterns = patternData.enhanced_patterns || 0;
+                    console.log('Loaded', learningData.total_patterns, 'patterns (' + learningData.edge_patterns + ' with edge)');
                 } else {
                     console.log('Pattern file does not exist');
                     learningData.pattern_database = {};

@@ -219,6 +219,7 @@ private:
     std::string generate_enhanced_pattern_key(const std::string& pair, const std::string& direction, 
                                                double leverage, int timeframe, 
                                                double volatility, int regime) const;
+    PatternMetrics get_pattern_metrics(const std::string& pattern_key) const;  // Get metrics for a specific pattern
     void identify_winning_patterns();
     void correlate_patterns();
     void detect_regime_shifts();

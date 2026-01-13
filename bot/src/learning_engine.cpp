@@ -222,6 +222,16 @@ std::string LearningEngine::generate_enhanced_pattern_key(const std::string& pai
            std::to_string(timeframe) + "_V" + std::to_string(vol_bucket) + "_" + regime_str;
 }
 
+// Get pattern metrics by key
+PatternMetrics LearningEngine::get_pattern_metrics(const std::string& pattern_key) const {
+    auto it = pattern_database.find(pattern_key);
+    if (it != pattern_database.end()) {
+        return it->second;
+    }
+    // Return empty metrics if pattern not found
+    return PatternMetrics();
+}
+
 void LearningEngine::identify_winning_patterns() {
     std::cout << "\n🏆 WINNING PATTERNS:" << std::endl;
     

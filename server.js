@@ -752,19 +752,9 @@ const server = http.createServer(async (req, res) => {
                         }
                     }
                     
-                    // Parse PERFORMANCE SUMMARY: "  Trades: 10 (W:4 L:6)"
-                    const summaryTradesMatch = output.match(/Trades: (\d+) \(W:(\d+) L:(\d+)\)/);
-                    if (summaryTradesMatch) {
-                        learningData.total_trades = parseInt(summaryTradesMatch[1]);
-                        learningData.winning_trades = parseInt(summaryTradesMatch[2]);
-                        learningData.losing_trades = parseInt(summaryTradesMatch[3]);
-                    }
-                    
-                    // Parse Win Rate: "  Win Rate: 40.0%"
-                    const wrMatch = output.match(/Win Rate: ([\d.]+)%/);
-                    if (wrMatch) {
-                        learningData.win_rate = parseFloat(wrMatch[1]);
-                    }
+                    // NOTE: Do NOT override trade counts/win rate from bot output
+                    // The trade_log.json file loaded at startup is the source of truth
+                    // Bot's in-memory stats only reflect current session, not historical data
                     
                     // Parse summary P&L with fees: "  P&L: $-2.50 (fees: $4.00)"
                     const summaryPnlMatch = output.match(/P&L: \$([\-\d.]+) \(fees:/);

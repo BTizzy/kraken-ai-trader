@@ -53,7 +53,11 @@
     "cycle_trades": 10,
     "min_trades_to_blacklist": 3,
     "min_pair_winrate": 0.35,
-    "min_pair_trades_for_stats": 5
+    "min_pair_trades_for_stats": 5,
+    "learning_mode": true,
+    "edge_filter_min_trades": 10,
+    "edge_filter_min_winrate": 0.35,
+    "_comment": "learning_mode=true bypasses edge filter to gather pattern data"
   },
   
   "backup": {

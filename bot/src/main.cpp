@@ -920,10 +920,24 @@ int main(int argc, char* argv[]) {
             double edge_min_wr = find_double("edge_filter_min_winrate");
             if (edge_min_wr > 0) config.edge_filter_min_winrate = edge_min_wr;
             
+            // Load risk management parameters
+            double tp = find_double("take_profit_pct");
+            if (tp > 0) config.take_profit_pct = tp;
+            double sl = find_double("stop_loss_pct");
+            if (sl > 0) config.stop_loss_pct = sl;
+            double trail_start = find_double("trailing_start_pct");
+            if (trail_start > 0) config.trailing_start_pct = trail_start;
+            double trail_stop = find_double("trailing_stop_pct");
+            if (trail_stop > 0) config.trailing_stop_pct = trail_stop;
+            
             std::cout << "Loaded config from " << config_path << std::endl;
             std::cout << "  learning_mode: " << (config.learning_mode ? "true" : "false") << std::endl;
             std::cout << "  edge_filter_min_trades: " << config.edge_filter_min_trades << std::endl;
             std::cout << "  edge_filter_min_winrate: " << config.edge_filter_min_winrate << std::endl;
+            std::cout << "  take_profit_pct: " << config.take_profit_pct << "%" << std::endl;
+            std::cout << "  stop_loss_pct: " << config.stop_loss_pct << "%" << std::endl;
+            std::cout << "  trailing_start_pct: " << config.trailing_start_pct << "%" << std::endl;
+            std::cout << "  trailing_stop_pct: " << config.trailing_stop_pct << "%" << std::endl;
         } catch (const std::exception& e) {
             std::cerr << "Error parsing config: " << e.what() << std::endl;
         }

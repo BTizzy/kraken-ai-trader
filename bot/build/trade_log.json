@@ -2,7 +2,7 @@
   "version": "2.0",
   "migrated_at": 1768316050974,
   "migration_notes": "Added timestamps, direction, normalized fields",
-  "total_trades": 1346,
+  "total_trades": 1348,
   "trades": [
     {
       "entry": 0.396786,
@@ -31486,6 +31486,32 @@
       "hold_time": 182,
       "position_size": 100,
       "timeframe_seconds": 182
+    },
+    {
+      "pair": "AAVEUSD",
+      "direction": "SHORT",
+      "entry_price": 157.03,
+      "exit_price": 155.99,
+      "pnl": 0.2,
+      "exit_reason": "timeout",
+      "timestamp": 1768926677219,
+      "entry_time": 1768926314283,
+      "hold_time": 363,
+      "position_size": 100,
+      "timeframe_seconds": 363
+    },
+    {
+      "pair": "ASTERUSD",
+      "direction": "SHORT",
+      "entry_price": 0.6,
+      "exit_price": 0.6,
+      "pnl": -0.1,
+      "exit_reason": "timeout",
+      "timestamp": 1768926871547,
+      "entry_time": 1768926688194,
+      "hold_time": 183,
+      "position_size": 100,
+      "timeframe_seconds": 183
     }
   ],
   "enriched_at": 1768334077291,

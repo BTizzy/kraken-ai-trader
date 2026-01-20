@@ -1,7 +1,7 @@
 # Kraken AI Trader - Improvements Roadmap V5
 
 **Created:** January 20, 2026  
-**Version:** 5.0.0  
+**Version:** 5.0.1  
 **Status:** Active Development
 
 ---
@@ -20,6 +20,74 @@ This session focused on **critical infrastructure fixes** that were preventing p
 | Trailing Stop Tuning | Lowered to 0.5% start, 0.25% trail for faster profits | ✅ Done |
 | Backtest Script | Compare strategies instantly on historical data | ✅ Done |
 | Fee-Aware Entry | Already implemented - skips trades where profit < fees | ✅ Verified |
+| **BUG: Fee Calculation** | **Was using 0.4% instead of 0.8% round-trip** | ✅ **Fixed** |
+| **BUG: avg_loss Sign** | **Tracked negative values, broke Kelly** | ✅ **Fixed** |
+| **Historical Data Correction** | **Applied missing 0.4% fee to all 1355 trades** | ✅ **Done** |
+
+---
+
+## 🐛 CRITICAL BUG FIXES (Jan 20, 2026 - Session 2)
+
+### Bug #1: Fee Calculation Used Wrong Rate
+
+**Problem:** P&L calculation used 0.4% total fees, but Kraken charges 0.4% PER TRADE (0.8% round-trip).
+
+**Impact:** All P&L was overstated by 0.4% per trade. We thought we were at -$487, but actual was **-$1,867.26**.
+
+**Fix:** `bot/src/main.cpp` line 791
+```cpp
+// BEFORE (WRONG)
+double fees = position_usd * 0.004;  // 0.4% total
+
+// AFTER (CORRECT)  
+double fees = position_usd * 0.008;  // 0.8% round-trip (0.4% entry + 0.4% exit)
+```
+
+### Bug #2: Fee-Aware Entry Used Wrong Rate
+
+**Problem:** The fee filter checked against 0.4% when it should require 0.8%+ profit to overcome fees.
+
+**Fix:** `bot/src/main.cpp` line 564
+```cpp
+// BEFORE (WRONG)
+const double FEE_RATE = 0.004;  // 0.4%
+
+// AFTER (CORRECT)
+const double FEE_RATE = 0.008;  // 0.8% round-trip
+```
+
+### Bug #3: avg_loss Tracked Negative Values
+
+**Problem:** `avg_loss` was tracking negative P&L values directly. Since losses are negative, this resulted in negative `avg_loss`, which broke Kelly calculations.
+
+**Fix:** `bot/src/main.cpp` lines 89-90
+```cpp
+// BEFORE (WRONG)
+avg_loss = ((avg_loss * losses) + pnl) / (losses + 1);
+
+// AFTER (CORRECT)
+double loss_magnitude = std::abs(pnl);  // Track magnitude, not negative value
+avg_loss = ((avg_loss * losses) + loss_magnitude) / (losses + 1);
+```
+
+### Bug #4: Kelly Calculation Broken
+
+**Problem:** With negative `avg_loss`, Kelly formula `(win_rate / avg_loss)` produced wrong results.
+
+**Fix:** Automatically fixed by Bug #3 fix.
+
+### Historical Data Correction
+
+Created `scripts/fix_fee_calculation.js` to correct all historical trades:
+
+| Metric | Before Fix | After Fix |
+|--------|-----------|-----------|
+| Total P&L | -$487.00 | **-$1,867.26** |
+| Win Rate | 11% | **8.12%** |
+| Profit Factor | 0.187 | **0.035** |
+| Trades | 1355 | 1355 |
+
+**Rationale for keeping data:** Even though trades had wrong fee calculations, the patterns themselves are real. The bot now learns from 1355 trades "what NOT to do" - these losing patterns help it avoid similar setups.
 
 ---
 

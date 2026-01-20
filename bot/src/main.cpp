@@ -337,7 +337,14 @@ public:
         api = std::make_unique<KrakenAPI>(config.paper_trading);
         learning_engine = std::make_unique<LearningEngine>();
         metrics.start_time = std::chrono::system_clock::now();
-        learning_engine->load_from_file(config.trade_log_file);
+        
+        // SQLite is the source of truth - trades loaded automatically in LearningEngine constructor
+        // Only load from JSON if SQLite is empty (for migration)
+        if (learning_engine->get_trade_count() == 0) {
+            std::cout << "📂 SQLite empty, loading from JSON for migration..." << std::endl;
+            learning_engine->load_from_file(config.trade_log_file);
+        }
+        
         std::cout << "\n" << std::string(60, '=') << std::endl;
         std::cout << "KRAKEN AI TRADING BOT v2.0" << std::endl;
         std::cout << std::string(60, '=') << std::endl;
@@ -602,9 +609,11 @@ private:
             calculate_indicators(result);
 
             // MARKET REGIME DETECTION
-            // Determine current market conditions to adjust strategy
-            const double HIGH_VOL_THRESHOLD = 8.0;   // >8% = volatile
-            const double LOW_VOL_THRESHOLD = 2.0;    // <2% = quiet
+            // Based on historical data analysis:
+            // - Avg volatility: 2.82%, only 7.7% of trades > 8%
+            // - VOLATILE (>4%) has 70% WR, RANGING loses money
+            const double HIGH_VOL_THRESHOLD = 4.0;   // >4% = volatile (was 8%, too restrictive)
+            const double LOW_VOL_THRESHOLD = 1.5;    // <1.5% = quiet
             const double TREND_THRESHOLD = 0.10;     // >10% trend score = trending
             
             if (result.volatility_pct > HIGH_VOL_THRESHOLD) {
@@ -695,7 +704,8 @@ private:
                         break;
                 }
                 if (!regime_allowed) {
-                    // std::cout << "  [REGIME FILTER] " << pair << " blocked (regime: " << regime_to_string(result.regime) << ")" << std::endl;
+                    std::cout << "  [REGIME BLOCKED] " << pair << " (regime: " << static_cast<int>(result.regime) 
+                              << ", vol: " << result.volatility_pct << "%)" << std::endl;
                     return result;
                 }
             }

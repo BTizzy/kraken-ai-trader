@@ -9,6 +9,7 @@
 #include <deque>
 #include <cmath>
 #include <algorithm>
+#include <sqlite3.h>
 
 using json = nlohmann::json;
 using namespace std::chrono;
@@ -26,6 +27,7 @@ using namespace std::chrono;
  * - Risk-adjusted performance metrics (Sharpe, Sortino, Calmar)
  * - Outlier detection and handling
  * - Bagging/ensemble methods for robustness
+ * - SQLite persistence (single source of truth)
  */
 
 struct TradeRecord {
@@ -244,4 +246,14 @@ private:
     const double CONFIDENCE_THRESHOLD = 0.6;  // 60% confidence needed
     const double MIN_WIN_RATE_FOR_TRADE = 0.45;  // Must be > 45% to trade
     const double OUTLIER_THRESHOLD = 2.5;  // 2.5 std devs
+    
+    // SQLite database (single source of truth)
+    sqlite3* db_ = nullptr;
+    std::string db_path_;
+    
+    // SQLite helpers
+    void init_database(const std::string& db_path);
+    void save_trade_to_db(const TradeRecord& trade);
+    void load_trades_from_db();
+    int get_db_trade_count() const;
 };

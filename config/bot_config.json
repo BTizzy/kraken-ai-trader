@@ -61,6 +61,22 @@
     "_comment": "learning_mode=true bypasses edge filter to gather pattern data"
   },
   
+  "regime_filter": {
+    "enabled": true,
+    "allowed_regimes": ["VOLATILE"],
+    "blocked_regimes": ["RANGING", "QUIET"],
+    "_comment": "Data shows VOLATILE regime has 70% WR, RANGING loses money"
+  },
+  
+  "blacklisted_pairs": [
+    "BONKUSD",
+    "ADAUSD", 
+    "ABUSD",
+    "BOBUSD",
+    "ALGOUSD"
+  ],
+  "_blacklist_comment": "Pairs with 10+ trades and <10% win rate from historical data",
+  
   "backup": {
     "enabled": true,
     "interval_trades": 50,

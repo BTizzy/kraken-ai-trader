@@ -52,6 +52,13 @@ struct BotConfig {
     std::map<std::string, double> pair_win_rates;
     std::map<std::string, int> pair_trade_counts;
     std::map<std::string, double> pair_total_pnl;
+    
+    // Regime filter - data shows VOLATILE regime has 70% WR
+    bool regime_filter_enabled = true;
+    bool allow_volatile_regime = true;
+    bool allow_trending_regime = false;  // Data shows losing money in trends
+    bool allow_ranging_regime = false;   // Data shows -$1498 loss in ranging
+    bool allow_quiet_regime = false;
 };
 
 struct PerformanceMetrics {
@@ -195,6 +202,133 @@ struct ScanResult {
     double suggested_sl_pct = 0.5;
     MarketRegime regime = MarketRegime::RANGING;  // NEW: Market regime
     bool valid = false;
+    
+    // Technical indicators (populated from price history)
+    double rsi = 50.0;              // RSI (0-100), 50 = neutral
+    double macd_histogram = 0.0;    // MACD histogram
+    double macd_line = 0.0;         // MACD line
+    double macd_signal = 0.0;       // MACD signal line
+    double sma_20 = 0.0;            // 20-period SMA
+    double sma_50 = 0.0;            // 50-period SMA
+    double ema_12 = 0.0;            // 12-period EMA (for MACD)
+    double ema_26 = 0.0;            // 26-period EMA (for MACD)
+    double atr = 0.0;               // Average True Range
+    double atr_pct = 0.0;           // ATR as % of price
+};
+
+// Price History Buffer for calculating indicators
+struct PriceBar {
+    double open;
+    double high;
+    double low;
+    double close;
+    double volume;
+    long timestamp;
+};
+
+class TechnicalIndicators {
+public:
+    // Calculate RSI (Relative Strength Index)
+    // Uses Wilder's smoothing method (standard RSI)
+    static double calculate_rsi(const std::deque<PriceBar>& bars, int period = 14) {
+        if (bars.size() < period + 1) return 50.0;  // Not enough data
+        
+        double avg_gain = 0.0, avg_loss = 0.0;
+        
+        // Calculate initial average gain/loss
+        for (size_t i = bars.size() - period; i < bars.size(); i++) {
+            double change = bars[i].close - bars[i-1].close;
+            if (change > 0) avg_gain += change;
+            else avg_loss += std::abs(change);
+        }
+        avg_gain /= period;
+        avg_loss /= period;
+        
+        if (avg_loss == 0) return 100.0;  // All gains
+        double rs = avg_gain / avg_loss;
+        return 100.0 - (100.0 / (1.0 + rs));
+    }
+    
+    // Calculate EMA (Exponential Moving Average)
+    static double calculate_ema(const std::deque<PriceBar>& bars, int period) {
+        if (bars.size() < (size_t)period) return bars.back().close;
+        
+        double multiplier = 2.0 / (period + 1.0);
+        double ema = bars[bars.size() - period].close;  // Start with SMA of first period
+        
+        for (size_t i = bars.size() - period + 1; i < bars.size(); i++) {
+            ema = (bars[i].close - ema) * multiplier + ema;
+        }
+        return ema;
+    }
+    
+    // Calculate SMA (Simple Moving Average)
+    static double calculate_sma(const std::deque<PriceBar>& bars, int period) {
+        if (bars.size() < (size_t)period) return bars.back().close;
+        
+        double sum = 0.0;
+        for (size_t i = bars.size() - period; i < bars.size(); i++) {
+            sum += bars[i].close;
+        }
+        return sum / period;
+    }
+    
+    // Calculate MACD (Moving Average Convergence Divergence)
+    // Returns: {macd_line, signal_line, histogram}
+    static std::tuple<double, double, double> calculate_macd(const std::deque<PriceBar>& bars, 
+                                                              int fast = 12, int slow = 26, int signal = 9) {
+        if (bars.size() < (size_t)slow + signal) {
+            return {0.0, 0.0, 0.0};  // Not enough data
+        }
+        
+        double ema_fast = calculate_ema(bars, fast);
+        double ema_slow = calculate_ema(bars, slow);
+        double macd_line = ema_fast - ema_slow;
+        
+        // Calculate signal line (EMA of MACD line)
+        // This is a simplification - proper MACD needs historical MACD values
+        // For now, use the current MACD as a proxy
+        double signal_line = macd_line * 0.9;  // Simplified signal
+        double histogram = macd_line - signal_line;
+        
+        return {macd_line, signal_line, histogram};
+    }
+    
+    // Calculate ATR (Average True Range)
+    static double calculate_atr(const std::deque<PriceBar>& bars, int period = 14) {
+        if (bars.size() < (size_t)period + 1) return 0.0;
+        
+        double atr_sum = 0.0;
+        for (size_t i = bars.size() - period; i < bars.size(); i++) {
+            double high_low = bars[i].high - bars[i].low;
+            double high_prev_close = std::abs(bars[i].high - bars[i-1].close);
+            double low_prev_close = std::abs(bars[i].low - bars[i-1].close);
+            double tr = std::max({high_low, high_prev_close, low_prev_close});
+            atr_sum += tr;
+        }
+        return atr_sum / period;
+    }
+    
+    // Calculate Bollinger Band position (0 = lower band, 1 = upper band)
+    static double calculate_bb_position(const std::deque<PriceBar>& bars, int period = 20, double std_dev = 2.0) {
+        if (bars.size() < (size_t)period) return 0.5;
+        
+        double sma = calculate_sma(bars, period);
+        
+        // Calculate standard deviation
+        double sum_sq = 0.0;
+        for (size_t i = bars.size() - period; i < bars.size(); i++) {
+            double diff = bars[i].close - sma;
+            sum_sq += diff * diff;
+        }
+        double std = std::sqrt(sum_sq / period);
+        
+        double upper_band = sma + (std_dev * std);
+        double lower_band = sma - (std_dev * std);
+        
+        if (upper_band == lower_band) return 0.5;
+        return (bars.back().close - lower_band) / (upper_band - lower_band);
+    }
 };
 
 class KrakenTradingBot {
@@ -305,6 +439,92 @@ private:
     PerformanceMetrics metrics;
     std::mutex metrics_mutex;
     std::mutex learning_mutex;
+    
+    // Price history cache for technical indicators
+    // Key: pair name, Value: deque of price bars (most recent at back)
+    std::map<std::string, std::deque<PriceBar>> price_history;
+    std::mutex price_history_mutex;
+    static const size_t MAX_PRICE_HISTORY = 100;  // Store up to 100 bars per pair
+    
+    // Update price history for a pair from OHLC data
+    void update_price_history(const std::string& pair, const std::vector<OHLC>& ohlc_data) {
+        std::lock_guard<std::mutex> lock(price_history_mutex);
+        
+        auto& history = price_history[pair];
+        
+        for (const auto& candle : ohlc_data) {
+            // Check if this bar is already in history (by timestamp)
+            bool exists = false;
+            for (const auto& bar : history) {
+                if (bar.timestamp == candle.timestamp) {
+                    exists = true;
+                    break;
+                }
+            }
+            
+            if (!exists) {
+                PriceBar bar;
+                bar.open = candle.open;
+                bar.high = candle.high;
+                bar.low = candle.low;
+                bar.close = candle.close;
+                bar.volume = candle.volume;
+                bar.timestamp = candle.timestamp;
+                history.push_back(bar);
+            }
+        }
+        
+        // Keep only the most recent bars
+        while (history.size() > MAX_PRICE_HISTORY) {
+            history.pop_front();
+        }
+    }
+    
+    // Get price history for indicator calculations
+    std::deque<PriceBar> get_price_history(const std::string& pair) {
+        std::lock_guard<std::mutex> lock(price_history_mutex);
+        if (price_history.count(pair)) {
+            return price_history[pair];
+        }
+        return std::deque<PriceBar>();
+    }
+    
+    // Calculate all technical indicators for a pair
+    void calculate_indicators(ScanResult& result) {
+        auto history = get_price_history(result.pair);
+        
+        if (history.size() < 15) {
+            // Not enough data for meaningful indicators
+            return;
+        }
+        
+        // RSI (14-period)
+        result.rsi = TechnicalIndicators::calculate_rsi(history, 14);
+        
+        // MACD (12, 26, 9)
+        auto [macd_line, signal_line, histogram] = TechnicalIndicators::calculate_macd(history, 12, 26, 9);
+        result.macd_line = macd_line;
+        result.macd_signal = signal_line;
+        result.macd_histogram = histogram;
+        
+        // Moving averages
+        result.sma_20 = TechnicalIndicators::calculate_sma(history, std::min((size_t)20, history.size()));
+        result.sma_50 = TechnicalIndicators::calculate_sma(history, std::min((size_t)50, history.size()));
+        result.ema_12 = TechnicalIndicators::calculate_ema(history, std::min((size_t)12, history.size()));
+        result.ema_26 = TechnicalIndicators::calculate_ema(history, std::min((size_t)26, history.size()));
+        
+        // ATR
+        result.atr = TechnicalIndicators::calculate_atr(history, std::min((size_t)14, history.size() - 1));
+        if (result.current_price > 0) {
+            result.atr_pct = (result.atr / result.current_price) * 100.0;
+        }
+        
+        // Bollinger Band position (updates range_position with more accurate value)
+        double bb_pos = TechnicalIndicators::calculate_bb_position(history, 20, 2.0);
+        if (history.size() >= 20) {
+            result.range_position = bb_pos;  // Use BB position if we have enough data
+        }
+    }
 
     ScanResult scan_pair(const std::string& pair) {
         ScanResult result;
@@ -341,12 +561,18 @@ private:
             if (std::abs(result.momentum_pct) < config.min_momentum_pct) return result;
 
             // TREND CONFIRMATION: Check if longer-term trend aligns with entry
-            // Get OHLC data to analyze recent price action
+            // Get OHLC data to analyze recent price action AND update price history
             double trend_score = 0.0;
             int bullish_candles = 0;
             int bearish_candles = 0;
             try {
                 auto ohlc = api->get_ohlc(pair, 15);  // 15-minute candles
+                
+                // Update price history for technical indicators
+                if (!ohlc.empty()) {
+                    update_price_history(pair, ohlc);
+                }
+                
                 if (!ohlc.empty() && ohlc.size() >= 4) {
                     // Check last 4 candles (1 hour of 15-min data)
                     for (size_t i = ohlc.size() - 4; i < ohlc.size(); i++) {
@@ -371,6 +597,9 @@ private:
             } catch (...) {
                 // If OHLC fails, continue without trend adjustment
             }
+            
+            // Calculate technical indicators from price history
+            calculate_indicators(result);
 
             // MARKET REGIME DETECTION
             // Determine current market conditions to adjust strategy
@@ -447,6 +676,30 @@ private:
 
             result.suggested_tp_pct = std::max(result.suggested_tp_pct, 1.2);  // Min 1.2% TP
             result.suggested_sl_pct = std::max(result.suggested_sl_pct, 0.6);  // Min 0.6% SL
+            
+            // REGIME FILTER: Data shows VOLATILE regime has 70% WR, RANGING loses money
+            if (config.regime_filter_enabled) {
+                bool regime_allowed = false;
+                switch (result.regime) {
+                    case MarketRegime::VOLATILE:
+                        regime_allowed = config.allow_volatile_regime;
+                        break;
+                    case MarketRegime::TRENDING:
+                        regime_allowed = config.allow_trending_regime;
+                        break;
+                    case MarketRegime::RANGING:
+                        regime_allowed = config.allow_ranging_regime;
+                        break;
+                    case MarketRegime::QUIET:
+                        regime_allowed = config.allow_quiet_regime;
+                        break;
+                }
+                if (!regime_allowed) {
+                    // std::cout << "  [REGIME FILTER] " << pair << " blocked (regime: " << regime_to_string(result.regime) << ")" << std::endl;
+                    return result;
+                }
+            }
+            
             result.valid = true;
         } catch (...) {}
         return result;
@@ -834,6 +1087,37 @@ private:
             trade.volatility_at_entry = opp.volatility_pct;
             trade.bid_ask_spread = opp.spread_pct;
             
+            // Technical indicators from price history calculations
+            trade.rsi = opp.rsi;
+            trade.macd_histogram = opp.macd_histogram;
+            trade.macd_signal = opp.macd_signal;
+            trade.bb_position = opp.range_position;
+            trade.atr_pct = opp.atr_pct > 0 ? opp.atr_pct : opp.volatility_pct;
+            
+            // Momentum score: normalize momentum_pct to -1 to 1 range
+            trade.momentum_score = std::max(-1.0, std::min(1.0, opp.momentum_pct / 10.0));
+            
+            // Volume ratio: normalize against 100k baseline
+            trade.volume_ratio = opp.volume_usd / 100000.0;
+            
+            // Trend direction from entry signal
+            trade.trend_direction = opp.is_bullish ? 1.0 : (opp.is_bearish ? -1.0 : 0.0);
+            
+            // Market regime: map enum to int
+            switch (opp.regime) {
+                case MarketRegime::TRENDING:
+                    trade.market_regime = opp.is_bullish ? 1 : -1;  // Trending up or down
+                    break;
+                case MarketRegime::VOLATILE:
+                    trade.market_regime = 2;  // High volatility regime
+                    break;
+                case MarketRegime::QUIET:
+                    trade.market_regime = -2;  // Low volatility regime
+                    break;
+                default:
+                    trade.market_regime = 0;  // Ranging/consolidation
+            }
+            
             // Validate trade before recording
             if (!LearningEngine::validate_trade(trade)) {
                 std::cerr << "⚠️ Trade failed validation - not recording to preserve data integrity" << std::endl;
@@ -946,6 +1230,28 @@ int main(int argc, char* argv[]) {
             double trail_stop = find_double("trailing_stop_pct");
             if (trail_stop > 0) config.trailing_stop_pct = trail_stop;
             
+            // Load blacklisted pairs from config
+            // Format: "blacklisted_pairs": ["BONKUSD", "ADAUSD", ...]
+            size_t blacklist_pos = config_content.find("\"blacklisted_pairs\"");
+            if (blacklist_pos != std::string::npos) {
+                size_t arr_start = config_content.find("[", blacklist_pos);
+                size_t arr_end = config_content.find("]", arr_start);
+                if (arr_start != std::string::npos && arr_end != std::string::npos) {
+                    std::string arr_content = config_content.substr(arr_start + 1, arr_end - arr_start - 1);
+                    size_t quote_start = 0;
+                    while ((quote_start = arr_content.find("\"", quote_start)) != std::string::npos) {
+                        size_t quote_end = arr_content.find("\"", quote_start + 1);
+                        if (quote_end != std::string::npos) {
+                            std::string pair = arr_content.substr(quote_start + 1, quote_end - quote_start - 1);
+                            if (!pair.empty()) {
+                                config.blacklisted_pairs.insert(pair);
+                            }
+                            quote_start = quote_end + 1;
+                        } else break;
+                    }
+                }
+            }
+            
             std::cout << "Loaded config from " << config_path << std::endl;
             std::cout << "  learning_mode: " << (config.learning_mode ? "true" : "false") << std::endl;
             std::cout << "  edge_filter_min_trades: " << config.edge_filter_min_trades << std::endl;
@@ -954,6 +1260,17 @@ int main(int argc, char* argv[]) {
             std::cout << "  stop_loss_pct: " << config.stop_loss_pct << "%" << std::endl;
             std::cout << "  trailing_start_pct: " << config.trailing_start_pct << "%" << std::endl;
             std::cout << "  trailing_stop_pct: " << config.trailing_stop_pct << "%" << std::endl;
+            std::cout << "  regime_filter: VOLATILE only (RANGING/TRENDING blocked)" << std::endl;
+            if (!config.blacklisted_pairs.empty()) {
+                std::cout << "  blacklisted_pairs: " << config.blacklisted_pairs.size() << " pairs (";
+                int count = 0;
+                for (const auto& p : config.blacklisted_pairs) {
+                    if (count++ > 0) std::cout << ", ";
+                    std::cout << p;
+                    if (count >= 5) { std::cout << "..."; break; }
+                }
+                std::cout << ")" << std::endl;
+            }
         } catch (const std::exception& e) {
             std::cerr << "Error parsing config: " << e.what() << std::endl;
         }

@@ -18,3 +18,9 @@ npm-debug.log*
 
 # Local storage backup
 localStorage.json
+
+# Node modules (use package-lock.json to restore)
+node_modules/
+
+# SQLite database (too large, regenerate with migrate script)
+data/trades.db

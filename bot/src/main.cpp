@@ -338,12 +338,9 @@ public:
         learning_engine = std::make_unique<LearningEngine>();
         metrics.start_time = std::chrono::system_clock::now();
         
-        // SQLite is the source of truth - trades loaded automatically in LearningEngine constructor
-        // Only load from JSON if SQLite is empty (for migration)
-        if (learning_engine->get_trade_count() == 0) {
-            std::cout << "📂 SQLite empty, loading from JSON for migration..." << std::endl;
-            learning_engine->load_from_file(config.trade_log_file);
-        }
+        // SQLite is the ONLY source of truth
+        // Trades loaded automatically in LearningEngine constructor
+        // No JSON fallback - SQLite must have data or start fresh
         
         std::cout << "\n" << std::string(60, '=') << std::endl;
         std::cout << "KRAKEN AI TRADING BOT v2.0" << std::endl;
@@ -359,7 +356,8 @@ public:
         metrics.print_summary();
         if (learning_engine) {
             learning_engine->print_summary();
-            learning_engine->save_to_file(config.trade_log_file);
+            // SQLite saves happen automatically in record_trade()
+            // No need for JSON save on exit
         }
     }
 
@@ -1134,10 +1132,10 @@ private:
             } else {
                 learning_engine->record_trade(trade);
                 
-                // Periodic backup every 50 trades
+                // SQLite saves automatically in record_trade()
+                // Log milestone trades
                 if (learning_engine->get_trade_count() % 50 == 0) {
-                    std::cout << "📦 Creating periodic backup at trade #" << learning_engine->get_trade_count() << std::endl;
-                    learning_engine->backup_trade_log(config.trade_log_file);
+                    std::cout << "� Milestone: " << learning_engine->get_trade_count() << " trades in database" << std::endl;
                 }
             }
             

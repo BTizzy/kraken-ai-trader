@@ -6,11 +6,247 @@
 #include <cmath>
 #include <set>
 
-LearningEngine::LearningEngine() {}
+LearningEngine::LearningEngine() {
+    // Initialize SQLite database (project root data directory)
+    // From bot/build/, go up two levels to project root, then into data/
+    std::string db_path = "../../data/trades.db";
+    init_database(db_path);
+}
 
-LearningEngine::~LearningEngine() {}
+LearningEngine::~LearningEngine() {
+    if (db_) {
+        sqlite3_close(db_);
+        db_ = nullptr;
+    }
+}
+
+void LearningEngine::init_database(const std::string& db_path) {
+    db_path_ = db_path;
+    
+    int rc = sqlite3_open(db_path.c_str(), &db_);
+    if (rc != SQLITE_OK) {
+        std::cerr << "❌ Failed to open SQLite database: " << sqlite3_errmsg(db_) << std::endl;
+        db_ = nullptr;
+        return;
+    }
+    
+    // Create trades table if not exists
+    const char* create_table_sql = R"(
+        CREATE TABLE IF NOT EXISTS trades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pair TEXT NOT NULL,
+            direction TEXT DEFAULT 'LONG',
+            entry_price REAL,
+            exit_price REAL,
+            position_size REAL,
+            leverage INTEGER DEFAULT 1,
+            pnl REAL,
+            gross_pnl REAL,
+            fees_paid REAL,
+            exit_reason TEXT,
+            timestamp INTEGER,
+            entry_time INTEGER,
+            hold_time INTEGER,
+            timeframe_seconds INTEGER,
+            volatility_pct REAL,
+            bid_ask_spread REAL,
+            rsi REAL,
+            macd_histogram REAL,
+            macd_signal REAL,
+            bb_position REAL,
+            volume_ratio REAL,
+            momentum_score REAL,
+            atr_pct REAL,
+            market_regime INTEGER,
+            trend_direction REAL,
+            max_profit REAL,
+            max_loss REAL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(pair, timestamp)
+        );
+        CREATE INDEX IF NOT EXISTS idx_trades_timestamp ON trades(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_trades_pair ON trades(pair);
+        CREATE INDEX IF NOT EXISTS idx_trades_regime ON trades(market_regime);
+    )";
+    
+    char* err_msg = nullptr;
+    rc = sqlite3_exec(db_, create_table_sql, nullptr, nullptr, &err_msg);
+    if (rc != SQLITE_OK) {
+        std::cerr << "❌ Failed to create trades table: " << err_msg << std::endl;
+        sqlite3_free(err_msg);
+    } else {
+        std::cout << "✅ SQLite database initialized: " << db_path << std::endl;
+    }
+    
+    // Load existing trades from database
+    load_trades_from_db();
+}
+
+void LearningEngine::save_trade_to_db(const TradeRecord& trade) {
+    if (!db_) {
+        std::cerr << "⚠️ Database not initialized, cannot save trade" << std::endl;
+        return;
+    }
+    
+    const char* insert_sql = R"(
+        INSERT OR IGNORE INTO trades (
+            pair, direction, entry_price, exit_price, position_size, leverage,
+            pnl, gross_pnl, fees_paid, exit_reason, timestamp, entry_time, hold_time,
+            timeframe_seconds, volatility_pct, bid_ask_spread, rsi, macd_histogram,
+            macd_signal, bb_position, volume_ratio, momentum_score, atr_pct,
+            market_regime, trend_direction, max_profit, max_loss
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    )";
+    
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(db_, insert_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "❌ Failed to prepare insert statement: " << sqlite3_errmsg(db_) << std::endl;
+        return;
+    }
+    
+    auto timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        trade.timestamp.time_since_epoch()).count();
+    
+    sqlite3_bind_text(stmt, 1, trade.pair.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, trade.direction.empty() ? "LONG" : trade.direction.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_double(stmt, 3, trade.entry_price);
+    sqlite3_bind_double(stmt, 4, trade.exit_price);
+    sqlite3_bind_double(stmt, 5, trade.position_size);
+    sqlite3_bind_int(stmt, 6, static_cast<int>(trade.leverage));
+    sqlite3_bind_double(stmt, 7, trade.pnl);
+    sqlite3_bind_double(stmt, 8, trade.gross_pnl);
+    sqlite3_bind_double(stmt, 9, trade.fees_paid);
+    sqlite3_bind_text(stmt, 10, trade.exit_reason.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int64(stmt, 11, timestamp_ms);
+    sqlite3_bind_int64(stmt, 12, timestamp_ms);  // entry_time same as timestamp for now
+    sqlite3_bind_int(stmt, 13, trade.timeframe_seconds);
+    sqlite3_bind_int(stmt, 14, trade.timeframe_seconds);
+    sqlite3_bind_double(stmt, 15, trade.volatility_at_entry);
+    sqlite3_bind_double(stmt, 16, trade.bid_ask_spread);
+    sqlite3_bind_double(stmt, 17, trade.rsi);
+    sqlite3_bind_double(stmt, 18, trade.macd_histogram);
+    sqlite3_bind_double(stmt, 19, trade.macd_signal);
+    sqlite3_bind_double(stmt, 20, trade.bb_position);
+    sqlite3_bind_double(stmt, 21, trade.volume_ratio);
+    sqlite3_bind_double(stmt, 22, trade.momentum_score);
+    sqlite3_bind_double(stmt, 23, trade.atr_pct);
+    sqlite3_bind_int(stmt, 24, trade.market_regime);
+    sqlite3_bind_double(stmt, 25, trade.trend_direction);
+    sqlite3_bind_double(stmt, 26, trade.max_profit);
+    sqlite3_bind_double(stmt, 27, trade.max_loss);
+    
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        std::cerr << "❌ Failed to insert trade: " << sqlite3_errmsg(db_) << std::endl;
+    } else {
+        std::cout << "💾 Trade saved to SQLite: " << trade.pair << " " 
+                  << (trade.pnl > 0 ? "+" : "") << "$" << std::fixed << std::setprecision(2) << trade.pnl << std::endl;
+    }
+    
+    sqlite3_finalize(stmt);
+}
+
+void LearningEngine::load_trades_from_db() {
+    if (!db_) return;
+    
+    // Use explicit column names to avoid index issues
+    const char* select_sql = R"(
+        SELECT 
+            pair, direction, entry_price, exit_price, position_size, leverage,
+            pnl, gross_pnl, fees_paid, exit_reason, timestamp,
+            timeframe_seconds, volatility_pct, bid_ask_spread,
+            rsi, macd_histogram, macd_signal, bb_position, volume_ratio,
+            momentum_score, atr_pct, market_regime, trend_direction
+        FROM trades ORDER BY timestamp ASC
+    )";
+    sqlite3_stmt* stmt;
+    
+    int rc = sqlite3_prepare_v2(db_, select_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "❌ Failed to prepare select statement: " << sqlite3_errmsg(db_) << std::endl;
+        return;
+    }
+    
+    int count = 0;
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        TradeRecord trade;
+        
+        // Column 0: pair
+        const char* pair = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        trade.pair = pair ? pair : "";
+        
+        // Column 1: direction
+        const char* dir = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+        trade.direction = dir ? dir : "LONG";
+        
+        // Columns 2-5: price/position data
+        trade.entry_price = sqlite3_column_double(stmt, 2);
+        trade.exit_price = sqlite3_column_double(stmt, 3);
+        trade.position_size = sqlite3_column_double(stmt, 4);
+        trade.leverage = sqlite3_column_double(stmt, 5);
+        
+        // Columns 6-9: P&L and exit
+        trade.pnl = sqlite3_column_double(stmt, 6);
+        trade.gross_pnl = sqlite3_column_double(stmt, 7);
+        trade.fees_paid = sqlite3_column_double(stmt, 8);
+        
+        const char* reason = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
+        trade.exit_reason = reason ? reason : "unknown";
+        
+        // Column 10: timestamp
+        int64_t ts = sqlite3_column_int64(stmt, 10);
+        trade.timestamp = system_clock::time_point(milliseconds(ts));
+        
+        // Columns 11-13: timeframe, volatility, spread
+        trade.timeframe_seconds = sqlite3_column_int(stmt, 11);
+        trade.volatility_at_entry = sqlite3_column_double(stmt, 12);
+        trade.bid_ask_spread = sqlite3_column_double(stmt, 13);
+        
+        // Columns 14-22: technical indicators
+        trade.rsi = sqlite3_column_double(stmt, 14);
+        trade.macd_histogram = sqlite3_column_double(stmt, 15);
+        trade.macd_signal = sqlite3_column_double(stmt, 16);
+        trade.bb_position = sqlite3_column_double(stmt, 17);
+        trade.volume_ratio = sqlite3_column_double(stmt, 18);
+        trade.momentum_score = sqlite3_column_double(stmt, 19);
+        trade.atr_pct = sqlite3_column_double(stmt, 20);
+        trade.market_regime = sqlite3_column_int(stmt, 21);
+        trade.trend_direction = sqlite3_column_double(stmt, 22);
+        
+        // Add to in-memory structures (don't use record_trade to avoid re-saving)
+        trade_history.push_back(trade);
+        trades_by_pair[trade.pair].push_back(trade);
+        count++;
+    }
+    
+    sqlite3_finalize(stmt);
+    std::cout << "📊 Loaded " << count << " trades from SQLite database" << std::endl;
+}
+
+int LearningEngine::get_db_trade_count() const {
+    if (!db_) return 0;
+    
+    const char* count_sql = "SELECT COUNT(*) FROM trades";
+    sqlite3_stmt* stmt;
+    
+    int rc = sqlite3_prepare_v2(db_, count_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) return 0;
+    
+    int count = 0;
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        count = sqlite3_column_int(stmt, 0);
+    }
+    
+    sqlite3_finalize(stmt);
+    return count;
+}
 
 void LearningEngine::record_trade(const TradeRecord& trade) {
+    // Save to SQLite FIRST (single source of truth)
+    save_trade_to_db(trade);
+    
+    // Then update in-memory structures
     trade_history.push_back(trade);
     trades_by_pair[trade.pair].push_back(trade);
     
@@ -565,22 +801,50 @@ double LearningEngine::calculate_confidence_score(const PatternMetrics& metrics)
 
 void LearningEngine::save_to_file(const std::string& filepath) {
     json data;
-    data["version"] = "1.0";
+    data["version"] = "2.0";
     data["total_trades"] = trade_history.size();
     
     for (const auto& t : trade_history) {
         json trade_json;
+        // Core trade data
         trade_json["pair"] = t.pair;
         trade_json["direction"] = t.direction.empty() ? "LONG" : t.direction;
-        trade_json["entry"] = t.entry_price;
-        trade_json["exit"] = t.exit_price;
+        trade_json["entry_price"] = t.entry_price;
+        trade_json["exit_price"] = t.exit_price;
+        trade_json["position_size"] = t.position_size;
         trade_json["leverage"] = t.leverage;
-        trade_json["pnl"] = t.pnl;
-        trade_json["reason"] = t.exit_reason;
-        // Save timestamp as milliseconds since epoch
+        trade_json["timeframe_seconds"] = t.timeframe_seconds;
+        
+        // P&L data
+        trade_json["pnl_usd"] = t.pnl;
+        trade_json["gross_pnl"] = t.gross_pnl;
+        trade_json["fees_paid"] = t.fees_paid;
+        trade_json["exit_reason"] = t.exit_reason;
+        
+        // Timestamp
         auto timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             t.timestamp.time_since_epoch()).count();
         trade_json["timestamp"] = timestamp_ms;
+        
+        // Market conditions at entry
+        trade_json["volatility_at_entry"] = t.volatility_at_entry;
+        trade_json["bid_ask_spread"] = t.bid_ask_spread;
+        
+        // Technical indicators (for ML/learning)
+        trade_json["rsi"] = t.rsi;
+        trade_json["macd_histogram"] = t.macd_histogram;
+        trade_json["macd_signal"] = t.macd_signal;
+        trade_json["bb_position"] = t.bb_position;
+        trade_json["volume_ratio"] = t.volume_ratio;
+        trade_json["momentum_score"] = t.momentum_score;
+        trade_json["atr_pct"] = t.atr_pct;
+        trade_json["market_regime"] = t.market_regime;
+        trade_json["trend_direction"] = t.trend_direction;
+        
+        // Trade dynamics
+        trade_json["max_profit"] = t.max_profit;
+        trade_json["max_loss"] = t.max_loss;
+        
         data["trades"].push_back(trade_json);
     }
     

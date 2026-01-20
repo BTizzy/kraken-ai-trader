@@ -10,6 +10,7 @@ find_package(CURL REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(libwebsockets REQUIRED)
+find_package(SQLite3 REQUIRED)
 
 # Include directories
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -27,6 +28,7 @@ target_link_libraries(kraken_bot
     nlohmann_json::nlohmann_json
     OpenSSL::SSL OpenSSL::Crypto
     websockets
+    SQLite::SQLite3
     pthread
 )
 

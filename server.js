@@ -151,6 +151,50 @@ function loadTrainingData() {
     }
 }
 
+/**
+ * Persist a completed trade to trade_log.json
+ * This ensures new trades survive server restarts
+ */
+function persistTrade(trade) {
+    const tradeLogPath = path.join(__dirname, 'bot', 'build', 'trade_log.json');
+    try {
+        let data = { trades: [], version: '2.0.0' };
+        
+        // Load existing trades
+        if (fs.existsSync(tradeLogPath)) {
+            data = JSON.parse(fs.readFileSync(tradeLogPath, 'utf8'));
+            if (!Array.isArray(data.trades)) {
+                data.trades = [];
+            }
+        }
+        
+        // Add new trade with all required fields
+        const persistedTrade = {
+            pair: trade.pair,
+            direction: trade.direction || 'LONG',
+            entry_price: trade.entry_price || 0,
+            exit_price: trade.exit_price || 0,
+            pnl: trade.pnl || 0,
+            exit_reason: trade.exit_reason || 'unknown',
+            timestamp: trade.exit_time || Date.now(),
+            entry_time: trade.entry_time || Date.now(),
+            hold_time: trade.hold_time_seconds || 0,
+            position_size: trade.position_size || 100,
+            timeframe_seconds: trade.hold_time_seconds || 600
+        };
+        
+        data.trades.push(persistedTrade);
+        data.total_trades = data.trades.length;
+        
+        // Write back to file
+        fs.writeFileSync(tradeLogPath, JSON.stringify(data, null, 2));
+        console.log(`📁 Persisted trade: ${trade.pair} P&L: $${(trade.pnl || 0).toFixed(2)} (${data.trades.length} total trades)`);
+        
+    } catch (error) {
+        console.error('Error persisting trade:', error.message);
+    }
+}
+
 // Load training data on startup
 loadTrainingData();
 
@@ -608,13 +652,31 @@ const server = http.createServer(async (req, res) => {
 
         // Start bot endpoint
         if (apiPath === 'bot/start') {
-            if (botProcess && !botProcess.killed) {
-                res.writeHead(400, {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                });
-                res.end(JSON.stringify({ error: 'Bot is already running' }));
-                return;
+            // CRITICAL: Always kill any existing kraken_bot processes first
+            // This prevents data corruption from multiple bot instances
+            const { execSync } = require('child_process');
+            try {
+                // Check if any kraken_bot is already running
+                const runningBots = execSync('pgrep -f kraken_bot 2>/dev/null || echo ""', { encoding: 'utf8' }).trim();
+                if (runningBots) {
+                    console.log(`Found running kraken_bot processes: ${runningBots.split('\n').join(', ')}`);
+                    execSync('pkill -9 -f kraken_bot 2>/dev/null || true', { stdio: 'ignore' });
+                    console.log('Killed existing kraken_bot processes with SIGKILL');
+                    // Wait for processes to fully terminate
+                    execSync('sleep 1', { stdio: 'ignore' });
+                }
+            } catch (e) {
+                // Ignore errors - no existing processes to kill
+            }
+            
+            // Also reset the botProcess reference if it's stale
+            if (botProcess) {
+                try {
+                    botProcess.kill('SIGKILL');
+                } catch (e) {
+                    // Process already dead
+                }
+                botProcess = null;
             }
 
             try {
@@ -671,16 +733,21 @@ const server = http.createServer(async (req, res) => {
                         botStatus.message = 'Scanning for opportunities';
                     }
                     
-                    // Parse trade ENTRY: "--- ENTER XXUSD ---"
-                    const enterMatch = output.match(/--- ENTER (\w+) ---/);
+                    // Parse trade ENTRY: "--- ENTER SHORT XXUSD ---" or "--- ENTER LONG XXUSD ---"
+                    const enterMatch = output.match(/--- ENTER (LONG|SHORT) (\w+) ---/);
                     if (enterMatch) {
-                        const pair = enterMatch[1];
+                        const direction = enterMatch[1];
+                        const pair = enterMatch[2];
                         const entryTime = Date.now();
+                        // Store pair temporarily to associate with price line that follows
+                        learningData._pendingEntryPair = pair;
                         learningData.recent_trades.unshift({
                             pair: pair,
-                            direction: 'LONG',
+                            direction: direction,
                             entry_time: entryTime,
+                            entry_price: null, // Will be set from "Price: $X" line
                             exit_time: null,
+                            exit_price: null,
                             hold_time_seconds: null,
                             timestamp: entryTime, // Keep for UI compatibility
                             status: 'active',
@@ -691,18 +758,34 @@ const server = http.createServer(async (req, res) => {
                         if (learningData.recent_trades.length > 30) {
                             learningData.recent_trades.pop();
                         }
-                        botStatus.message = 'Entered ' + pair;
+                        botStatus.message = 'Entered ' + direction + ' ' + pair;
                     }
                     
-                    // Parse trade EXIT: "--- EXIT XXUSD [take_profit] ---"
-                    const exitMatch = output.match(/--- EXIT (\w+) \[(take_profit|stop_loss|trailing_stop|timeout)\] ---/);
+                    // Parse entry price line: "  Price: $0.358105"
+                    const entryPriceMatch = output.match(/^\s+Price: \$([\d.]+)/);
+                    if (entryPriceMatch && learningData._pendingEntryPair) {
+                        const price = parseFloat(entryPriceMatch[1]);
+                        const trade = learningData.recent_trades.find(t => t.pair === learningData._pendingEntryPair && t.status === 'active');
+                        if (trade && !isNaN(price)) {
+                            trade.entry_price = price;
+                        }
+                        learningData._pendingEntryPair = null; // Clear pending
+                    }
+                    
+                    // Parse trade EXIT: "--- EXIT SHORT XXUSD [max_hold_time] ---" or "--- EXIT LONG XXUSD [take_profit] ---"
+                    // Bot outputs: direction (LONG/SHORT), then pair, then reason in brackets
+                    const exitMatch = output.match(/--- EXIT (LONG|SHORT) (\w+) \[(take_profit|stop_loss|trailing_stop|timeout|max_hold_time)\] ---/);
                     if (exitMatch) {
-                        const pair = exitMatch[1];
-                        const reason = exitMatch[2];
+                        const direction = exitMatch[1];
+                        const pair = exitMatch[2];
+                        const reason = exitMatch[3];
                         
-                        if (reason === 'take_profit') learningData.tp_exits++;
-                        else if (reason === 'stop_loss') learningData.sl_exits++;
-                        else if (reason === 'trailing_stop') learningData.trailing_exits++;
+                        // Normalize reason names
+                        const normalizedReason = reason === 'max_hold_time' ? 'timeout' : reason;
+                        
+                        if (normalizedReason === 'take_profit') learningData.tp_exits++;
+                        else if (normalizedReason === 'stop_loss') learningData.sl_exits++;
+                        else if (normalizedReason === 'trailing_stop') learningData.trailing_exits++;
                         else learningData.timeout_exits++;
                         
                         const trade = learningData.recent_trades.find(t => t.pair === pair && t.status === 'active');
@@ -710,11 +793,45 @@ const server = http.createServer(async (req, res) => {
                             const exitTime = Date.now();
                             trade.exit_time = exitTime;
                             trade.hold_time_seconds = Math.round((exitTime - trade.entry_time) / 1000);
-                            trade.exit_reason = reason;
-                            trade.result = reason; // Set result field for UI compatibility
+                            trade.exit_reason = normalizedReason;
+                            trade.result = normalizedReason; // Set result field for UI compatibility
                             trade.status = 'exiting';
+                            trade.direction = direction; // Capture direction for persistence
                         }
-                        botStatus.message = 'Exited ' + pair + ' [' + reason + ']';
+                        // Store the pair being exited for matching subsequent price/pnl lines
+                        learningData._pendingExitPair = pair;
+                        botStatus.message = 'Exited ' + pair + ' [' + normalizedReason + ']';
+                    }
+                    
+                    // Parse entry/exit prices: "Entry: $0.358105 -> Exit: $0.358200"
+                    // Note: This line comes AFTER the EXIT header but BEFORE P&L line
+                    // Use _pendingExitPair to find the correct trade
+                    const priceMatch = output.match(/Entry: \$([\d.]+) -> Exit: \$([\d.]+)/);
+                    if (priceMatch) {
+                        const entryPrice = parseFloat(priceMatch[1]);
+                        const exitPrice = parseFloat(priceMatch[2]);
+                        
+                        // Find trade by pending exit pair, or fall back to status-based search
+                        let trade = null;
+                        if (learningData._pendingExitPair) {
+                            trade = learningData.recent_trades.find(t => t.pair === learningData._pendingExitPair);
+                        }
+                        if (!trade) {
+                            // Fallback: look for any trade in 'exiting' status
+                            trade = learningData.recent_trades.find(t => t.status === 'exiting');
+                        }
+                        if (!trade) {
+                            // Last resort: most recent active trade
+                            trade = learningData.recent_trades.find(t => t.status === 'active');
+                        }
+                        
+                        if (trade) {
+                            trade.entry_price = entryPrice;
+                            trade.exit_price = exitPrice;
+                            console.log(`[PRICE] Set prices on ${trade.pair}: entry=$${entryPrice}, exit=$${exitPrice}`);
+                        } else {
+                            console.log(`[PRICE] WARNING: No trade found for prices! pending=${learningData._pendingExitPair}`);
+                        }
                     }
                     
                     // Parse P&L line: "  P&L: $1.50 (+1.5%)" - individual trade P&L (not summary with fees)
@@ -723,9 +840,18 @@ const server = http.createServer(async (req, res) => {
                     if (tradePnlMatch && !output.includes('(fees:')) {
                         const tradePnl = parseFloat(tradePnlMatch[1]);
                         if (!isNaN(tradePnl) && Math.abs(tradePnl) < 10000) {
-                            // Only process P&L if there's a trade in 'exiting' state (prevents double-counting)
-                            const trade = learningData.recent_trades.find(t => t.status === 'exiting');
-                            if (trade) {
+                            // Find trade by pending exit pair, or fall back to status-based search
+                            let trade = null;
+                            if (learningData._pendingExitPair) {
+                                trade = learningData.recent_trades.find(t => t.pair === learningData._pendingExitPair);
+                            }
+                            if (!trade) {
+                                // Fallback: look for any trade in 'exiting' status
+                                trade = learningData.recent_trades.find(t => t.status === 'exiting');
+                            }
+                            
+                            if (trade && (trade.status === 'exiting' || trade.status === 'active')) {
+                                console.log(`[PNL] Trade ${trade.pair}: entry_price=${trade.entry_price}, exit_price=${trade.exit_price}, pnl=${tradePnl}`);
                                 trade.pnl = tradePnl;
                                 trade.status = 'completed';
                                 
@@ -748,6 +874,12 @@ const server = http.createServer(async (req, res) => {
                                     : 0;
                                 
                                 learningData.last_update = Date.now();
+                                
+                                // PERSIST TRADE: Save completed trade to trade_log.json
+                                persistTrade(trade);
+                                
+                                // Clear pending exit pair after successful persist
+                                learningData._pendingExitPair = null;
                             }
                         }
                     }
@@ -953,6 +1085,19 @@ const server = http.createServer(async (req, res) => {
 
 // Start server
 server.listen(PORT, () => {
+    // STARTUP: Kill any orphaned bot processes from previous server runs
+    const { execSync } = require('child_process');
+    try {
+        const runningBots = execSync('pgrep -f kraken_bot 2>/dev/null || echo ""', { encoding: 'utf8' }).trim();
+        if (runningBots) {
+            console.log(`⚠️  Found orphaned kraken_bot processes at startup: ${runningBots.split('\n').join(', ')}`);
+            execSync('pkill -9 -f kraken_bot 2>/dev/null || true', { stdio: 'ignore' });
+            console.log('✅ Killed orphaned bot processes');
+        }
+    } catch (e) {
+        // Ignore errors
+    }
+    
     console.log(`
 ╔════════════════════════════════════════════════════════════╗
 ║         Kraken Trading Server v1.0                     ║

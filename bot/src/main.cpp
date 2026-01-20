@@ -22,6 +22,9 @@ using namespace std::chrono_literals;
 struct BotConfig {
     bool paper_trading = true;
     bool enable_learning = true;
+    bool learning_mode = true;  // NEW: When true, bypasses edge filter to gather pattern data
+    int edge_filter_min_trades = 10;  // Minimum trades before applying edge filter
+    double edge_filter_min_winrate = 0.35;  // Minimum win rate for edge
     int learning_cycle_trades = 10;
     std::string trade_log_file = "trade_log.json";
     int max_concurrent_trades = 2;
@@ -491,8 +494,8 @@ private:
         double amount = position_usd / confirmed_entry_price;
 
         // PATTERN EDGE FILTER: Only trade if pattern has proven edge
-        // Generate pattern key and check if it exists with positive edge
-        {
+        // LEARNING_MODE: When enabled, bypasses edge filter to gather pattern data
+        if (!config.learning_mode) {
             std::lock_guard<std::mutex> lock(learning_mutex);
             // Use default hold time for pattern lookup (will be refined below)
             int default_hold = learned_config.timeframe_seconds > 0 ? learned_config.timeframe_seconds : config.default_hold_seconds;
@@ -501,8 +504,8 @@ private:
             // Use the existing public get_pattern_metrics method
             auto pattern_metrics = learning_engine->get_pattern_metrics(opp.pair, 1.0, timeframe_bucket);
             
-            if (pattern_metrics.total_trades >= 5) {  // Need at least 5 trades for pattern
-                if (!pattern_metrics.has_edge || pattern_metrics.win_rate < 0.40) {
+            if (pattern_metrics.total_trades >= config.edge_filter_min_trades) {
+                if (!pattern_metrics.has_edge || pattern_metrics.win_rate < config.edge_filter_min_winrate) {
                     std::cout << "⚠️ Skipping " << opp.pair << ": Pattern has no edge (WR: " 
                               << (pattern_metrics.win_rate * 100) << "%, PF: " 
                               << pattern_metrics.profit_factor << ")" << std::endl;
@@ -511,6 +514,8 @@ private:
                 std::cout << "✅ Pattern has edge! WR: " << (pattern_metrics.win_rate * 100) 
                           << "%, PF: " << pattern_metrics.profit_factor << std::endl;
             }
+        } else {
+            std::cout << "📊 LEARNING_MODE: Trading " << opp.pair << " to gather pattern data" << std::endl;
         }
 
         // LEARNING ENGINE: Override TP/SL with learned values if available
@@ -864,10 +869,74 @@ private:
 int main(int argc, char* argv[]) {
     BotConfig config;
 
+    // Load config from JSON file if it exists
+    // Bot runs from bot/build/, so path is ../../config/bot_config.json
+    std::string config_path = "../../config/bot_config.json";
+    std::ifstream config_file(config_path);
+    if (config_file.is_open()) {
+        try {
+            std::string config_content((std::istreambuf_iterator<char>(config_file)),
+                                       std::istreambuf_iterator<char>());
+            config_file.close();
+            
+            // Parse learning_mode from config
+            auto find_bool = [&](const std::string& key) -> bool {
+                size_t pos = config_content.find("\"" + key + "\"");
+                if (pos != std::string::npos) {
+                    pos = config_content.find(":", pos);
+                    if (pos != std::string::npos) {
+                        std::string val = config_content.substr(pos + 1, 20);
+                        return val.find("true") != std::string::npos;
+                    }
+                }
+                return false;
+            };
+            
+            auto find_int = [&](const std::string& key) -> int {
+                size_t pos = config_content.find("\"" + key + "\"");
+                if (pos != std::string::npos) {
+                    pos = config_content.find(":", pos);
+                    if (pos != std::string::npos) {
+                        return std::stoi(config_content.substr(pos + 1, 10));
+                    }
+                }
+                return 0;
+            };
+            
+            auto find_double = [&](const std::string& key) -> double {
+                size_t pos = config_content.find("\"" + key + "\"");
+                if (pos != std::string::npos) {
+                    pos = config_content.find(":", pos);
+                    if (pos != std::string::npos) {
+                        return std::stod(config_content.substr(pos + 1, 15));
+                    }
+                }
+                return 0.0;
+            };
+            
+            config.learning_mode = find_bool("learning_mode");
+            int edge_min_trades = find_int("edge_filter_min_trades");
+            if (edge_min_trades > 0) config.edge_filter_min_trades = edge_min_trades;
+            double edge_min_wr = find_double("edge_filter_min_winrate");
+            if (edge_min_wr > 0) config.edge_filter_min_winrate = edge_min_wr;
+            
+            std::cout << "Loaded config from " << config_path << std::endl;
+            std::cout << "  learning_mode: " << (config.learning_mode ? "true" : "false") << std::endl;
+            std::cout << "  edge_filter_min_trades: " << config.edge_filter_min_trades << std::endl;
+            std::cout << "  edge_filter_min_winrate: " << config.edge_filter_min_winrate << std::endl;
+        } catch (const std::exception& e) {
+            std::cerr << "Error parsing config: " << e.what() << std::endl;
+        }
+    } else {
+        std::cout << "No config file found at " << config_path << ", using defaults" << std::endl;
+    }
+
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
         if (arg == "--live") config.paper_trading = false;
         else if (arg == "--paper") config.paper_trading = true;
+        else if (arg == "--learning") config.learning_mode = true;
+        else if (arg == "--no-learning") config.learning_mode = false;
         else if (arg == "--position" && i+1 < argc) config.base_position_size_usd = std::stod(argv[++i]);
         else if (arg == "--tp" && i+1 < argc) config.take_profit_pct = std::stod(argv[++i]);
         else if (arg == "--sl" && i+1 < argc) config.stop_loss_pct = std::stod(argv[++i]);

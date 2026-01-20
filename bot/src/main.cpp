@@ -85,7 +85,9 @@ struct PerformanceMetrics {
             if (pnl > best_trade) best_trade = pnl;
         } else {
             losing_trades++;
-            avg_loss = ((avg_loss * (losing_trades - 1)) + pnl) / losing_trades;
+            // Use abs(pnl) to track magnitude of losses (pnl is negative for losses)
+            double loss_magnitude = std::abs(pnl);
+            avg_loss = ((avg_loss * (losing_trades - 1)) + loss_magnitude) / losing_trades;
             if (pnl < worst_trade) worst_trade = pnl;
         }
         win_rate = (double)winning_trades / total_trades;
@@ -118,7 +120,12 @@ struct PerformanceMetrics {
         //        b = average win / average loss ratio
         double p = win_rate;
         double q = 1.0 - p;
-        double b = std::abs(avg_win / avg_loss);
+        
+        // Guard against division by zero
+        if (avg_loss <= 0) {
+            return 0.25;  // Default if no loss data
+        }
+        double b = avg_win / avg_loss;  // Both are now positive magnitudes
         
         double kelly = (p * b - q) / b;
         
@@ -142,7 +149,7 @@ struct PerformanceMetrics {
 
     double get_profit_factor() const {
         double gross_wins = avg_win * winning_trades;
-        double gross_losses = std::abs(avg_loss) * losing_trades;
+        double gross_losses = avg_loss * losing_trades;  // avg_loss is already magnitude (positive)
         return gross_losses > 0 ? gross_wins / gross_losses : (gross_wins > 0 ? 10.0 : 1.0);
     }
 
@@ -553,25 +560,34 @@ private:
         }
 
         // FEE-AWARE TRADING: Only trade if expected profit > fees
-        // Fee is 0.4% of position, so we need TP to exceed that with a buffer
-        const double FEE_RATE = 0.004;  // 0.4%
+        // Round-trip fee is 0.8% (0.4% entry + 0.4% exit)
+        const double FEE_RATE = 0.008;  // 0.8% round-trip fees
         const double MIN_PROFIT_BUFFER = 0.001;  // 0.1% buffer above fees
-        double expected_fees_pct = FEE_RATE * 100.0;  // Convert to percentage
-        double min_required_tp = expected_fees_pct + (MIN_PROFIT_BUFFER * 100.0);
-        
-        if (tp_pct < min_required_tp) {
-            std::cout << "⚠️ Skipping " << opp.pair << ": TP " << tp_pct << "% < min required " 
-                      << min_required_tp << "% (fees + buffer)" << std::endl;
-            return;
-        }
+        double expected_fees_pct = FEE_RATE * 100.0;  // Convert to percentage (0.8%)
+        double min_required_tp = expected_fees_pct + (MIN_PROFIT_BUFFER * 100.0);  // 0.9% minimum
         
         // Also check if expected profit (TP * win_rate - SL * loss_rate) > fees
         double estimated_win_rate = learned_config.is_validated ? 0.55 : 0.50;  // Conservative estimate
         double expected_profit = (tp_pct * estimated_win_rate) - (sl_pct * (1.0 - estimated_win_rate));
-        if (expected_profit < expected_fees_pct) {
-            std::cout << "⚠️ Skipping " << opp.pair << ": Expected profit " << expected_profit 
-                      << "% < fees " << expected_fees_pct << "%" << std::endl;
-            return;
+        
+        bool passes_fee_filter = (tp_pct >= min_required_tp) && (expected_profit >= expected_fees_pct);
+        
+        if (!passes_fee_filter) {
+            if (config.learning_mode) {
+                // In learning mode, allow trade but log that it wouldn't pass fee filter
+                std::cout << "📚 LEARNING: Trading " << opp.pair << " despite low expected profit (" 
+                          << expected_profit << "% vs " << expected_fees_pct << "% fees)" << std::endl;
+            } else {
+                // In production mode, skip trades that don't cover fees
+                if (tp_pct < min_required_tp) {
+                    std::cout << "⚠️ Skipping " << opp.pair << ": TP " << tp_pct << "% < min required " 
+                              << min_required_tp << "% (fees + buffer)" << std::endl;
+                } else {
+                    std::cout << "⚠️ Skipping " << opp.pair << ": Expected profit " << expected_profit 
+                              << "% < fees " << expected_fees_pct << "%" << std::endl;
+                }
+                return;
+            }
         }
 
         std::cout << "\n--- ENTER " << opp.direction << " " << opp.pair << " ---" << std::endl;
@@ -772,7 +788,7 @@ private:
             pnl_pct = ((exit_price - entry_price) / entry_price) * 100.0;  // LONG: profit when price rises
         }
         double pnl_usd = position_usd * (pnl_pct / 100.0);
-        double fees = position_usd * 0.004;
+        double fees = position_usd * 0.008;  // 0.8% round-trip: 0.4% entry + 0.4% exit
         double net_pnl = pnl_usd - fees;
         bool is_win = net_pnl > 0;
 

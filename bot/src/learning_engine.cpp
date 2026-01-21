@@ -598,6 +598,54 @@ std::string LearningEngine::detect_market_regime() const {
     return "consolidating";
 }
 
+json LearningEngine::analyze_patterns_by_regime() const {
+    json result;
+    
+    if (trade_history.empty()) {
+        result["error"] = "No trade data available";
+        return result;
+    }
+    
+    // Group trades by regime
+    std::map<int, std::vector<const TradeRecord*>> regime_trades;
+    for (const auto& trade : trade_history) {
+        regime_trades[trade.market_regime].push_back(&trade);
+    }
+    
+    // Analyze each regime
+    const std::map<int, std::string> regime_names = {
+        {-2, "quiet"}, {-1, "downtrend"}, {0, "ranging"}, 
+        {1, "uptrend"}, {2, "volatile"}
+    };
+    
+    for (const auto& [regime_code, trades] : regime_trades) {
+        if (trades.empty()) continue;
+        
+        int wins = 0;
+        double total_pnl = 0.0;
+        double total_roi = 0.0;
+        
+        for (const auto* trade : trades) {
+            if (trade->is_win()) wins++;
+            total_pnl += trade->pnl;
+            total_roi += trade->roi();
+        }
+        
+        std::string regime_name = regime_names.count(regime_code) ? 
+                                  regime_names.at(regime_code) : "unknown";
+        
+        result[regime_name]["count"] = (int)trades.size();
+        result[regime_name]["wins"] = wins;
+        result[regime_name]["win_rate"] = trades.size() > 0 ? 
+                                          (double)wins / trades.size() * 100.0 : 0.0;
+        result[regime_name]["total_pnl"] = total_pnl;
+        result[regime_name]["avg_roi"] = trades.size() > 0 ? 
+                                         total_roi / trades.size() : 0.0;
+    }
+    
+    return result;
+}
+
 void LearningEngine::update_strategy_database() {
     std::cout << "\n🔄 UPDATING STRATEGY DATABASE..." << std::endl;
     
@@ -1072,6 +1120,28 @@ void LearningEngine::print_summary() const {
     std::cout << "  Patterns Found: " << stats["patterns_found"] << std::endl;
     std::cout << "  Validated Strategies: " << stats["strategies"] << std::endl;
     std::cout << "  Market Regime: " << stats["regime"] << std::endl;
+    
+    // Per-regime performance analysis
+    std::cout << "\n📊 PERFORMANCE BY MARKET REGIME:" << std::endl;
+    auto regime_stats = analyze_patterns_by_regime();
+    
+    if (!regime_stats.contains("error")) {
+        const std::vector<std::string> regime_order = {"volatile", "uptrend", "downtrend", "ranging", "quiet"};
+        for (const auto& regime : regime_order) {
+            if (regime_stats.contains(regime)) {
+                auto& data = regime_stats[regime];
+                std::cout << "  " << std::left << std::setw(12) << (regime + ":") 
+                          << std::right << std::setw(4) << data["count"].get<int>() << " trades, "
+                          << std::fixed << std::setprecision(1) << std::setw(5) 
+                          << data["win_rate"].get<double>() << "% WR, "
+                          << "$" << std::setprecision(2) << std::setw(7) 
+                          << data["total_pnl"].get<double>() << " P&L" << std::endl;
+            }
+        }
+    } else {
+        std::cout << "  " << regime_stats["error"].get<std::string>() << std::endl;
+    }
+    
     std::cout << std::string(60, '=') << std::endl;
 }
 

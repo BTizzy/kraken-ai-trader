@@ -59,6 +59,25 @@ struct BotConfig {
     bool allow_trending_regime = false;  // Data shows losing money in trends
     bool allow_ranging_regime = false;   // Data shows -$1498 loss in ranging
     bool allow_quiet_regime = false;
+    
+    // Per-regime TP/SL configuration
+    // VOLATILE: tighter stops to manage whipsaw risk, moderate targets
+    double volatile_take_profit_pct = 2.0;   // 2% TP for volatile markets
+    double volatile_stop_loss_pct = 0.8;     // 0.8% SL for volatile markets
+    
+    // TRENDING: wider targets to ride momentum, moderate stops
+    double trending_take_profit_pct = 3.0;   // 3% TP for trending markets
+    double trending_stop_loss_pct = 1.0;     // 1% SL for trending markets
+    
+    // RANGING: tight targets for mean reversion, tight stops
+    double ranging_take_profit_pct = 1.2;    // 1.2% TP for ranging markets
+    double ranging_stop_loss_pct = 0.5;      // 0.5% SL for ranging markets
+    
+    // QUIET: generally avoided, but if traded use conservative settings
+    double quiet_take_profit_pct = 1.0;      // 1% TP for quiet markets
+    double quiet_stop_loss_pct = 0.4;        // 0.4% SL for quiet markets
+    
+    bool debug_mode = false;  // Enable detailed regime logging
 };
 
 struct PerformanceMetrics {
@@ -328,6 +347,65 @@ public:
         
         if (upper_band == lower_band) return 0.5;
         return (bars.back().close - lower_band) / (upper_band - lower_band);
+    }
+    
+    // Calculate ADX (Average Directional Index) for trend strength
+    // Returns: ADX value (0-100, where >25 indicates trending, <20 indicates ranging)
+    static double calculate_adx(const std::deque<PriceBar>& bars, int period = 14) {
+        if (bars.size() < (size_t)period + 1) return 0.0;
+        
+        std::vector<double> plus_dm, minus_dm, tr;
+        
+        // Calculate +DM, -DM, and TR for each bar
+        for (size_t i = 1; i < bars.size(); i++) {
+            double high_diff = bars[i].high - bars[i-1].high;
+            double low_diff = bars[i-1].low - bars[i].low;
+            
+            // Directional Movement
+            double plus_dm_val = (high_diff > low_diff && high_diff > 0) ? high_diff : 0.0;
+            double minus_dm_val = (low_diff > high_diff && low_diff > 0) ? low_diff : 0.0;
+            
+            // True Range
+            double high_low = bars[i].high - bars[i].low;
+            double high_prev_close = std::abs(bars[i].high - bars[i-1].close);
+            double low_prev_close = std::abs(bars[i].low - bars[i-1].close);
+            double tr_val = std::max({high_low, high_prev_close, low_prev_close});
+            
+            plus_dm.push_back(plus_dm_val);
+            minus_dm.push_back(minus_dm_val);
+            tr.push_back(tr_val);
+        }
+        
+        if (tr.size() < (size_t)period) return 0.0;
+        
+        // Calculate smoothed +DM, -DM, and TR
+        double smoothed_plus_dm = 0.0, smoothed_minus_dm = 0.0, smoothed_tr = 0.0;
+        for (size_t i = 0; i < (size_t)period; i++) {
+            smoothed_plus_dm += plus_dm[i];
+            smoothed_minus_dm += minus_dm[i];
+            smoothed_tr += tr[i];
+        }
+        
+        // Apply Wilder's smoothing for the rest
+        for (size_t i = period; i < plus_dm.size(); i++) {
+            smoothed_plus_dm = smoothed_plus_dm - (smoothed_plus_dm / period) + plus_dm[i];
+            smoothed_minus_dm = smoothed_minus_dm - (smoothed_minus_dm / period) + minus_dm[i];
+            smoothed_tr = smoothed_tr - (smoothed_tr / period) + tr[i];
+        }
+        
+        // Calculate +DI and -DI
+        double plus_di = (smoothed_tr != 0) ? (smoothed_plus_dm / smoothed_tr) * 100.0 : 0.0;
+        double minus_di = (smoothed_tr != 0) ? (smoothed_minus_dm / smoothed_tr) * 100.0 : 0.0;
+        
+        // Calculate DX
+        double dx = 0.0;
+        if (plus_di + minus_di != 0) {
+            dx = (std::abs(plus_di - minus_di) / (plus_di + minus_di)) * 100.0;
+        }
+        
+        // ADX is the smoothed average of DX
+        // For simplicity, return DX as approximation (full ADX needs historical DX values)
+        return dx;
     }
 };
 
@@ -606,22 +684,68 @@ private:
             // Calculate technical indicators from price history
             calculate_indicators(result);
 
-            // MARKET REGIME DETECTION
+            // ENHANCED MARKET REGIME DETECTION
+            // Uses multiple signals: volatility, ADX, and moving average crossovers
             // Based on historical data analysis:
             // - Avg volatility: 2.82%, only 7.7% of trades > 8%
             // - VOLATILE (>4%) has 70% WR, RANGING loses money
             const double HIGH_VOL_THRESHOLD = 4.0;   // >4% = volatile (was 8%, too restrictive)
             const double LOW_VOL_THRESHOLD = 1.5;    // <1.5% = quiet
-            const double TREND_THRESHOLD = 0.10;     // >10% trend score = trending
+            const double ADX_TREND_THRESHOLD = 25.0; // ADX >25 = trending market
+            const double ADX_RANGING_THRESHOLD = 20.0; // ADX <20 = ranging market
             
+            // Calculate ADX for trend strength assessment
+            auto history = get_price_history(pair);
+            double adx = 0.0;
+            if (history.size() >= 15) {
+                adx = TechnicalIndicators::calculate_adx(history, 14);
+            }
+            
+            // Check for moving average crossover (EMA 12 vs EMA 26)
+            bool ma_trending = false;
+            if (history.size() >= 26 && result.ema_12 > 0 && result.ema_26 > 0) {
+                double ma_diff_pct = std::abs((result.ema_12 - result.ema_26) / result.ema_26) * 100.0;
+                ma_trending = ma_diff_pct > 0.5;  // >0.5% separation indicates trend
+            }
+            
+            // Multi-signal regime detection with priority order
             if (result.volatility_pct > HIGH_VOL_THRESHOLD) {
+                // High volatility takes priority - regardless of trend
                 result.regime = MarketRegime::VOLATILE;
+                if (config.debug_mode) {
+                    std::cout << "[REGIME] " << pair << " -> VOLATILE (vol=" 
+                              << std::fixed << std::setprecision(2) << result.volatility_pct 
+                              << "%, ADX=" << adx << ")" << std::endl;
+                }
             } else if (result.volatility_pct < LOW_VOL_THRESHOLD) {
+                // Low volatility = quiet market
                 result.regime = MarketRegime::QUIET;
-            } else if (std::abs(trend_score) > TREND_THRESHOLD || bullish_candles >= 3 || bearish_candles >= 3) {
+                if (config.debug_mode) {
+                    std::cout << "[REGIME] " << pair << " -> QUIET (vol=" 
+                              << std::fixed << std::setprecision(2) << result.volatility_pct << "%)" << std::endl;
+                }
+            } else if (adx > ADX_TREND_THRESHOLD || (ma_trending && adx > 15.0)) {
+                // Strong ADX or MA crossover with moderate ADX = trending
                 result.regime = MarketRegime::TRENDING;
-            } else {
+                if (config.debug_mode) {
+                    std::cout << "[REGIME] " << pair << " -> TRENDING (ADX=" 
+                              << std::fixed << std::setprecision(1) << adx 
+                              << ", MA_cross=" << (ma_trending ? "yes" : "no") << ")" << std::endl;
+                }
+            } else if (adx < ADX_RANGING_THRESHOLD && !ma_trending) {
+                // Low ADX and no MA divergence = ranging/consolidation
                 result.regime = MarketRegime::RANGING;
+                if (config.debug_mode) {
+                    std::cout << "[REGIME] " << pair << " -> RANGING (ADX=" 
+                              << std::fixed << std::setprecision(1) << adx << ")" << std::endl;
+                }
+            } else {
+                // Default to ranging for edge cases (ADX 20-25 with unclear signals)
+                result.regime = MarketRegime::RANGING;
+                if (config.debug_mode) {
+                    std::cout << "[REGIME] " << pair << " -> RANGING (default, ADX=" 
+                              << std::fixed << std::setprecision(1) << adx << ")" << std::endl;
+                }
             }
 
             // ENTRY CRITERIA: Must have momentum and not be overextended
@@ -796,27 +920,41 @@ private:
         hold_time = std::max(config.min_hold_seconds, std::min(hold_time, config.max_hold_seconds));
 
         // REGIME-BASED STRATEGY ADJUSTMENT
-        // Modify position size and targets based on market regime
+        // Apply per-regime TP/SL and position sizing based on market conditions
+        std::cout << "📊 Market Regime: " << regime_to_string(opp.regime) << " - Adjusting strategy" << std::endl;
+        
         switch (opp.regime) {
             case MarketRegime::VOLATILE:
-                // In volatile markets, reduce position size and widen stops
-                position_usd *= 0.5;  // Half size
-                sl_pct *= 1.5;        // Wider stop
-                std::cout << "📊 VOLATILE regime - reducing position, widening stops" << std::endl;
+                // VOLATILE: tighter stops, moderate targets, reduced position
+                tp_pct = config.volatile_take_profit_pct;
+                sl_pct = config.volatile_stop_loss_pct;
+                position_usd *= 0.7;  // 30% reduction for risk management
+                std::cout << "  ├─ TP: " << tp_pct << "% | SL: " << sl_pct 
+                          << "% | Position: " << std::fixed << std::setprecision(2) 
+                          << position_usd << " (70% of base)" << std::endl;
                 break;
+                
             case MarketRegime::QUIET:
-                // In quiet markets, skip trading (low opportunity)
-                std::cout << "⚠️ Skipping " << opp.pair << ": QUIET market regime - waiting for opportunity" << std::endl;
+                // QUIET: skip trading (low opportunity)
+                std::cout << "⚠️ Skipping " << opp.pair << ": QUIET market regime - insufficient volatility" << std::endl;
                 return;
+                
             case MarketRegime::TRENDING:
-                // In trending markets, use momentum strategy with trailing stops
+                // TRENDING: wider targets for momentum, extended hold time
+                tp_pct = config.trending_take_profit_pct;
+                sl_pct = config.trending_stop_loss_pct;
                 hold_time = std::min(hold_time * 2, config.max_hold_seconds);  // Hold longer
-                std::cout << "📈 TRENDING regime - extended hold time, momentum strategy" << std::endl;
+                std::cout << "  ├─ TP: " << tp_pct << "% | SL: " << sl_pct 
+                          << "% | Hold: " << hold_time << "s (extended for momentum)" << std::endl;
                 break;
+                
             case MarketRegime::RANGING:
-                // In ranging markets, use mean reversion with tighter targets
-                tp_pct *= 0.8;  // Tighter TP
-                std::cout << "↔️ RANGING regime - tighter targets, mean reversion" << std::endl;
+                // RANGING: tight targets for mean reversion, quick exits
+                tp_pct = config.ranging_take_profit_pct;
+                sl_pct = config.ranging_stop_loss_pct;
+                hold_time = std::max(config.min_hold_seconds, hold_time / 2);  // Shorter hold
+                std::cout << "  ├─ TP: " << tp_pct << "% | SL: " << sl_pct 
+                          << "% | Hold: " << hold_time << "s (mean reversion)" << std::endl;
                 break;
         }
 
@@ -1264,11 +1402,19 @@ int main(int argc, char* argv[]) {
             std::cout << "  learning_mode: " << (config.learning_mode ? "true" : "false") << std::endl;
             std::cout << "  edge_filter_min_trades: " << config.edge_filter_min_trades << std::endl;
             std::cout << "  edge_filter_min_winrate: " << config.edge_filter_min_winrate << std::endl;
-            std::cout << "  take_profit_pct: " << config.take_profit_pct << "%" << std::endl;
-            std::cout << "  stop_loss_pct: " << config.stop_loss_pct << "%" << std::endl;
+            std::cout << "  Base TP/SL: " << config.take_profit_pct << "% / " << config.stop_loss_pct << "%" << std::endl;
+            std::cout << "  Per-Regime TP/SL:" << std::endl;
+            std::cout << "    VOLATILE:  TP=" << config.volatile_take_profit_pct << "% / SL=" << config.volatile_stop_loss_pct << "%" << std::endl;
+            std::cout << "    TRENDING:  TP=" << config.trending_take_profit_pct << "% / SL=" << config.trending_stop_loss_pct << "%" << std::endl;
+            std::cout << "    RANGING:   TP=" << config.ranging_take_profit_pct << "% / SL=" << config.ranging_stop_loss_pct << "%" << std::endl;
             std::cout << "  trailing_start_pct: " << config.trailing_start_pct << "%" << std::endl;
             std::cout << "  trailing_stop_pct: " << config.trailing_stop_pct << "%" << std::endl;
-            std::cout << "  regime_filter: VOLATILE only (RANGING/TRENDING blocked)" << std::endl;
+            std::cout << "  regime_filter: ";
+            if (config.allow_volatile_regime) std::cout << "VOLATILE ";
+            if (config.allow_trending_regime) std::cout << "TRENDING ";
+            if (config.allow_ranging_regime) std::cout << "RANGING ";
+            if (config.allow_quiet_regime) std::cout << "QUIET";
+            std::cout << "(others blocked)" << std::endl;
             if (!config.blacklisted_pairs.empty()) {
                 std::cout << "  blacklisted_pairs: " << config.blacklisted_pairs.size() << " pairs (";
                 int count = 0;

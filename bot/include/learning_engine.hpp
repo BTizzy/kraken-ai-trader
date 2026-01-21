@@ -115,6 +115,11 @@ struct StrategyConfig {
     double trailing_stop_pct = 0.5;
     bool use_partial_exits = true;
     
+    // Per-regime parameters (optional, 0 = use defaults)
+    int market_regime = -1;    // -1=any, 0=ranging, 1=trending, 2=volatile, 3=quiet
+    double regime_tp_pct = 0;  // Regime-specific TP (0 = use base take_profit_pct)
+    double regime_sl_pct = 0;  // Regime-specific SL (0 = use base stop_loss_pct)
+    
     // Validation
     bool is_validated = false;
     double estimated_edge = 0;
@@ -142,6 +147,9 @@ public:
     
     // Regime detection
     std::string detect_market_regime() const;
+    
+    // Analyze pattern performance by regime
+    json analyze_patterns_by_regime() const;
     
     // Risk assessment
     double estimate_drawdown_risk() const;

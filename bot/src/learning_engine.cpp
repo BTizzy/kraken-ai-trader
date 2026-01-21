@@ -1627,7 +1627,8 @@ LearningEngine::ValidationMetrics LearningEngine::cross_validate_pattern(
         metrics.test_sharpe / metrics.train_sharpe : 0;
     
     metrics.is_overfit = (win_rate_drop > OVERFIT_WINRATE_DROP_THRESHOLD) || 
-                         (metrics.train_sharpe > 0.5 && sharpe_ratio < OVERFIT_SHARPE_RATIO_THRESHOLD);
+                         (metrics.train_sharpe > MIN_TRAIN_SHARPE_FOR_OVERFIT_CHECK && 
+                          sharpe_ratio < OVERFIT_SHARPE_RATIO_THRESHOLD);
     
     return metrics;
 }

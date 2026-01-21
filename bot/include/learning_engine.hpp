@@ -252,6 +252,7 @@ private:
     const double CROSS_VAL_TRAIN_RATIO = 0.8;  // 80/20 train/test split
     const double OVERFIT_WINRATE_DROP_THRESHOLD = 0.20;  // Flag if test WR drops >20%
     const double OVERFIT_SHARPE_RATIO_THRESHOLD = 0.5;   // Flag if test Sharpe <50% of train
+    const double MIN_TRAIN_SHARPE_FOR_OVERFIT_CHECK = 0.5;  // Only check Sharpe overfitting if train Sharpe > this
     
     // SQLite database (single source of truth)
     sqlite3* db_ = nullptr;

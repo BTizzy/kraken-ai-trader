@@ -37,6 +37,12 @@ double calculate_sharpe_ratio(const std::vector<double>& returns) {
 }
 
 // Test cross-validation logic
+// Constants matching learning_engine.hpp
+const int MIN_TRADES_FOR_VALIDATION = 10;
+const double OVERFIT_WINRATE_DROP_THRESHOLD = 0.20;
+const double OVERFIT_SHARPE_RATIO_THRESHOLD = 0.5;
+const double MIN_TRAIN_SHARPE_FOR_OVERFIT_CHECK = 0.5;
+
 struct ValidationMetrics {
     double train_win_rate = 0;
     double test_win_rate = 0;
@@ -52,7 +58,7 @@ struct ValidationMetrics {
 ValidationMetrics cross_validate_pattern(const std::vector<TradeRecord>& trades, double train_ratio) {
     ValidationMetrics metrics;
     
-    if (trades.size() < 10) {
+    if (trades.size() < static_cast<size_t>(MIN_TRADES_FOR_VALIDATION)) {
         return metrics;
     }
     
@@ -105,13 +111,14 @@ ValidationMetrics cross_validate_pattern(const std::vector<TradeRecord>& trades,
     metrics.test_profit_factor = test_gross_losses > 0 ? 
         test_gross_wins / test_gross_losses : test_gross_wins;
     
-    // Detect overfitting
+    // Detect overfitting using the same thresholds as main implementation
     double win_rate_drop = metrics.train_win_rate - metrics.test_win_rate;
     double sharpe_ratio = metrics.train_sharpe > 0 ? 
         metrics.test_sharpe / metrics.train_sharpe : 0;
     
-    metrics.is_overfit = (win_rate_drop > 0.20) || 
-                         (metrics.train_sharpe > 0.5 && sharpe_ratio < 0.5);
+    metrics.is_overfit = (win_rate_drop > OVERFIT_WINRATE_DROP_THRESHOLD) || 
+                         (metrics.train_sharpe > MIN_TRAIN_SHARPE_FOR_OVERFIT_CHECK && 
+                          sharpe_ratio < OVERFIT_SHARPE_RATIO_THRESHOLD);
     
     return metrics;
 }

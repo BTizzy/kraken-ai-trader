@@ -71,22 +71,22 @@ void LearningEngine::init_database(const std::string& db_path) {
         CREATE TABLE IF NOT EXISTS learned_patterns (
             pattern_key TEXT PRIMARY KEY,
             pair TEXT NOT NULL,
-            leverage REAL,
-            timeframe_bucket INTEGER,
-            total_trades INTEGER DEFAULT 0,
-            winning_trades INTEGER DEFAULT 0,
-            losing_trades INTEGER DEFAULT 0,
+            leverage REAL NOT NULL,
+            timeframe_bucket INTEGER NOT NULL,
+            total_trades INTEGER NOT NULL DEFAULT 0 CHECK(total_trades >= 0),
+            winning_trades INTEGER NOT NULL DEFAULT 0 CHECK(winning_trades >= 0),
+            losing_trades INTEGER NOT NULL DEFAULT 0 CHECK(losing_trades >= 0),
             total_pnl REAL DEFAULT 0.0,
             total_fees REAL DEFAULT 0.0,
-            avg_win REAL DEFAULT 0.0,
-            avg_loss REAL DEFAULT 0.0,
+            avg_win REAL DEFAULT 0.0 CHECK(avg_win >= 0),
+            avg_loss REAL DEFAULT 0.0 CHECK(avg_loss >= 0),
             max_drawdown REAL DEFAULT 0.0,
             sharpe_ratio REAL DEFAULT 0.0,
             sortino_ratio REAL DEFAULT 0.0,
-            win_rate REAL DEFAULT 0.0,
-            profit_factor REAL DEFAULT 0.0,
-            confidence_score REAL DEFAULT 0.0,
-            has_edge INTEGER DEFAULT 0,
+            win_rate REAL DEFAULT 0.0 CHECK(win_rate >= 0 AND win_rate <= 1),
+            profit_factor REAL DEFAULT 0.0 CHECK(profit_factor >= 0),
+            confidence_score REAL DEFAULT 0.0 CHECK(confidence_score >= 0 AND confidence_score <= 1),
+            has_edge INTEGER DEFAULT 0 CHECK(has_edge IN (0, 1)),
             edge_percentage REAL DEFAULT 0.0,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
@@ -426,8 +426,8 @@ void LearningEngine::analyze_patterns() {
         pattern_database[pattern_key] = metrics;
         
         // NEW: Cross-validation for patterns with enough samples
-        if (trades.size() >= 10) {
-            ValidationMetrics validation = cross_validate_pattern(trades, 0.8);
+        if (trades.size() >= static_cast<size_t>(MIN_TRADES_FOR_VALIDATION)) {
+            ValidationMetrics validation = cross_validate_pattern(trades, CROSS_VAL_TRAIN_RATIO);
             log_validation_metrics(pattern_key, validation);
         }
         
@@ -1458,14 +1458,18 @@ void LearningEngine::save_patterns_to_db() {
     )";
     
     sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(db_, insert_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "❌ Failed to prepare pattern insert statement: " << sqlite3_errmsg(db_) << std::endl;
+        return;
+    }
+    
     int saved_count = 0;
     
     for (const auto& [pattern_key, metrics] : pattern_database) {
-        int rc = sqlite3_prepare_v2(db_, insert_sql, -1, &stmt, nullptr);
-        if (rc != SQLITE_OK) {
-            std::cerr << "❌ Failed to prepare pattern insert: " << sqlite3_errmsg(db_) << std::endl;
-            continue;
-        }
+        // Reset the statement for reuse
+        sqlite3_reset(stmt);
+        sqlite3_clear_bindings(stmt);
         
         sqlite3_bind_text(stmt, 1, pattern_key.c_str(), -1, SQLITE_TRANSIENT);
         sqlite3_bind_text(stmt, 2, metrics.pair.c_str(), -1, SQLITE_TRANSIENT);
@@ -1494,10 +1498,9 @@ void LearningEngine::save_patterns_to_db() {
             std::cerr << "⚠️ Failed to save pattern " << pattern_key << ": " 
                       << sqlite3_errmsg(db_) << std::endl;
         }
-        
-        sqlite3_finalize(stmt);
     }
     
+    sqlite3_finalize(stmt);
     std::cout << "💾 Saved " << saved_count << " learned patterns to SQLite" << std::endl;
 }
 
@@ -1564,12 +1567,12 @@ LearningEngine::ValidationMetrics LearningEngine::cross_validate_pattern(
     
     ValidationMetrics metrics;
     
-    // Need at least 10 trades for meaningful cross-validation
-    if (trades.size() < 10) {
+    // Need at least MIN_TRADES_FOR_VALIDATION trades for meaningful cross-validation
+    if (trades.size() < static_cast<size_t>(MIN_TRADES_FOR_VALIDATION)) {
         return metrics;
     }
     
-    // Split into train and test sets (80/20 by default)
+    // Split into train and test sets (CROSS_VAL_TRAIN_RATIO by default)
     int train_size = static_cast<int>(trades.size() * train_ratio);
     std::vector<TradeRecord> train_trades(trades.begin(), trades.begin() + train_size);
     std::vector<TradeRecord> test_trades(trades.begin() + train_size, trades.end());
@@ -1619,14 +1622,12 @@ LearningEngine::ValidationMetrics LearningEngine::cross_validate_pattern(
         test_gross_wins / test_gross_losses : test_gross_wins;
     
     // Detect overfitting: test performance significantly worse than train
-    // Flag as overfit if test win rate is >20% lower than train win rate
-    // OR test Sharpe is <50% of train Sharpe
     double win_rate_drop = metrics.train_win_rate - metrics.test_win_rate;
     double sharpe_ratio = metrics.train_sharpe > 0 ? 
         metrics.test_sharpe / metrics.train_sharpe : 0;
     
-    metrics.is_overfit = (win_rate_drop > 0.20) || 
-                         (metrics.train_sharpe > 0.5 && sharpe_ratio < 0.5);
+    metrics.is_overfit = (win_rate_drop > OVERFIT_WINRATE_DROP_THRESHOLD) || 
+                         (metrics.train_sharpe > 0.5 && sharpe_ratio < OVERFIT_SHARPE_RATIO_THRESHOLD);
     
     return metrics;
 }

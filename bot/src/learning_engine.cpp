@@ -1420,6 +1420,11 @@ json LearningEngine::analyze_indicator_effectiveness() const {
         {"near_lower", {}}, {"middle", {}}, {"near_upper", {}}
     };
     
+    // NEW: Ichimoku cloud position buckets
+    std::map<std::string, IndicatorBucket> ichimoku_buckets = {
+        {"above_cloud", {}}, {"in_cloud", {}}, {"below_cloud", {}}
+    };
+    
     for (const auto& trade : trade_history) {
         // RSI analysis
         std::string rsi_bucket = trade.rsi < 30 ? "oversold" : 
@@ -1440,6 +1445,26 @@ json LearningEngine::analyze_indicator_effectiveness() const {
         bb_buckets[bb_bucket].count++;
         if (trade.is_win()) bb_buckets[bb_bucket].wins++;
         bb_buckets[bb_bucket].avg_pnl += trade.pnl;
+        
+        // NEW: Ichimoku cloud position analysis
+        // Compare entry price to cloud (senkou span A and B)
+        if (trade.senkou_span_a != 0.0 || trade.senkou_span_b != 0.0) {
+            double cloud_top = std::max(trade.senkou_span_a, trade.senkou_span_b);
+            double cloud_bottom = std::min(trade.senkou_span_a, trade.senkou_span_b);
+            std::string ichimoku_bucket;
+            
+            if (trade.entry_price > cloud_top) {
+                ichimoku_bucket = "above_cloud";
+            } else if (trade.entry_price < cloud_bottom) {
+                ichimoku_bucket = "below_cloud";
+            } else {
+                ichimoku_bucket = "in_cloud";
+            }
+            
+            ichimoku_buckets[ichimoku_bucket].count++;
+            if (trade.is_win()) ichimoku_buckets[ichimoku_bucket].wins++;
+            ichimoku_buckets[ichimoku_bucket].avg_pnl += trade.pnl;
+        }
     }
     
     // Build results
@@ -1472,6 +1497,17 @@ json LearningEngine::analyze_indicator_effectiveness() const {
         }
     }
     results["bollinger_bands"] = bb_results;
+    
+    // NEW: Ichimoku cloud results
+    json ichimoku_results;
+    for (auto& [bucket, data] : ichimoku_buckets) {
+        if (data.count > 0) {
+            ichimoku_results[bucket]["count"] = data.count;
+            ichimoku_results[bucket]["win_rate"] = (double)data.wins / data.count * 100;
+            ichimoku_results[bucket]["avg_pnl"] = data.avg_pnl / data.count;
+        }
+    }
+    results["ichimoku_cloud"] = ichimoku_results;
     
     return results;
 }
@@ -1520,6 +1556,21 @@ void LearningEngine::analyze_indicator_patterns() {
     if (results.contains("bollinger_bands")) {
         std::cout << "  Bollinger Bands:" << std::endl;
         for (auto& [bucket, data] : results["bollinger_bands"].items()) {
+            if (data.contains("count") && data["count"].get<int>() > 0) {
+                std::cout << "    " << bucket << ": " 
+                          << data["count"] << " trades, "
+                          << std::fixed << std::setprecision(1) 
+                          << data["win_rate"].get<double>() << "% WR, "
+                          << "$" << std::setprecision(2) << data["avg_pnl"].get<double>() << " avg"
+                          << std::endl;
+            }
+        }
+    }
+    
+    // NEW: Ichimoku Cloud
+    if (results.contains("ichimoku_cloud")) {
+        std::cout << "  Ichimoku Cloud Position:" << std::endl;
+        for (auto& [bucket, data] : results["ichimoku_cloud"].items()) {
             if (data.contains("count") && data["count"].get<int>() > 0) {
                 std::cout << "    " << bucket << ": " 
                           << data["count"] << " trades, "

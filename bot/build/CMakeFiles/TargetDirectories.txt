@@ -1,3 +1,0 @@
-/Users/ryanbartell/polymarket-ai-trader/kraken-ai-trader-1/bot/build/CMakeFiles/kraken_bot.dir
-/Users/ryanbartell/polymarket-ai-trader/kraken-ai-trader-1/bot/build/CMakeFiles/edit_cache.dir
-/Users/ryanbartell/polymarket-ai-trader/kraken-ai-trader-1/bot/build/CMakeFiles/rebuild_cache.dir

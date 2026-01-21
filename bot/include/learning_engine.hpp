@@ -63,6 +63,14 @@ struct TradeRecord {
     double vwap_deviation = 0.0;     // Price deviation from VWAP
     int market_regime = 0;           // 0=consolidation, 1=uptrend, -1=downtrend
     
+    // NEW: Additional technical indicators (OBV and Ichimoku Cloud)
+    double obv = 0.0;                // On-Balance Volume
+    double tenkan_sen = 0.0;         // Ichimoku: Conversion Line (9-period)
+    double kijun_sen = 0.0;          // Ichimoku: Base Line (26-period)
+    double senkou_span_a = 0.0;      // Ichimoku: Leading Span A
+    double senkou_span_b = 0.0;      // Ichimoku: Leading Span B
+    double chikou_span = 0.0;        // Ichimoku: Lagging Span
+    
     bool is_win() const { return pnl > 0; }
     double roi() const { return (pnl / position_size) * 100; }
 };
@@ -173,6 +181,14 @@ public:
         double atr_pct = 0.0;
         int market_regime = 0;
         double composite_score = 0.0;  // Overall signal strength (-1 to 1)
+        
+        // NEW: OBV and Ichimoku Cloud indicators
+        double obv = 0.0;
+        double tenkan_sen = 0.0;
+        double kijun_sen = 0.0;
+        double senkou_span_a = 0.0;
+        double senkou_span_b = 0.0;
+        double chikou_span = 0.0;
     };
     
     // Get technical signals for a pair based on historical price data
@@ -215,6 +231,12 @@ private:
                          const std::vector<double>& closes, int period = 14) const;
     double calculate_ema(const std::vector<double>& prices, int period) const;
     double calculate_sma(const std::vector<double>& prices, int period) const;
+    
+    // NEW: OBV and Ichimoku Cloud calculations
+    double calculate_obv(const std::vector<double>& prices, const std::vector<double>& volumes) const;
+    std::tuple<double, double, double, double, double> calculate_ichimoku(
+        const std::vector<double>& highs, const std::vector<double>& lows, 
+        const std::vector<double>& closes) const;
     
     // Pattern matching
     std::string generate_pattern_key(const std::string& pair, const std::string& direction, double leverage, int timeframe) const;

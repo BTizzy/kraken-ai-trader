@@ -214,6 +214,14 @@ struct ScanResult {
     double ema_26 = 0.0;            // 26-period EMA (for MACD)
     double atr = 0.0;               // Average True Range
     double atr_pct = 0.0;           // ATR as % of price
+    
+    // NEW: OBV and Ichimoku Cloud indicators
+    double obv = 0.0;               // On-Balance Volume
+    double tenkan_sen = 0.0;        // Ichimoku: Conversion Line
+    double kijun_sen = 0.0;         // Ichimoku: Base Line
+    double senkou_span_a = 0.0;     // Ichimoku: Leading Span A
+    double senkou_span_b = 0.0;     // Ichimoku: Leading Span B
+    double chikou_span = 0.0;       // Ichimoku: Lagging Span
 };
 
 // Price History Buffer for calculating indicators
@@ -328,6 +336,71 @@ public:
         
         if (upper_band == lower_band) return 0.5;
         return (bars.back().close - lower_band) / (upper_band - lower_band);
+    }
+    
+    // Calculate On-Balance Volume (OBV)
+    static double calculate_obv(const std::deque<PriceBar>& bars) {
+        if (bars.size() < 2) return 0.0;
+        
+        double obv = 0.0;
+        for (size_t i = 1; i < bars.size(); i++) {
+            if (bars[i].close > bars[i-1].close) {
+                obv += bars[i].volume;
+            } else if (bars[i].close < bars[i-1].close) {
+                obv -= bars[i].volume;
+            }
+            // If close == prev close, OBV stays the same
+        }
+        return obv;
+    }
+    
+    // Calculate Ichimoku Cloud components
+    // Returns: {tenkan_sen, kijun_sen, senkou_span_a, senkou_span_b, chikou_span}
+    static std::tuple<double, double, double, double, double> calculate_ichimoku(
+        const std::deque<PriceBar>& bars) {
+        
+        if (bars.size() < 52) {
+            // Not enough data for full Ichimoku calculation
+            double price = bars.empty() ? 0.0 : bars.back().close;
+            return {price, price, price, price, price};
+        }
+        
+        // Tenkan-sen (Conversion Line): (9-period high + 9-period low) / 2
+        double tenkan_high = bars[bars.size() - 9].high;
+        double tenkan_low = bars[bars.size() - 9].low;
+        for (size_t i = bars.size() - 9; i < bars.size(); i++) {
+            tenkan_high = std::max(tenkan_high, bars[i].high);
+            tenkan_low = std::min(tenkan_low, bars[i].low);
+        }
+        double tenkan_sen = (tenkan_high + tenkan_low) / 2.0;
+        
+        // Kijun-sen (Base Line): (26-period high + 26-period low) / 2
+        double kijun_high = bars[bars.size() - 26].high;
+        double kijun_low = bars[bars.size() - 26].low;
+        for (size_t i = bars.size() - 26; i < bars.size(); i++) {
+            kijun_high = std::max(kijun_high, bars[i].high);
+            kijun_low = std::min(kijun_low, bars[i].low);
+        }
+        double kijun_sen = (kijun_high + kijun_low) / 2.0;
+        
+        // Senkou Span A (Leading Span A): (Tenkan-sen + Kijun-sen) / 2
+        // Projected 26 periods ahead
+        double senkou_span_a = (tenkan_sen + kijun_sen) / 2.0;
+        
+        // Senkou Span B (Leading Span B): (52-period high + 52-period low) / 2
+        // Projected 26 periods ahead
+        double senkou_high = bars[0].high;
+        double senkou_low = bars[0].low;
+        for (size_t i = 0; i < std::min((size_t)52, bars.size()); i++) {
+            senkou_high = std::max(senkou_high, bars[bars.size() - 52 + i].high);
+            senkou_low = std::min(senkou_low, bars[bars.size() - 52 + i].low);
+        }
+        double senkou_span_b = (senkou_high + senkou_low) / 2.0;
+        
+        // Chikou Span (Lagging Span): Current closing price shifted back 26 periods
+        double chikou_span = bars.back().close;
+        
+        return {tenkan_sen, kijun_sen, senkou_span_a, senkou_span_b, chikou_span};
     }
 };
 
@@ -528,6 +601,24 @@ private:
         double bb_pos = TechnicalIndicators::calculate_bb_position(history, 20, 2.0);
         if (history.size() >= 20) {
             result.range_position = bb_pos;  // Use BB position if we have enough data
+        }
+        
+        // NEW: OBV (On-Balance Volume)
+        result.obv = TechnicalIndicators::calculate_obv(history);
+        
+        // NEW: Ichimoku Cloud
+        if (history.size() >= 52) {
+            auto [tenkan, kijun, span_a, span_b, chikou] = TechnicalIndicators::calculate_ichimoku(history);
+            result.tenkan_sen = tenkan;
+            result.kijun_sen = kijun;
+            result.senkou_span_a = span_a;
+            result.senkou_span_b = span_b;
+            result.chikou_span = chikou;
+            
+            // Log Ichimoku values for verification
+            std::cout << "  📊 Ichimoku for " << pair << ": Tenkan=" << std::fixed << std::setprecision(2) 
+                      << tenkan << ", Kijun=" << kijun << ", Span A=" << span_a 
+                      << ", Span B=" << span_b << std::endl;
         }
     }
 
@@ -1101,6 +1192,14 @@ private:
             trade.macd_signal = opp.macd_signal;
             trade.bb_position = opp.range_position;
             trade.atr_pct = opp.atr_pct > 0 ? opp.atr_pct : opp.volatility_pct;
+            
+            // NEW: OBV and Ichimoku Cloud indicators
+            trade.obv = opp.obv;
+            trade.tenkan_sen = opp.tenkan_sen;
+            trade.kijun_sen = opp.kijun_sen;
+            trade.senkou_span_a = opp.senkou_span_a;
+            trade.senkou_span_b = opp.senkou_span_b;
+            trade.chikou_span = opp.chikou_span;
             
             // Momentum score: normalize momentum_pct to -1 to 1 range
             trade.momentum_score = std::max(-1.0, std::min(1.0, opp.momentum_pct / 10.0));

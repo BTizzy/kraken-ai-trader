@@ -650,8 +650,19 @@ const server = http.createServer(async (req, res) => {
             return;
         }
 
-        // Start bot endpoint
+        // Start bot endpoint - DISABLED for safety
+        // Bot should be managed via terminal: cd bot/build && ./kraken_bot
         if (apiPath === 'bot/start') {
+            res.writeHead(403, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+            res.end(JSON.stringify({ 
+                success: false, 
+                error: 'Bot start via dashboard disabled. Use terminal: cd bot/build && ./kraken_bot' 
+            }));
+            return;
+        }
+
+        // DISABLED: Original bot/start code
+        if (false && apiPath === 'bot/start_LEGACY') {
             // CRITICAL: Always kill any existing kraken_bot processes first
             // This prevents data corruption from multiple bot instances
             const { execSync } = require('child_process');

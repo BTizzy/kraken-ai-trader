@@ -607,12 +607,27 @@ private:
             calculate_indicators(result);
 
             // MARKET REGIME DETECTION
-            // Based on historical data analysis:
-            // - Avg volatility: 2.82%, only 7.7% of trades > 8%
-            // - VOLATILE (>4%) has 70% WR, RANGING loses money
-            const double HIGH_VOL_THRESHOLD = 4.0;   // >4% = volatile (was 8%, too restrictive)
+            // Based on historical data analysis (Jan 21, 2026):
+            // - TP trades avg 4.79% vol (70% WR), timeout trades avg 7.04% vol (6% WR)
+            // - Sweet spot is 4.5-7% volatility - enough movement to hit TP, not too chaotic
+            const double HIGH_VOL_THRESHOLD = 4.5;   // >4.5% = volatile (raised from 4.0%)
+            const double MAX_VOL_THRESHOLD = 7.0;    // >7% = too chaotic for production
+            const double LEARNING_MAX_VOL = 15.0;    // Even in learning mode, skip extreme chaos
             const double LOW_VOL_THRESHOLD = 1.5;    // <1.5% = quiet
             const double TREND_THRESHOLD = 0.10;     // >10% trend score = trending
+            
+            // Volatility ceiling - skip pairs that are TOO volatile
+            // In learning mode: allow up to 15% to gather data on high-vol conditions
+            // In production: cap at 7% where we know we can hit TP reliably
+            double vol_ceiling = config.learning_mode ? LEARNING_MAX_VOL : MAX_VOL_THRESHOLD;
+            if (result.volatility_pct > vol_ceiling) {
+                static int chaotic_skip_count = 0;
+                if (++chaotic_skip_count % 50 == 1) {
+                    std::cout << "  [SKIP] " << pair << " volatility " << result.volatility_pct 
+                              << "% > " << vol_ceiling << "% (too chaotic)" << std::endl;
+                }
+                return result;  // Skip this pair
+            }
             
             if (result.volatility_pct > HIGH_VOL_THRESHOLD) {
                 result.regime = MarketRegime::VOLATILE;

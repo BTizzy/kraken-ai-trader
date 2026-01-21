@@ -1370,14 +1370,16 @@ LearningEngine::TechnicalSignals LearningEngine::calculate_signals(
     }
     
     // NEW: Calculate Ichimoku Cloud indicators
-    // Note: We need highs and lows, but we only have closing prices
-    // As a workaround, we'll use close prices +/- a small percentage to estimate
-    // In a real implementation, we'd need actual OHLC data
+    // LIMITATION: We need highs and lows, but we only have closing prices in price history
+    // As a workaround, we estimate high/low using a small percentage deviation from close
+    // This approximation is reasonable for stable markets but may be less accurate during high volatility
+    // For production use, consider storing actual OHLC data in price_history
     if (prices.size() >= 52) {
+        const double HIGH_LOW_ESTIMATE_PCT = 0.001;  // 0.1% deviation for high/low estimation
         std::vector<double> highs, lows;
         for (double price : prices) {
-            highs.push_back(price * 1.001);  // Estimate high as 0.1% above close
-            lows.push_back(price * 0.999);   // Estimate low as 0.1% below close
+            highs.push_back(price * (1.0 + HIGH_LOW_ESTIMATE_PCT));
+            lows.push_back(price * (1.0 - HIGH_LOW_ESTIMATE_PCT));
         }
         auto [tenkan, kijun, span_a, span_b, chikou] = calculate_ichimoku(highs, lows, prices);
         signals.tenkan_sen = tenkan;

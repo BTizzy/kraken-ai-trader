@@ -389,11 +389,12 @@ public:
         
         // Senkou Span B (Leading Span B): (52-period high + 52-period low) / 2
         // Projected 26 periods ahead
-        double senkou_high = bars[0].high;
-        double senkou_low = bars[0].low;
-        for (size_t i = 0; i < std::min((size_t)52, bars.size()); i++) {
-            senkou_high = std::max(senkou_high, bars[bars.size() - 52 + i].high);
-            senkou_low = std::min(senkou_low, bars[bars.size() - 52 + i].low);
+        size_t senkou_start = bars.size() >= 52 ? bars.size() - 52 : 0;
+        double senkou_high = bars[senkou_start].high;
+        double senkou_low = bars[senkou_start].low;
+        for (size_t i = senkou_start; i < bars.size(); i++) {
+            senkou_high = std::max(senkou_high, bars[i].high);
+            senkou_low = std::min(senkou_low, bars[i].low);
         }
         double senkou_span_b = (senkou_high + senkou_low) / 2.0;
         

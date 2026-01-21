@@ -613,9 +613,14 @@ json LearningEngine::analyze_patterns_by_regime() const {
     }
     
     // Analyze each regime
+    // Regime codes match main.cpp MarketRegime enum to database integer mapping:
+    // RANGING(0), TRENDING(1=up/-1=down), VOLATILE(2), QUIET(-2)
     const std::map<int, std::string> regime_names = {
-        {-2, "quiet"}, {-1, "downtrend"}, {0, "ranging"}, 
-        {1, "uptrend"}, {2, "volatile"}
+        {-2, "quiet"},      // MarketRegime::QUIET
+        {-1, "downtrend"},  // MarketRegime::TRENDING (bearish)
+        {0, "ranging"},     // MarketRegime::RANGING (default)
+        {1, "uptrend"},     // MarketRegime::TRENDING (bullish)
+        {2, "volatile"}     // MarketRegime::VOLATILE
     };
     
     for (const auto& [regime_code, trades] : regime_trades) {

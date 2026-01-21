@@ -350,7 +350,10 @@ public:
     }
     
     // Calculate ADX (Average Directional Index) for trend strength
-    // Returns: ADX value (0-100, where >25 indicates trending, <20 indicates ranging)
+    // NOTE: This is a simplified DX calculation (single period)
+    // Full ADX requires smoothing historical DX values, which would need state tracking
+    // DX serves as a good approximation: >25 = trending, <20 = ranging
+    // Returns: DX value (0-100, approximates ADX for single-period use)
     static double calculate_adx(const std::deque<PriceBar>& bars, int period = 14) {
         if (bars.size() < (size_t)period + 1) return 0.0;
         
@@ -397,14 +400,15 @@ public:
         double plus_di = (smoothed_tr != 0) ? (smoothed_plus_dm / smoothed_tr) * 100.0 : 0.0;
         double minus_di = (smoothed_tr != 0) ? (smoothed_minus_dm / smoothed_tr) * 100.0 : 0.0;
         
-        // Calculate DX
+        // Calculate DX (Directional Index)
         double dx = 0.0;
         if (plus_di + minus_di != 0) {
             dx = (std::abs(plus_di - minus_di) / (plus_di + minus_di)) * 100.0;
         }
         
-        // ADX is the smoothed average of DX
-        // For simplicity, return DX as approximation (full ADX needs historical DX values)
+        // Return DX as ADX approximation
+        // For full ADX, we would need to smooth DX values over the period
+        // DX is sufficient for regime detection (same thresholds apply)
         return dx;
     }
 };
@@ -1410,11 +1414,17 @@ int main(int argc, char* argv[]) {
             std::cout << "  trailing_start_pct: " << config.trailing_start_pct << "%" << std::endl;
             std::cout << "  trailing_stop_pct: " << config.trailing_stop_pct << "%" << std::endl;
             std::cout << "  regime_filter: ";
-            if (config.allow_volatile_regime) std::cout << "VOLATILE ";
-            if (config.allow_trending_regime) std::cout << "TRENDING ";
-            if (config.allow_ranging_regime) std::cout << "RANGING ";
-            if (config.allow_quiet_regime) std::cout << "QUIET";
-            std::cout << "(others blocked)" << std::endl;
+            bool any_allowed = false;
+            if (config.allow_volatile_regime) { std::cout << "VOLATILE "; any_allowed = true; }
+            if (config.allow_trending_regime) { std::cout << "TRENDING "; any_allowed = true; }
+            if (config.allow_ranging_regime) { std::cout << "RANGING "; any_allowed = true; }
+            if (config.allow_quiet_regime) { std::cout << "QUIET "; any_allowed = true; }
+            if (any_allowed) {
+                std::cout << "(others blocked)";
+            } else {
+                std::cout << "NONE (all regimes blocked!)";
+            }
+            std::cout << std::endl;
             if (!config.blacklisted_pairs.empty()) {
                 std::cout << "  blacklisted_pairs: " << config.blacklisted_pairs.size() << " pairs (";
                 int count = 0;

@@ -616,7 +616,7 @@ private:
             result.chikou_span = chikou;
             
             // Log Ichimoku values for verification
-            std::cout << "  📊 Ichimoku for " << pair << ": Tenkan=" << std::fixed << std::setprecision(2) 
+            std::cout << "  📊 Ichimoku for " << result.pair << ": Tenkan=" << std::fixed << std::setprecision(2) 
                       << tenkan << ", Kijun=" << kijun << ", Span A=" << span_a 
                       << ", Span B=" << span_b << std::endl;
         }

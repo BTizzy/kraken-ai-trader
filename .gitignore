@@ -23,4 +23,3 @@ localStorage.json
 node_modules/
 
 # SQLite database (too large, regenerate with migrate script)
-data/trades.db

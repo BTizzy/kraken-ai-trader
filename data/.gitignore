@@ -1,0 +1,3 @@
+# SQLite WAL mode files (auto-generated, not needed in repo)
+*.db-shm
+*.db-wal

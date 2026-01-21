@@ -33,3 +33,4 @@ bot/build/kraken_bot
 bot/build/*.o
 bot/build/*.d
 bot/build/*.json
+bot/test_validation

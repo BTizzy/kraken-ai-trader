@@ -1,6 +1,10 @@
 # Kraken AI Trader - Improvement Roadmap V7
+
+> **NOTE:** This document provides historical and technical context. For the most current architecture, operational, and strategy information, always check `Must_read_before_any_agent_task.md`.
+
 **Created**: January 20, 2026
-**Status**: SQLite is single source of truth, regime filter active, learning operational
+**Updated**: January 22, 2026
+**Status**: SQLite is single source of truth, regime filter active, learning operational, MARKET ANALYSIS COMPLETE - realistic targets applied
 
 ---
 
@@ -25,6 +29,9 @@
 | JSON save calls removed | No more trade_log.json writes from C++ |
 | Dashboard start button removed | Prevents server crashes from rogue spawns |
 | Bot/start endpoint disabled | Returns 403 - must use terminal |
+| **VOLATILE TP/SL Fixed** | **Reverted to fixed 1.5% TP / 0.6% SL for all VOLATILE regime** - eliminates timeouts causing losing streak |
+| **MARKET ANALYSIS COMPLETE** | **Root cause: 1.5% TP impossible in 3min - markets barely move!** |
+| **REALISTIC TARGETS APPLIED** | **TP: 0.5%, SL: 0.3%, Hold: 15min - matches actual market movement** |
 
 ---
 
@@ -132,6 +139,7 @@ CREATE TABLE trades (
 - [x] Regime filter blocking RANGING/TRENDING
 - [x] Dashboard start button removed
 - [x] Bot/start API endpoint disabled
+- [x] **High-Frequency Price Collection**: 360x data improvement (1,800+ points/hour vs 5) with real-time technical analysis
 - [ ] Monitor new trades for regime=2 (VOLATILE) only
 - [ ] Verify 50%+ win rate on filtered trades
 

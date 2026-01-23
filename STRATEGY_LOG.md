@@ -1,6 +1,23 @@
 # Scalper Strategy Evolution Log
 
+> **NOTE:** This document provides historical and technical context. For the most current architecture, operational, and strategy information, always check `Must_read_before_any_agent_task.md`.
+
 This document tracks all strategy iterations, test results, and learnings to prevent regression.
+
+---
+
+## 🚀 Major System Upgrade: High-Frequency Price Collection (January 22, 2026)
+
+**360x Data Improvement Implemented:**
+- **Before**: 15-minute OHLC candles = 5 data points/hour
+- **After**: Real-time ticker data every 2 seconds = 1,800+ data points/hour
+- **Impact**: Technical indicators now calculated from live price streams instead of coarse historical candles
+- **Components**: 
+  - `lib/price_data_collector.js`: High-frequency collection with SQLite storage
+  - `/api/prices/` endpoint: REST API for real-time price data
+  - Rolling buffers: 1,000 data points per pair for immediate analysis
+- **Technical Analysis**: RSI, MACD, SMA, EMA, ATR, Bollinger Bands now use 360x more data
+- **Expected Outcome**: Much more responsive trading decisions and improved profitability
 
 ---
 

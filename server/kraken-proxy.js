@@ -1,37 +1,83 @@
 // Minimal Kraken WebSocket/REST proxy for secure wallet and price feed
 // Usage: KRAKEN_API_KEY=yourkey KRAKEN_API_SECRET=yoursecret node server/kraken-proxy.js
 
+console.log('Server starting - loading kraken-proxy.js');
+
 const express = require('express');
-const fetch = require('node-fetch');
+const https = require('https');
 const WebSocket = require('ws');
+const path = require('path');
 require('dotenv').config();
+
+console.log('All modules loaded, setting up app...');
 
 const app = express();
 const PORT = process.env.PORT || 3002;
 
-// REST endpoints
-app.get('/public/assetpairs', async (req, res) => {
-    const r = await fetch('https://api.kraken.com/0/public/AssetPairs');
-    res.json(await r.json());
+console.log('App created, loading sqlite-utils...');
+
+// SQLite utilities for bot status and trades
+const { getRecentTrades, getBotStatus } = require('./sqlite-utils');
+
+// High-frequency price data collector
+let priceCollector;
+
+// High-frequency price data endpoint for bot
+app.get('/api/prices/:pair', async (req, res) => {
+    const pair = req.params.pair;
+    const maxPoints = parseInt(req.query.limit) || 100;
+
+    console.log(`Price data endpoint called for ${pair}, limit: ${maxPoints}`);
+
+    try {
+        const priceData = priceCollector.getPriceData(pair, maxPoints);
+        console.log(`Returning ${priceData.prices.length} price points for ${pair}`);
+        res.json(priceData);
+    } catch (error) {
+        console.error('Error fetching price data:', error);
+        res.status(500).json({ error: 'Failed to fetch price data', details: error.message });
+    }
 });
 
-app.get('/public/depth', async (req, res) => {
-    const pair = req.query.pair;
-    const r = await fetch(`https://api.kraken.com/0/public/Depth?pair=${pair}`);
-    res.json(await r.json());
-});
-
-// Private balance endpoint (requires API keys)
-app.get('/private/balance', async (req, res) => {
-    // TODO: Implement Kraken private API signing
-    res.status(501).json({ error: 'Not implemented. Add API key/secret logic.' });
-});
-
-// WebSocket proxy (for browser clients)
-app.get('/ws', (req, res) => {
-    res.send('WebSocket endpoint. Connect using wss://ws.kraken.com');
-});
+console.log('About to call app.listen...');
 
 app.listen(PORT, () => {
-    console.log(`Kraken proxy listening on http://localhost:${PORT}`);
+    console.log('=== APP.LISTEN CALLBACK STARTED ===');
+    console.log(`Kraken proxy server running on port ${PORT}`);
+    console.log('WebSocket server available at ws://localhost:3002');
+
+    // Initialize high-frequency price data collector AFTER server starts
+    console.log('About to initialize price data collector...');
+    console.log('About to require price_data_collector...');
+    try {
+        const priceCollectorPath = path.join(__dirname, '..', 'lib', 'price_data_collector');
+        console.log('Loading PriceDataCollector from:', priceCollectorPath);
+        const PriceDataCollector = require(priceCollectorPath);
+        console.log('Require successful, about to create instance...');
+        priceCollector = new PriceDataCollector();
+        console.log('Price data collector created successfully');
+    } catch (error) {
+        console.error('Failed to create price data collector:', error.message);
+        console.error('Stack trace:', error.stack);
+    }
+    console.log('Finished initializing price data collector');
+    console.log('=== APP.LISTEN CALLBACK ENDED ===');
+}).on('error', (err) => {
+    console.error('Server failed to start:', err);
+});
+
+// Keep the process alive
+console.log('Setting up keep-alive interval...');
+setInterval(() => {
+    console.log('Server is alive at', new Date().toISOString());
+}, 5000);
+
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught exception:', err);
+    process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled rejection at:', promise, 'reason:', reason);
+    process.exit(1);
 });

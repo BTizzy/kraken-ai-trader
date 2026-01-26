@@ -67,19 +67,46 @@ void LearningEngine::init_database(const std::string& db_path) {
         CREATE INDEX IF NOT EXISTS idx_trades_timestamp ON trades(timestamp);
         CREATE INDEX IF NOT EXISTS idx_trades_pair ON trades(pair);
         CREATE INDEX IF NOT EXISTS idx_trades_regime ON trades(market_regime);
+        
+        CREATE TABLE IF NOT EXISTS learned_patterns (
+            pattern_key TEXT PRIMARY KEY,
+            pair TEXT NOT NULL,
+            leverage REAL NOT NULL,
+            timeframe_bucket INTEGER NOT NULL,
+            total_trades INTEGER NOT NULL DEFAULT 0 CHECK(total_trades >= 0),
+            winning_trades INTEGER NOT NULL DEFAULT 0 CHECK(winning_trades >= 0),
+            losing_trades INTEGER NOT NULL DEFAULT 0 CHECK(losing_trades >= 0),
+            total_pnl REAL DEFAULT 0.0,
+            total_fees REAL DEFAULT 0.0,
+            avg_win REAL DEFAULT 0.0 CHECK(avg_win >= 0),
+            avg_loss REAL DEFAULT 0.0 CHECK(avg_loss >= 0),
+            max_drawdown REAL DEFAULT 0.0,
+            sharpe_ratio REAL DEFAULT 0.0,
+            sortino_ratio REAL DEFAULT 0.0,
+            win_rate REAL DEFAULT 0.0 CHECK(win_rate >= 0 AND win_rate <= 1),
+            profit_factor REAL DEFAULT 0.0 CHECK(profit_factor >= 0),
+            confidence_score REAL DEFAULT 0.0 CHECK(confidence_score >= 0 AND confidence_score <= 1),
+            has_edge INTEGER DEFAULT 0 CHECK(has_edge IN (0, 1)),
+            edge_percentage REAL DEFAULT 0.0,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_patterns_pair ON learned_patterns(pair);
+        CREATE INDEX IF NOT EXISTS idx_patterns_edge ON learned_patterns(has_edge);
+        CREATE INDEX IF NOT EXISTS idx_patterns_confidence ON learned_patterns(confidence_score);
     )";
     
     char* err_msg = nullptr;
     rc = sqlite3_exec(db_, create_table_sql, nullptr, nullptr, &err_msg);
     if (rc != SQLITE_OK) {
-        std::cerr << "❌ Failed to create trades table: " << err_msg << std::endl;
+        std::cerr << "❌ Failed to create database tables: " << err_msg << std::endl;
         sqlite3_free(err_msg);
     } else {
         std::cout << "✅ SQLite database initialized: " << db_path << std::endl;
     }
     
-    // Load existing trades from database
+    // Load existing trades and patterns from database
     load_trades_from_db();
+    load_patterns_from_db();
 }
 
 void LearningEngine::save_trade_to_db(const TradeRecord& trade) {
@@ -398,6 +425,12 @@ void LearningEngine::analyze_patterns() {
         
         pattern_database[pattern_key] = metrics;
         
+        // NEW: Cross-validation for patterns with enough samples
+        if (trades.size() >= static_cast<size_t>(MIN_TRADES_FOR_VALIDATION)) {
+            ValidationMetrics validation = cross_validate_pattern(trades, CROSS_VAL_TRAIN_RATIO);
+            log_validation_metrics(pattern_key, validation);
+        }
+        
         // Print
         if (metrics.winning_trades > 0 || metrics.losing_trades > 0) {
             std::cout << "  📈 " << pattern_key
@@ -427,6 +460,9 @@ void LearningEngine::analyze_patterns() {
     
     // 8. SAVE PATTERN DATABASE FOR API ACCESS
     save_pattern_database_to_file("pattern_database.json");
+    
+    // 9. NEW: PERSIST PATTERNS TO SQLITE
+    save_patterns_to_db();
 }
 
 std::string LearningEngine::generate_pattern_key(const std::string& pair, const std::string& direction, double leverage, int timeframe) const {
@@ -1398,4 +1434,221 @@ void LearningEngine::analyze_indicator_patterns() {
             }
         }
     }
+}
+
+// ==============================================================================
+// NEW: PATTERN PERSISTENCE IN SQLITE
+// ==============================================================================
+
+void LearningEngine::save_patterns_to_db() {
+    if (!db_) {
+        std::cerr << "⚠️ Database not initialized, cannot save patterns" << std::endl;
+        return;
+    }
+    
+    const char* insert_sql = R"(
+        INSERT OR REPLACE INTO learned_patterns (
+            pattern_key, pair, leverage, timeframe_bucket,
+            total_trades, winning_trades, losing_trades,
+            total_pnl, total_fees, avg_win, avg_loss,
+            max_drawdown, sharpe_ratio, sortino_ratio,
+            win_rate, profit_factor, confidence_score,
+            has_edge, edge_percentage, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    )";
+    
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(db_, insert_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "❌ Failed to prepare pattern insert statement: " << sqlite3_errmsg(db_) << std::endl;
+        return;
+    }
+    
+    int saved_count = 0;
+    
+    for (const auto& [pattern_key, metrics] : pattern_database) {
+        // Reset the statement for reuse
+        sqlite3_reset(stmt);
+        sqlite3_clear_bindings(stmt);
+        
+        sqlite3_bind_text(stmt, 1, pattern_key.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 2, metrics.pair.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_double(stmt, 3, metrics.leverage);
+        sqlite3_bind_int(stmt, 4, metrics.timeframe_bucket);
+        sqlite3_bind_int(stmt, 5, metrics.total_trades);
+        sqlite3_bind_int(stmt, 6, metrics.winning_trades);
+        sqlite3_bind_int(stmt, 7, metrics.losing_trades);
+        sqlite3_bind_double(stmt, 8, metrics.total_pnl);
+        sqlite3_bind_double(stmt, 9, metrics.total_fees);
+        sqlite3_bind_double(stmt, 10, metrics.avg_win);
+        sqlite3_bind_double(stmt, 11, metrics.avg_loss);
+        sqlite3_bind_double(stmt, 12, metrics.max_drawdown);
+        sqlite3_bind_double(stmt, 13, metrics.sharpe_ratio);
+        sqlite3_bind_double(stmt, 14, metrics.sortino_ratio);
+        sqlite3_bind_double(stmt, 15, metrics.win_rate);
+        sqlite3_bind_double(stmt, 16, metrics.profit_factor);
+        sqlite3_bind_double(stmt, 17, metrics.confidence_score);
+        sqlite3_bind_int(stmt, 18, metrics.has_edge ? 1 : 0);
+        sqlite3_bind_double(stmt, 19, metrics.edge_percentage);
+        
+        rc = sqlite3_step(stmt);
+        if (rc == SQLITE_DONE) {
+            saved_count++;
+        } else {
+            std::cerr << "⚠️ Failed to save pattern " << pattern_key << ": " 
+                      << sqlite3_errmsg(db_) << std::endl;
+        }
+    }
+    
+    sqlite3_finalize(stmt);
+    std::cout << "💾 Saved " << saved_count << " learned patterns to SQLite" << std::endl;
+}
+
+void LearningEngine::load_patterns_from_db() {
+    if (!db_) {
+        std::cerr << "⚠️ Database not initialized, cannot load patterns" << std::endl;
+        return;
+    }
+    
+    const char* select_sql = "SELECT * FROM learned_patterns";
+    sqlite3_stmt* stmt;
+    
+    int rc = sqlite3_prepare_v2(db_, select_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        // Table might not exist yet (first run)
+        return;
+    }
+    
+    int loaded_count = 0;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        PatternMetrics metrics;
+        
+        const char* pattern_key_cstr = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        std::string pattern_key = pattern_key_cstr ? pattern_key_cstr : "";
+        
+        const char* pair_cstr = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+        metrics.pair = pair_cstr ? pair_cstr : "";
+        
+        metrics.leverage = sqlite3_column_double(stmt, 2);
+        metrics.timeframe_bucket = sqlite3_column_int(stmt, 3);
+        metrics.total_trades = sqlite3_column_int(stmt, 4);
+        metrics.winning_trades = sqlite3_column_int(stmt, 5);
+        metrics.losing_trades = sqlite3_column_int(stmt, 6);
+        metrics.total_pnl = sqlite3_column_double(stmt, 7);
+        metrics.total_fees = sqlite3_column_double(stmt, 8);
+        metrics.avg_win = sqlite3_column_double(stmt, 9);
+        metrics.avg_loss = sqlite3_column_double(stmt, 10);
+        metrics.max_drawdown = sqlite3_column_double(stmt, 11);
+        metrics.sharpe_ratio = sqlite3_column_double(stmt, 12);
+        metrics.sortino_ratio = sqlite3_column_double(stmt, 13);
+        metrics.win_rate = sqlite3_column_double(stmt, 14);
+        metrics.profit_factor = sqlite3_column_double(stmt, 15);
+        metrics.confidence_score = sqlite3_column_double(stmt, 16);
+        metrics.has_edge = sqlite3_column_int(stmt, 17) == 1;
+        metrics.edge_percentage = sqlite3_column_double(stmt, 18);
+        
+        pattern_database[pattern_key] = metrics;
+        loaded_count++;
+    }
+    
+    sqlite3_finalize(stmt);
+    
+    if (loaded_count > 0) {
+        std::cout << "📂 Loaded " << loaded_count << " learned patterns from SQLite" << std::endl;
+    }
+}
+
+// ==============================================================================
+// NEW: CROSS-VALIDATION TO PREVENT OVERFITTING
+// ==============================================================================
+
+LearningEngine::ValidationMetrics LearningEngine::cross_validate_pattern(
+    const std::vector<TradeRecord>& trades, double train_ratio) const {
+    
+    ValidationMetrics metrics;
+    
+    // Need at least MIN_TRADES_FOR_VALIDATION trades for meaningful cross-validation
+    if (trades.size() < static_cast<size_t>(MIN_TRADES_FOR_VALIDATION)) {
+        return metrics;
+    }
+    
+    // Split into train and test sets (CROSS_VAL_TRAIN_RATIO by default)
+    int train_size = static_cast<int>(trades.size() * train_ratio);
+    std::vector<TradeRecord> train_trades(trades.begin(), trades.begin() + train_size);
+    std::vector<TradeRecord> test_trades(trades.begin() + train_size, trades.end());
+    
+    metrics.train_count = train_trades.size();
+    metrics.test_count = test_trades.size();
+    
+    // Calculate train metrics
+    std::vector<double> train_returns;
+    int train_wins = 0;
+    double train_gross_wins = 0, train_gross_losses = 0;
+    
+    for (const auto& t : train_trades) {
+        train_returns.push_back(t.roi());
+        if (t.is_win()) {
+            train_wins++;
+            train_gross_wins += t.gross_pnl;
+        } else {
+            train_gross_losses += std::abs(t.gross_pnl);
+        }
+    }
+    
+    metrics.train_win_rate = (double)train_wins / train_trades.size();
+    metrics.train_sharpe = calculate_sharpe_ratio(train_returns);
+    metrics.train_profit_factor = train_gross_losses > 0 ? 
+        train_gross_wins / train_gross_losses : train_gross_wins;
+    
+    // Calculate test metrics
+    std::vector<double> test_returns;
+    int test_wins = 0;
+    double test_gross_wins = 0, test_gross_losses = 0;
+    
+    for (const auto& t : test_trades) {
+        test_returns.push_back(t.roi());
+        if (t.is_win()) {
+            test_wins++;
+            test_gross_wins += t.gross_pnl;
+        } else {
+            test_gross_losses += std::abs(t.gross_pnl);
+        }
+    }
+    
+    metrics.test_win_rate = test_trades.size() > 0 ? 
+        (double)test_wins / test_trades.size() : 0;
+    metrics.test_sharpe = calculate_sharpe_ratio(test_returns);
+    metrics.test_profit_factor = test_gross_losses > 0 ? 
+        test_gross_wins / test_gross_losses : test_gross_wins;
+    
+    // Detect overfitting: test performance significantly worse than train
+    double win_rate_drop = metrics.train_win_rate - metrics.test_win_rate;
+    double sharpe_ratio = metrics.train_sharpe > 0 ? 
+        metrics.test_sharpe / metrics.train_sharpe : 0;
+    
+    metrics.is_overfit = (win_rate_drop > OVERFIT_WINRATE_DROP_THRESHOLD) || 
+                         (metrics.train_sharpe > MIN_TRAIN_SHARPE_FOR_OVERFIT_CHECK && 
+                          sharpe_ratio < OVERFIT_SHARPE_RATIO_THRESHOLD);
+    
+    return metrics;
+}
+
+void LearningEngine::log_validation_metrics(const std::string& pattern_key, 
+                                              const ValidationMetrics& metrics) const {
+    std::cout << "  🔍 Cross-Validation [" << pattern_key << "]:" << std::endl;
+    std::cout << "     Train (" << metrics.train_count << " trades): "
+              << "WR=" << std::fixed << std::setprecision(1) << metrics.train_win_rate * 100 << "%, "
+              << "Sharpe=" << std::setprecision(2) << metrics.train_sharpe << ", "
+              << "P/F=" << std::setprecision(2) << metrics.train_profit_factor << std::endl;
+    std::cout << "     Test  (" << metrics.test_count << " trades): "
+              << "WR=" << std::fixed << std::setprecision(1) << metrics.test_win_rate * 100 << "%, "
+              << "Sharpe=" << std::setprecision(2) << metrics.test_sharpe << ", "
+              << "P/F=" << std::setprecision(2) << metrics.test_profit_factor;
+    
+    if (metrics.is_overfit) {
+        std::cout << " ⚠️ OVERFIT WARNING";
+    } else {
+        std::cout << " ✅ Validated";
+    }
+    std::cout << std::endl;
 }

@@ -247,6 +247,13 @@ private:
     const double MIN_WIN_RATE_FOR_TRADE = 0.45;  // Must be > 45% to trade
     const double OUTLIER_THRESHOLD = 2.5;  // 2.5 std devs
     
+    // NEW: Cross-validation configuration
+    const int MIN_TRADES_FOR_VALIDATION = 10;  // Minimum trades for cross-validation
+    const double CROSS_VAL_TRAIN_RATIO = 0.8;  // 80/20 train/test split
+    const double OVERFIT_WINRATE_DROP_THRESHOLD = 0.20;  // Flag if test WR drops >20%
+    const double OVERFIT_SHARPE_RATIO_THRESHOLD = 0.5;   // Flag if test Sharpe <50% of train
+    const double MIN_TRAIN_SHARPE_FOR_OVERFIT_CHECK = 0.5;  // Only check Sharpe overfitting if train Sharpe > this
+    
     // SQLite database (single source of truth)
     sqlite3* db_ = nullptr;
     std::string db_path_;
@@ -256,4 +263,25 @@ private:
     void save_trade_to_db(const TradeRecord& trade);
     void load_trades_from_db();
     int get_db_trade_count() const;
+    
+    // NEW: Pattern persistence in SQLite
+    void save_patterns_to_db();
+    void load_patterns_from_db();
+    
+    // NEW: Cross-validation for preventing overfitting
+    struct ValidationMetrics {
+        double train_win_rate = 0;
+        double test_win_rate = 0;
+        double train_sharpe = 0;
+        double test_sharpe = 0;
+        double train_profit_factor = 0;
+        double test_profit_factor = 0;
+        int train_count = 0;
+        int test_count = 0;
+        bool is_overfit = false;  // True if test performance << train performance
+    };
+    
+    ValidationMetrics cross_validate_pattern(const std::vector<TradeRecord>& trades, 
+                                              double train_ratio = 0.8) const;
+    void log_validation_metrics(const std::string& pattern_key, const ValidationMetrics& metrics) const;
 };

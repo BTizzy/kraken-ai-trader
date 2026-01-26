@@ -23,3 +23,14 @@ localStorage.json
 node_modules/
 
 # SQLite database (too large, regenerate with migrate script)
+
+# C++ build artifacts
+bot/build/CMakeCache.txt
+bot/build/CMakeFiles/
+bot/build/Makefile
+bot/build/cmake_install.cmake
+bot/build/kraken_bot
+bot/build/*.o
+bot/build/*.d
+bot/build/*.json
+bot/test_validation

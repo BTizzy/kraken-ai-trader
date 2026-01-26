@@ -78,6 +78,29 @@ void LearningEngine::init_database(const std::string& db_path) {
         std::cout << "✅ SQLite database initialized: " << db_path << std::endl;
     }
     
+    // Add new columns for OBV and Ichimoku indicators (safe for existing databases)
+    const char* add_columns_sql[] = {
+        "ALTER TABLE trades ADD COLUMN obv REAL DEFAULT 0.0;",
+        "ALTER TABLE trades ADD COLUMN tenkan_sen REAL DEFAULT 0.0;",
+        "ALTER TABLE trades ADD COLUMN kijun_sen REAL DEFAULT 0.0;",
+        "ALTER TABLE trades ADD COLUMN senkou_span_a REAL DEFAULT 0.0;",
+        "ALTER TABLE trades ADD COLUMN senkou_span_b REAL DEFAULT 0.0;",
+        "ALTER TABLE trades ADD COLUMN chikou_span REAL DEFAULT 0.0;"
+    };
+    
+    for (const char* sql : add_columns_sql) {
+        rc = sqlite3_exec(db_, sql, nullptr, nullptr, &err_msg);
+        // Ignore errors if column already exists
+        if (rc != SQLITE_OK && err_msg != nullptr) {
+            std::string error_str(err_msg);
+            if (error_str.find("duplicate column") == std::string::npos) {
+                std::cerr << "⚠️ Column migration note: " << error_str << std::endl;
+            }
+            sqlite3_free(err_msg);
+            err_msg = nullptr;
+        }
+    }
+    
     // Load existing trades from database
     load_trades_from_db();
 }
@@ -94,8 +117,9 @@ void LearningEngine::save_trade_to_db(const TradeRecord& trade) {
             pnl, gross_pnl, fees_paid, exit_reason, timestamp, entry_time, hold_time,
             timeframe_seconds, volatility_pct, bid_ask_spread, rsi, macd_histogram,
             macd_signal, bb_position, volume_ratio, momentum_score, atr_pct,
-            market_regime, trend_direction, max_profit, max_loss
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            market_regime, trend_direction, max_profit, max_loss,
+            obv, tenkan_sen, kijun_sen, senkou_span_a, senkou_span_b, chikou_span
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     )";
     
     sqlite3_stmt* stmt;
@@ -136,6 +160,14 @@ void LearningEngine::save_trade_to_db(const TradeRecord& trade) {
     sqlite3_bind_double(stmt, 26, trade.max_profit);
     sqlite3_bind_double(stmt, 27, trade.max_loss);
     
+    // NEW: Bind OBV and Ichimoku indicators
+    sqlite3_bind_double(stmt, 28, trade.obv);
+    sqlite3_bind_double(stmt, 29, trade.tenkan_sen);
+    sqlite3_bind_double(stmt, 30, trade.kijun_sen);
+    sqlite3_bind_double(stmt, 31, trade.senkou_span_a);
+    sqlite3_bind_double(stmt, 32, trade.senkou_span_b);
+    sqlite3_bind_double(stmt, 33, trade.chikou_span);
+    
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
         std::cerr << "❌ Failed to insert trade: " << sqlite3_errmsg(db_) << std::endl;
@@ -157,7 +189,13 @@ void LearningEngine::load_trades_from_db() {
             pnl, gross_pnl, fees_paid, exit_reason, timestamp,
             timeframe_seconds, volatility_pct, bid_ask_spread,
             rsi, macd_histogram, macd_signal, bb_position, volume_ratio,
-            momentum_score, atr_pct, market_regime, trend_direction
+            momentum_score, atr_pct, market_regime, trend_direction,
+            COALESCE(obv, 0.0) as obv,
+            COALESCE(tenkan_sen, 0.0) as tenkan_sen,
+            COALESCE(kijun_sen, 0.0) as kijun_sen,
+            COALESCE(senkou_span_a, 0.0) as senkou_span_a,
+            COALESCE(senkou_span_b, 0.0) as senkou_span_b,
+            COALESCE(chikou_span, 0.0) as chikou_span
         FROM trades ORDER BY timestamp ASC
     )";
     sqlite3_stmt* stmt;
@@ -213,6 +251,14 @@ void LearningEngine::load_trades_from_db() {
         trade.atr_pct = sqlite3_column_double(stmt, 20);
         trade.market_regime = sqlite3_column_int(stmt, 21);
         trade.trend_direction = sqlite3_column_double(stmt, 22);
+        
+        // NEW: Columns 23-28: OBV and Ichimoku indicators
+        trade.obv = sqlite3_column_double(stmt, 23);
+        trade.tenkan_sen = sqlite3_column_double(stmt, 24);
+        trade.kijun_sen = sqlite3_column_double(stmt, 25);
+        trade.senkou_span_a = sqlite3_column_double(stmt, 26);
+        trade.senkou_span_b = sqlite3_column_double(stmt, 27);
+        trade.chikou_span = sqlite3_column_double(stmt, 28);
         
         // Add to in-memory structures (don't use record_trade to avoid re-saving)
         trade_history.push_back(trade);
@@ -841,6 +887,14 @@ void LearningEngine::save_to_file(const std::string& filepath) {
         trade_json["market_regime"] = t.market_regime;
         trade_json["trend_direction"] = t.trend_direction;
         
+        // NEW: OBV and Ichimoku Cloud indicators
+        trade_json["obv"] = t.obv;
+        trade_json["tenkan_sen"] = t.tenkan_sen;
+        trade_json["kijun_sen"] = t.kijun_sen;
+        trade_json["senkou_span_a"] = t.senkou_span_a;
+        trade_json["senkou_span_b"] = t.senkou_span_b;
+        trade_json["chikou_span"] = t.chikou_span;
+        
         // Trade dynamics
         trade_json["max_profit"] = t.max_profit;
         trade_json["max_loss"] = t.max_loss;
@@ -1194,6 +1248,61 @@ double LearningEngine::calculate_atr(const std::vector<double>& highs,
     return calculate_sma(true_ranges, period);
 }
 
+// NEW: Calculate On-Balance Volume (OBV)
+double LearningEngine::calculate_obv(const std::vector<double>& prices, 
+                                      const std::vector<double>& volumes) const {
+    if (prices.size() < 2 || volumes.size() < 2 || prices.size() != volumes.size()) {
+        return 0.0;
+    }
+    
+    double obv = 0.0;
+    for (size_t i = 1; i < prices.size(); i++) {
+        if (prices[i] > prices[i-1]) {
+            obv += volumes[i];
+        } else if (prices[i] < prices[i-1]) {
+            obv -= volumes[i];
+        }
+        // If price == prev price, OBV stays the same
+    }
+    return obv;
+}
+
+// NEW: Calculate Ichimoku Cloud components
+// Returns: {tenkan_sen, kijun_sen, senkou_span_a, senkou_span_b, chikou_span}
+std::tuple<double, double, double, double, double> LearningEngine::calculate_ichimoku(
+    const std::vector<double>& highs, const std::vector<double>& lows, 
+    const std::vector<double>& closes) const {
+    
+    if (highs.size() < 52 || lows.size() < 52 || closes.size() < 52) {
+        // Not enough data for full Ichimoku calculation
+        double price = closes.empty() ? 0.0 : closes.back();
+        return {price, price, price, price, price};
+    }
+    
+    // Tenkan-sen (Conversion Line): (9-period high + 9-period low) / 2
+    double tenkan_high = *std::max_element(highs.end() - 9, highs.end());
+    double tenkan_low = *std::min_element(lows.end() - 9, lows.end());
+    double tenkan_sen = (tenkan_high + tenkan_low) / 2.0;
+    
+    // Kijun-sen (Base Line): (26-period high + 26-period low) / 2
+    double kijun_high = *std::max_element(highs.end() - 26, highs.end());
+    double kijun_low = *std::min_element(lows.end() - 26, lows.end());
+    double kijun_sen = (kijun_high + kijun_low) / 2.0;
+    
+    // Senkou Span A (Leading Span A): (Tenkan-sen + Kijun-sen) / 2
+    double senkou_span_a = (tenkan_sen + kijun_sen) / 2.0;
+    
+    // Senkou Span B (Leading Span B): (52-period high + 52-period low) / 2
+    double senkou_high = *std::max_element(highs.end() - 52, highs.end());
+    double senkou_low = *std::min_element(lows.end() - 52, lows.end());
+    double senkou_span_b = (senkou_high + senkou_low) / 2.0;
+    
+    // Chikou Span (Lagging Span): Current closing price
+    double chikou_span = closes.back();
+    
+    return {tenkan_sen, kijun_sen, senkou_span_a, senkou_span_b, chikou_span};
+}
+
 LearningEngine::TechnicalSignals LearningEngine::calculate_signals(
     const std::vector<double>& prices,
     const std::vector<double>& volumes,
@@ -1255,6 +1364,31 @@ LearningEngine::TechnicalSignals LearningEngine::calculate_signals(
     signals.composite_score = (signals.momentum_score + signals.order_flow_imbalance) / 2;
     signals.composite_score = std::max(-1.0, std::min(1.0, signals.composite_score));
     
+    // NEW: Calculate OBV (On-Balance Volume)
+    if (prices.size() >= 2 && volumes.size() >= 2) {
+        signals.obv = calculate_obv(prices, volumes);
+    }
+    
+    // NEW: Calculate Ichimoku Cloud indicators
+    // LIMITATION: We need highs and lows, but we only have closing prices in price history
+    // As a workaround, we estimate high/low using a small percentage deviation from close
+    // This approximation is reasonable for stable markets but may be less accurate during high volatility
+    // For production use, consider storing actual OHLC data in price_history
+    if (prices.size() >= 52) {
+        const double HIGH_LOW_ESTIMATE_PCT = 0.001;  // 0.1% deviation for high/low estimation
+        std::vector<double> highs, lows;
+        for (double price : prices) {
+            highs.push_back(price * (1.0 + HIGH_LOW_ESTIMATE_PCT));
+            lows.push_back(price * (1.0 - HIGH_LOW_ESTIMATE_PCT));
+        }
+        auto [tenkan, kijun, span_a, span_b, chikou] = calculate_ichimoku(highs, lows, prices);
+        signals.tenkan_sen = tenkan;
+        signals.kijun_sen = kijun;
+        signals.senkou_span_a = span_a;
+        signals.senkou_span_b = span_b;
+        signals.chikou_span = chikou;
+    }
+    
     return signals;
 }
 
@@ -1288,6 +1422,11 @@ json LearningEngine::analyze_indicator_effectiveness() const {
         {"near_lower", {}}, {"middle", {}}, {"near_upper", {}}
     };
     
+    // NEW: Ichimoku cloud position buckets
+    std::map<std::string, IndicatorBucket> ichimoku_buckets = {
+        {"above_cloud", {}}, {"in_cloud", {}}, {"below_cloud", {}}
+    };
+    
     for (const auto& trade : trade_history) {
         // RSI analysis
         std::string rsi_bucket = trade.rsi < 30 ? "oversold" : 
@@ -1308,6 +1447,26 @@ json LearningEngine::analyze_indicator_effectiveness() const {
         bb_buckets[bb_bucket].count++;
         if (trade.is_win()) bb_buckets[bb_bucket].wins++;
         bb_buckets[bb_bucket].avg_pnl += trade.pnl;
+        
+        // NEW: Ichimoku cloud position analysis
+        // Compare entry price to cloud (senkou span A and B)
+        if (trade.senkou_span_a != 0.0 || trade.senkou_span_b != 0.0) {
+            double cloud_top = std::max(trade.senkou_span_a, trade.senkou_span_b);
+            double cloud_bottom = std::min(trade.senkou_span_a, trade.senkou_span_b);
+            std::string ichimoku_bucket;
+            
+            if (trade.entry_price > cloud_top) {
+                ichimoku_bucket = "above_cloud";
+            } else if (trade.entry_price < cloud_bottom) {
+                ichimoku_bucket = "below_cloud";
+            } else {
+                ichimoku_bucket = "in_cloud";
+            }
+            
+            ichimoku_buckets[ichimoku_bucket].count++;
+            if (trade.is_win()) ichimoku_buckets[ichimoku_bucket].wins++;
+            ichimoku_buckets[ichimoku_bucket].avg_pnl += trade.pnl;
+        }
     }
     
     // Build results
@@ -1340,6 +1499,17 @@ json LearningEngine::analyze_indicator_effectiveness() const {
         }
     }
     results["bollinger_bands"] = bb_results;
+    
+    // NEW: Ichimoku cloud results
+    json ichimoku_results;
+    for (auto& [bucket, data] : ichimoku_buckets) {
+        if (data.count > 0) {
+            ichimoku_results[bucket]["count"] = data.count;
+            ichimoku_results[bucket]["win_rate"] = (double)data.wins / data.count * 100;
+            ichimoku_results[bucket]["avg_pnl"] = data.avg_pnl / data.count;
+        }
+    }
+    results["ichimoku_cloud"] = ichimoku_results;
     
     return results;
 }
@@ -1388,6 +1558,21 @@ void LearningEngine::analyze_indicator_patterns() {
     if (results.contains("bollinger_bands")) {
         std::cout << "  Bollinger Bands:" << std::endl;
         for (auto& [bucket, data] : results["bollinger_bands"].items()) {
+            if (data.contains("count") && data["count"].get<int>() > 0) {
+                std::cout << "    " << bucket << ": " 
+                          << data["count"] << " trades, "
+                          << std::fixed << std::setprecision(1) 
+                          << data["win_rate"].get<double>() << "% WR, "
+                          << "$" << std::setprecision(2) << data["avg_pnl"].get<double>() << " avg"
+                          << std::endl;
+            }
+        }
+    }
+    
+    // NEW: Ichimoku Cloud
+    if (results.contains("ichimoku_cloud")) {
+        std::cout << "  Ichimoku Cloud Position:" << std::endl;
+        for (auto& [bucket, data] : results["ichimoku_cloud"].items()) {
             if (data.contains("count") && data["count"].get<int>() > 0) {
                 std::cout << "    " << bucket << ": " 
                           << data["count"] << " trades, "

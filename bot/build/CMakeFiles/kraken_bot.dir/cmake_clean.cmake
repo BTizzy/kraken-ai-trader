@@ -1,4 +1,5 @@
 file(REMOVE_RECURSE
+  "CMakeFiles/kraken_bot.dir/link.d"
   "CMakeFiles/kraken_bot.dir/src/kraken_api.cpp.o"
   "CMakeFiles/kraken_bot.dir/src/kraken_api.cpp.o.d"
   "CMakeFiles/kraken_bot.dir/src/learning_engine.cpp.o"

@@ -78,11 +78,18 @@ This document provides a high-level summary of the kraken-ai-trader system, its 
 **Common issues and best practices:**
 
 - **Always start the Node.js server (`server/kraken-proxy.js`) before running or testing the C++ bot.** The bot relies on the server for API access and will not function correctly if the server is down.
+- **Always start the Node.js server (`server/kraken-proxy.js`) before running or testing the C++ bot.** The bot relies on the server for API access and will not function correctly if the server is down.
+  - Operational note: Do not kill the running server process during monitoring runs. If you must restart, perform a graceful restart and verify routes with `GET /__routes__` and `GET /api/collector/status2` before starting monitoring. Add logs and route checks if you see unexpected 404s.
 - **Before testing or debugging, check if the `kraken_bot` process is running.** Use `pgrep kraken_bot` or similar commands to confirm. If not running, start it from `bot/build`.
 - **Always verify the terminal state before running commands.** Make sure you are in the correct directory and that the terminal is not blocked by a running process.
 - **If you cannot find log output, check if the bot is running in a different terminal or if output is being redirected.**
 - **CRITICAL: Never run sleep or other commands immediately after starting the bot servers, data collection scripts or other proccesses in background.** This interrupts the process. Instead, use dedicated terminals for long-running processes or proper process management with `&` and job control.
+- **High-frequency collector health:** The price collector now exposes `/api/collector/status` on the proxy server and will emit a fatal condition when consecutive data collection errors exceed a configurable threshold (env `PRICE_COLLECTOR_CONSECUTIVE_ERROR_THRESHOLD`). This can be configured to exit the process (`PRICE_COLLECTOR_FAIL_FAST=true`) so failures are visible and addressed rather than silently falling back to arbitrary values.
+  - New: Collector prefers a WebSocket-based real-time feed as the primary ingestion path. The WS connection status and metrics are surfaced via `/api/collector/status` with fields `ws_status`, `last_ws_connected_ts`, `last_ws_message_ts`, and `ws_message_count`. If WS is unavailable the collector will fall back to REST polling; monitor WS fields and collector `last_successful_sample_ts` for signal quality.
 - **Update this section with any new operational lessons learned to help future agents avoid common pitfalls.**
+
+Additional operational note (sidecar):
+- A lightweight health sidecar (`server/health-sidecar.js`) is available that reads the `data/price_history.db` and exposes `/health/collector` on port 3006. Use this as a reliable fallback probe when `/api/collector/status` or other debug endpoints on the main proxy are returning unexpected HTML 404s (diagnostic evidence shows some local responders may intermittently answer loopback requests with HTML 404). The monitor script (`scripts/monitor_paper_run.js`) has been updated to probe this sidecar at `http://localhost:3006/health/collector` when the primary status endpoints are unavailable.
 
 ---
 *Last updated: January 22, 2026*

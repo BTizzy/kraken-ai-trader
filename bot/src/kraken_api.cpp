@@ -1,6 +1,7 @@
 #include "kraken_api.hpp"
 #include <curl/curl.h>
 #include <iostream>
+#include <sqlite3.h>
 #include <sstream>
 #include <iomanip>
 #include <openssl/hmac.h>
@@ -47,13 +48,13 @@ KrakenAPI::KrakenAPI(bool paper_trading) : paper_mode(paper_trading) {
     api_key = key ? key : "";
     api_secret = secret ? secret : "";
 
-    // Initialize mock prices for paper trading
+    // Initialize mock prices for paper trading (futures contracts)
     mock_prices = {
-        {"XBTUSD", 91000.0},
-        {"ETHUSD", 3200.0},
-        {"ADAUSD", 0.85},
-        {"DOTUSD", 8.50},
-        {"LINKUSD", 18.50}
+        {"PI_XBTUSD", 89000.0},
+        {"PI_ETHUSD", 3200.0},
+        {"PI_ADAUSD", 0.85},
+        {"PI_LINKUSD", 18.50},
+        {"PI_LTCUSD", 120.0}
     };
 
     std::cout << "KrakenAPI initialized in " << (paper_mode ? "PAPER" : "LIVE") << " mode" << std::endl;
@@ -90,7 +91,16 @@ json KrakenAPI::http_get(const std::string& endpoint) {
     std::string response;
 
     if (curl) {
-        std::string url = "http://localhost:8000" + endpoint;
+        std::string url;
+        
+        // Check if this is a local server endpoint (starts with /api/)
+        if (endpoint.substr(0, 5) == "/api/") {
+            // Local server call
+            url = "http://localhost:3002" + endpoint;
+        } else {
+            // Kraken API call
+            url = "https://futures.kraken.com" + endpoint;
+        }
 
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
@@ -206,17 +216,19 @@ double KrakenAPI::get_equity() {
 // Market data - uses our Node.js proxy server
 double KrakenAPI::get_current_price(const std::string& pair) {
     try {
-        // Convert Kraken pair format (e.g., "XBTUSD") to our API format
-        std::string api_pair = pair;
-        if (pair == "XBTUSD") api_pair = "XXBTZUSD";
-
-        auto ticker = get_ticker(api_pair);
-        auto last_trade = ticker.value("c", json::array({"0"}));
-        if (last_trade.is_array() && !last_trade.empty()) {
-            std::string price_str = last_trade[0];
-            return price_str.empty() ? 0.0 : std::stod(price_str);
+        auto ticker = get_ticker(pair);
+        
+        // Futures API ticker format - direct numeric access
+        double price = ticker.contains("last") ? ticker["last"].get<double>() : 0.0;
+        if (price > 0.0) {
+            return price;
         }
-        return 0.0;
+        
+        // Fallback to mock prices
+        if (mock_prices.count(pair)) {
+            return mock_prices[pair];
+        }
+        return 100.0; // Default fallback
     } catch (const std::exception& e) {
         std::cerr << "Error getting price for " << pair << ": " << e.what() << std::endl;
         // Fallback to mock prices
@@ -228,29 +240,40 @@ double KrakenAPI::get_current_price(const std::string& pair) {
 }
 
 json KrakenAPI::get_ticker(const std::string& pair) {
-    // Use retry logic for API calls
-    return retry_with_backoff([this, &pair]() -> json {
-        std::string endpoint = "/api/ticker/" + pair;
-        auto response = http_get(endpoint);
-
-        if (response.contains("result") && response["result"].contains(pair)) {
-            return response["result"][pair];
+    // Use high-frequency price data instead of Kraken API
+    try {
+        double latest_price = get_latest_price(pair);
+        if (latest_price > 0) {
+            // ONLY use exact local data - do not inject arbitrary volatility baselines
+            // Return a ticker-like object with the latest price data (no estimated volatility)
+            return {
+                {"last", latest_price},
+                {"bid", latest_price * 0.9999},  // Approximate bid (slightly lower)
+                {"ask", latest_price * 1.0001},  // Approximate ask (slightly higher)
+                {"volumeQuote", 1000000.0},      // Placeholder volume
+                {"high", latest_price},
+                {"low", latest_price},
+                {"open", latest_price}  // Use current price as open for simplicity
+            };
         }
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to get price from local data: " << e.what() << std::endl;
+    }
 
-        throw std::runtime_error("No ticker data for " + pair);
-    }, 3, 500);  // 3 retries, starting at 500ms delay
+    // NO FALLBACK: Leverage trading requires high-frequency local data only
+    // Return empty object to indicate no data available
+    return json{};
 }
 
 double KrakenAPI::get_bid_ask_spread(const std::string& pair) {
     try {
         auto ticker = get_ticker(pair);
-        auto ask_array = ticker.value("a", json::array({"100"}));
-        auto bid_array = ticker.value("b", json::array({"99"}));
-
-        if (ask_array.is_array() && !ask_array.empty() &&
-            bid_array.is_array() && !bid_array.empty()) {
-            double ask = std::stod(std::string(ask_array[0]));
-            double bid = std::stod(std::string(bid_array[0]));
+        
+        // Futures API format: direct bid/ask fields
+        double ask = ticker.contains("ask") ? ticker["ask"].get<double>() : 0.0;
+        double bid = ticker.contains("bid") ? ticker["bid"].get<double>() : 0.0;
+        
+        if (ask > 0 && bid > 0) {
             return (ask - bid) / bid * 100.0; // Return as percentage
         }
         return 0.1; // Default 0.1% spread
@@ -260,49 +283,18 @@ double KrakenAPI::get_bid_ask_spread(const std::string& pair) {
 }
 
 std::vector<std::string> KrakenAPI::get_trading_pairs() {
-    try {
-        auto response = http_get("/api/assetpairs");
-        std::vector<std::string> pairs;
+    // Use fixed list of pairs that we collect high-frequency data for
+    // This ensures we only trade pairs with real-time data available
+    std::vector<std::string> pairs = {
+        "PI_XBTUSD",  // Bitcoin
+        "PI_ETHUSD",  // Ethereum
+        "PI_ADAUSD",  // Cardano
+        "PI_LINKUSD", // Chainlink
+        "PI_LTCUSD"   // Litecoin
+    };
 
-        if (response.contains("result")) {
-            for (const auto& [key, value] : response["result"].items()) {
-                // More restrictive filtering: only pairs that END with USD and are online
-                if (value.contains("status") && value["status"] == "online" &&
-                    key.length() > 3 && key.substr(key.length() - 3) == "USD") {
-                    // Skip pairs with special characters that might cause issues
-                    bool valid = true;
-                    for (char c : key) {
-                        if (!isalnum(c)) {
-                            valid = false;
-                            break;
-                        }
-                    }
-                    if (valid) {
-                        pairs.push_back(key);
-                    }
-                }
-            }
-        }
-
-        // Limit to top 100 pairs by volume (if we have too many)
-        if (pairs.size() > 100) {
-            // For now, just take the first 100
-            pairs.resize(100);
-        }
-
-        if (pairs.empty()) {
-            // Fallback pairs
-            pairs = {"XBTUSD", "ETHUSD", "ADAUSD", "DOTUSD", "LINKUSD"};
-        }
-
-        std::cout << "Found " << pairs.size() << " valid USD trading pairs" << std::endl;
-        return pairs;
-
-    } catch (const std::exception& e) {
-        std::cerr << "Error fetching trading pairs: " << e.what() << std::endl;
-        // Return fallback pairs
-        return {"XBTUSD", "ETHUSD", "ADAUSD", "DOTUSD", "LINKUSD"};
-    }
+    std::cout << "Using " << pairs.size() << " high-frequency trading pairs" << std::endl;
+    return pairs;
 }
 
 std::vector<OHLC> KrakenAPI::get_ohlc(const std::string& pair, int interval) {
@@ -319,11 +311,22 @@ std::vector<OHLC> KrakenAPI::get_ohlc(const std::string& pair, int interval) {
                         if (candle.is_array() && candle.size() >= 6) {
                             OHLC ohlc;
                             ohlc.timestamp = candle[0].get<long>();
-                            ohlc.open = std::stod(candle[1].get<std::string>());
-                            ohlc.high = std::stod(candle[2].get<std::string>());
-                            ohlc.low = std::stod(candle[3].get<std::string>());
-                            ohlc.close = std::stod(candle[4].get<std::string>());
-                            ohlc.volume = std::stod(candle[6].get<std::string>());
+                            
+                            // Handle both string and number values
+                            if (candle[1].is_string()) {
+                                ohlc.open = std::stod(candle[1].get<std::string>());
+                                ohlc.high = std::stod(candle[2].get<std::string>());
+                                ohlc.low = std::stod(candle[3].get<std::string>());
+                                ohlc.close = std::stod(candle[4].get<std::string>());
+                                ohlc.volume = std::stod(candle[6].get<std::string>());
+                            } else {
+                                ohlc.open = candle[1].get<double>();
+                                ohlc.high = candle[2].get<double>();
+                                ohlc.low = candle[3].get<double>();
+                                ohlc.close = candle[4].get<double>();
+                                ohlc.volume = candle[6].get<double>();
+                            }
+                            
                             result.push_back(ohlc);
                         }
                     }
@@ -334,6 +337,100 @@ std::vector<OHLC> KrakenAPI::get_ohlc(const std::string& pair, int interval) {
         // Silently fail - trend confirmation is optional
     }
     return result;
+}
+
+std::vector<double> KrakenAPI::get_price_history(const std::string& pair, int max_points) {
+    std::vector<double> prices;
+    try {
+        std::string endpoint = "/api/prices/" + pair + "?limit=" + std::to_string(max_points);
+        auto response = http_get(endpoint);
+
+        if (response.contains("prices") && response["prices"].is_array()) {
+            for (const auto& price : response["prices"]) {
+                prices.push_back(price.get<double>());
+            }
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Error getting price history for " << pair << ": " << e.what() << std::endl;
+    }
+    std::cerr << "get_price_history: after HTTP attempt, retrieved " << prices.size() << " prices for " << pair << " (requested " << max_points << ")" << std::endl;
+    // Fallback: read directly from local price_history.db if HTTP source is insufficient
+    if (prices.size() < 10) {
+        try {
+            std::string dbpath = "../../data/price_history.db";
+            sqlite3* db = nullptr;
+            if (sqlite3_open(dbpath.c_str(), &db) == SQLITE_OK) {
+                std::string sql = "SELECT price FROM price_history WHERE pair = ? ORDER BY timestamp DESC LIMIT ?";
+                sqlite3_stmt* stmt = nullptr;
+                if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
+                    sqlite3_bind_text(stmt, 1, pair.c_str(), -1, SQLITE_TRANSIENT);
+                    sqlite3_bind_int(stmt, 2, max_points);
+                    while (sqlite3_step(stmt) == SQLITE_ROW) {
+                        double p = sqlite3_column_double(stmt, 0);
+                        prices.push_back(p);
+                    }
+                    sqlite3_finalize(stmt);
+                }
+                sqlite3_close(db);
+                // reverse to chronological order (we selected DESC)
+                std::reverse(prices.begin(), prices.end());
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "DB fallback failed for price history: " << e.what() << std::endl;
+        }
+    }
+    return prices;
+}
+
+double KrakenAPI::get_latest_price(const std::string& pair) {
+    try {
+        // Use high-frequency price data instead of API call
+        std::string endpoint = "/api/prices/" + pair + "?limit=1";
+        auto response = http_get(endpoint);
+
+        if (response.contains("prices") && response["prices"].is_array() && !response["prices"].empty()) {
+            return response["prices"][0].get<double>();
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Error getting latest price for " << pair << ": " << e.what() << std::endl;
+    }
+    return 0.0; // Return 0 on error, caller should handle
+}
+
+double KrakenAPI::get_volatility(const std::string& pair, int minutes) {
+    try {
+        // Use high-frequency volatility calculation
+        std::string endpoint = "/api/volatility/" + pair + "?minutes=" + std::to_string(minutes);
+        auto response = http_get(endpoint);
+
+        if (response.contains("volatility")) {
+            return response["volatility"].get<double>();
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Error getting volatility for " << pair << ": " << e.what() << std::endl;
+    }
+    // Fallback: compute volatility locally from price history if HTTP endpoint fails
+    try {
+        const auto prices = get_price_history(pair, 500);
+        std::cerr << "get_volatility: retrieved " << prices.size() << " prices for " << pair << " from get_price_history" << std::endl;
+        if (prices.size() < 2) return 0.0;
+        std::vector<double> returns;
+        for (size_t i = 1; i < prices.size(); ++i) {
+            double r = std::log(prices[i] / prices[i-1]);
+            returns.push_back(std::abs(r));
+        }
+        if (returns.empty()) return 0.0;
+        double mean = std::accumulate(returns.begin(), returns.end(), 0.0) / returns.size();
+        double variance = 0.0;
+        for (double v : returns) variance += std::pow(v - mean, 2);
+        variance /= returns.size();
+        double stddev = std::sqrt(variance);
+    std::cerr << "get_volatility: computed stddev percent " << (stddev * 100.0) << " for " << pair << std::endl;
+    return stddev * 100.0; // percent
+    } catch (const std::exception& e) {
+        std::cerr << "Fallback volatility calculation failed for " << pair << ": " << e.what() << std::endl;
+    }
+    return 0.0; // Return 0 on error
 }
 
 bool KrakenAPI::deploy_live() {

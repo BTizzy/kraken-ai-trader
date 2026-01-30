@@ -1148,4 +1148,6 @@ CMakeFiles/kraken_bot.dir/src/main.cpp.o: \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/curl/header.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/curl/websockets.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/curl/mprintf.h \
-  /Users/ryanbartell/polymarket-ai-trader/kraken-ai-trader-1/bot/include/learning_engine.hpp
+  /Users/ryanbartell/polymarket-ai-trader/kraken-ai-trader-1/bot/include/learning_engine.hpp \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sqlite3.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/os/availability.h

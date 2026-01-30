@@ -1,0 +1,127 @@
+{
+  "latest": {
+    "AEROUSD": {
+      "pair": "AEROUSD",
+      "bid_price": 0.4836,
+      "ask_price": 0.4842,
+      "last_price": 0.4843,
+      "volume": 464568.30809,
+      "vwap": 0.48289221,
+      "timestamp": 1769107097898,
+      "volatility_pct": 0,
+      "market_regime": 0
+    },
+    "APEUSD": {
+      "pair": "APEUSD",
+      "bid_price": 0.1931,
+      "ask_price": 0.1933,
+      "last_price": 0.1924,
+      "volume": 335454.05130006,
+      "vwap": 0.19024,
+      "timestamp": 1769107097898,
+      "volatility_pct": 0,
+      "market_regime": 0
+    },
+    "ARBUSD": {
+      "pair": "ARBUSD",
+      "bid_price": 0.1787,
+      "ask_price": 0.1788,
+      "last_price": 0.1787,
+      "volume": 1096227.96816,
+      "vwap": 0.18121407,
+      "timestamp": 1769107097898,
+      "volatility_pct": 0,
+      "market_regime": 0
+    },
+    "ATOMUSD": {
+      "pair": "ATOMUSD",
+      "bid_price": 2.3383,
+      "ask_price": 2.3388,
+      "last_price": 2.3344,
+      "volume": 82102.49805286,
+      "vwap": 2.383208,
+      "timestamp": 1769107097898,
+      "volatility_pct": 0,
+      "market_regime": 0
+    },
+    "AVAXUSD": {
+      "pair": "AVAXUSD",
+      "bid_price": 12.13,
+      "ask_price": 12.15,
+      "last_price": 12.14,
+      "volume": 109647.28167839,
+      "vwap": 12.3803,
+      "timestamp": 1769107097898,
+      "volatility_pct": 0,
+      "market_regime": 0
+    },
+    "AVNTUSD": {
+      "pair": "AVNTUSD",
+      "bid_price": 0.2656,
+      "ask_price": 0.26585,
+      "last_price": 0.26528,
+      "volume": 379790.60955,
+      "vwap": 0.270668042,
+      "timestamp": 1769107097898,
+      "volatility_pct": 0,
+      "market_regime": 0
+    },
+    "BATUSD": {
+      "pair": "BATUSD",
+      "bid_price": 0.18876,
+      "ask_price": 0.18898,
+      "last_price": 0.18993,
+      "volume": 2141098.45551587,
+      "vwap": 0.188821,
+      "timestamp": 1769107097898,
+      "volatility_pct": 0,
+      "market_regime": 0
+    },
+    "BCHUSD": {
+      "pair": "BCHUSD",
+      "bid_price": 598.07,
+      "ask_price": 598.36,
+      "last_price": 597.67,
+      "volume": 2608.1808879,
+      "vwap": 593.0999,
+      "timestamp": 1769107097898,
+      "volatility_pct": 0,
+      "market_regime": 0
+    },
+    "BERAUSD": {
+      "pair": "BERAUSD",
+      "bid_price": 0.793,
+      "ask_price": 0.7944,
+      "last_price": 0.7949,
+      "volume": 126683.35812,
+      "vwap": 0.8260337,
+      "timestamp": 1769107097898,
+      "volatility_pct": 0,
+      "market_regime": 0
+    },
+    "BONKUSD": {
+      "pair": "BONKUSD",
+      "bid_price": 0.000009066,
+      "ask_price": 0.000009069,
+      "last_price": 0.00000906,
+      "volume": 83256248115.45354,
+      "vwap": 0.000009132785,
+      "timestamp": 1769107097898,
+      "volatility_pct": 0,
+      "market_regime": 0
+    }
+  },
+  "active_pairs": [
+    "AEROUSD",
+    "APEUSD",
+    "ARBUSD",
+    "ATOMUSD",
+    "AVAXUSD",
+    "AVNTUSD",
+    "BATUSD",
+    "BCHUSD",
+    "BERAUSD",
+    "BONKUSD"
+  ],
+  "timestamp": 1769107098451
+}

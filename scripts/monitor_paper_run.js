@@ -170,7 +170,8 @@ function isProcessRunning(name) {
             events.push({ ts: now, type: 'vol_unavailable', status: vol.status, body: vol.body || vol.error });
             console.error('Volatility endpoint returned non-200 at', uptime + 's', vol.status, vol.body || vol.error);
             // Try a direct price probe as a fallback signal
-            const p = await httpGet('/api/prices/PI_XBTUSD?limit=1');
+            // Prefer authoritative DB-backed price probe to avoid loopback hijacking
+            const p = await httpGet('/api/prices/authoritative/PI_XBTUSD?limit=1');
             if (p.status === 200) {
                 events.push({ ts: now, type: 'price_probe_ok' });
                 console.log('Price probe OK at', uptime + 's');

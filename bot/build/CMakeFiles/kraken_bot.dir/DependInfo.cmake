@@ -11,6 +11,7 @@ set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/Users/ryanbartell/polymarket-ai-trader/kraken-ai-trader-1/bot/src/kraken_api.cpp" "CMakeFiles/kraken_bot.dir/src/kraken_api.cpp.o" "gcc" "CMakeFiles/kraken_bot.dir/src/kraken_api.cpp.o.d"
   "/Users/ryanbartell/polymarket-ai-trader/kraken-ai-trader-1/bot/src/learning_engine.cpp" "CMakeFiles/kraken_bot.dir/src/learning_engine.cpp.o" "gcc" "CMakeFiles/kraken_bot.dir/src/learning_engine.cpp.o.d"
   "/Users/ryanbartell/polymarket-ai-trader/kraken-ai-trader-1/bot/src/main.cpp" "CMakeFiles/kraken_bot.dir/src/main.cpp.o" "gcc" "CMakeFiles/kraken_bot.dir/src/main.cpp.o.d"
+  "/Users/ryanbartell/polymarket-ai-trader/kraken-ai-trader-1/bot/src/market_data_cache.cpp" "CMakeFiles/kraken_bot.dir/src/market_data_cache.cpp.o" "gcc" "CMakeFiles/kraken_bot.dir/src/market_data_cache.cpp.o.d"
   )
 
 # Targets to which this target links which contain Fortran sources.

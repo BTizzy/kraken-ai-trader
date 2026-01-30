@@ -342,13 +342,37 @@ std::vector<OHLC> KrakenAPI::get_ohlc(const std::string& pair, int interval) {
 std::vector<double> KrakenAPI::get_price_history(const std::string& pair, int max_points) {
     std::vector<double> prices;
     try {
-        std::string endpoint = "/api/prices/" + pair + "?limit=" + std::to_string(max_points);
-        auto response = http_get(endpoint);
+        // In PAPER mode prefer reading directly from the local DB to avoid relying on
+        // potentially noisy or hijacked loopback HTTP endpoints that may return
+        // repeated/degenerate price arrays (observed in local testing).
+        // Optionally prefer the authoritative DB-backed endpoint. This can be forced
+        // by setting USE_AUTHORITATIVE_PRICES=1 in the environment or implicitly when
+        // running in paper_mode.
+        const char* env_use_auth = std::getenv("USE_AUTHORITATIVE_PRICES");
+        bool use_authoritative = (env_use_auth && std::string(env_use_auth) == "1") || paper_mode;
+        if (!paper_mode) {
+            std::string endpointBase = use_authoritative ? "/api/prices/authoritative/" : "/api/prices/";
+            std::string endpoint = endpointBase + pair + "?limit=" + std::to_string(max_points);
+            auto response = http_get(endpoint);
+            std::cerr << "get_price_history: attempted HTTP endpoint " << endpoint << "" << std::endl;
 
-        if (response.contains("prices") && response["prices"].is_array()) {
-            for (const auto& price : response["prices"]) {
-                prices.push_back(price.get<double>());
+            if (response.contains("prices") && response["prices"].is_array()) {
+                for (const auto& price : response["prices"]) {
+                    prices.push_back(price.get<double>());
+                }
             }
+
+            // If HTTP returned a degenerate result (e.g., all prices identical), consider it invalid
+            if (prices.size() >= 2) {
+                double minp = *std::min_element(prices.begin(), prices.end());
+                double maxp = *std::max_element(prices.begin(), prices.end());
+                if (minp == maxp) {
+                    std::cerr << "HTTP price endpoint returned degenerate constant prices for " << pair << " (value=" << minp << ") - falling back to DB" << std::endl;
+                    prices.clear();
+                }
+            }
+        } else {
+            std::cerr << "Paper mode: skipping HTTP price endpoint for " << pair << " - will read from local DB fallback" << std::endl;
         }
     } catch (const std::exception& e) {
         std::cerr << "Error getting price history for " << pair << ": " << e.what() << std::endl;
@@ -357,9 +381,34 @@ std::vector<double> KrakenAPI::get_price_history(const std::string& pair, int ma
     // Fallback: read directly from local price_history.db if HTTP source is insufficient
     if (prices.size() < 10) {
         try {
-            std::string dbpath = "../../data/price_history.db";
+            // Allow runtime override of DB path for testing/CI
+            const char* env_db = std::getenv("PRICE_HISTORY_DB");
+            std::vector<std::string> candidates;
+            if (env_db && *env_db) candidates.push_back(std::string(env_db));
+            candidates.push_back("../../data/price_history.db");
+            candidates.push_back("../data/price_history.db");
+            candidates.push_back("./data/price_history.db");
+
             sqlite3* db = nullptr;
-            if (sqlite3_open(dbpath.c_str(), &db) == SQLITE_OK) {
+            bool opened = false;
+            std::string openedPath;
+
+            for (const auto& dbpath : candidates) {
+                int rc = sqlite3_open(dbpath.c_str(), &db);
+                if (rc == SQLITE_OK) {
+                    opened = true;
+                    openedPath = dbpath;
+                    break;
+                } else {
+                    std::cerr << "DB fallback: failed to open '" << dbpath << "': " << sqlite3_errmsg(db) << std::endl;
+                    if (db) sqlite3_close(db);
+                    db = nullptr;
+                }
+            }
+
+            if (!opened) {
+                std::cerr << "DB fallback: unable to open any candidate price_history.db files" << std::endl;
+            } else {
                 std::string sql = "SELECT price FROM price_history WHERE pair = ? ORDER BY timestamp DESC LIMIT ?";
                 sqlite3_stmt* stmt = nullptr;
                 if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
@@ -370,10 +419,13 @@ std::vector<double> KrakenAPI::get_price_history(const std::string& pair, int ma
                         prices.push_back(p);
                     }
                     sqlite3_finalize(stmt);
+                } else {
+                    std::cerr << "DB fallback: failed to prepare statement: " << sqlite3_errmsg(db) << std::endl;
                 }
                 sqlite3_close(db);
                 // reverse to chronological order (we selected DESC)
                 std::reverse(prices.begin(), prices.end());
+                std::cerr << "get_price_history: DB fallback retrieved " << prices.size() << " prices for " << pair << " from " << openedPath << std::endl;
             }
         } catch (const std::exception& e) {
             std::cerr << "DB fallback failed for price history: " << e.what() << std::endl;
@@ -385,7 +437,11 @@ std::vector<double> KrakenAPI::get_price_history(const std::string& pair, int ma
 double KrakenAPI::get_latest_price(const std::string& pair) {
     try {
         // Use high-frequency price data instead of API call
-        std::string endpoint = "/api/prices/" + pair + "?limit=1";
+        const char* env_use_auth = std::getenv("USE_AUTHORITATIVE_PRICES");
+        bool use_authoritative = (env_use_auth && std::string(env_use_auth) == "1") || paper_mode;
+        std::string endpointBase = use_authoritative ? "/api/prices/authoritative/" : "/api/prices/";
+        std::string endpoint = endpointBase + pair + "?limit=1";
+        std::cerr << "get_latest_price: attempting HTTP endpoint " << endpoint << std::endl;
         auto response = http_get(endpoint);
 
         if (response.contains("prices") && response["prices"].is_array() && !response["prices"].empty()) {
@@ -398,16 +454,21 @@ double KrakenAPI::get_latest_price(const std::string& pair) {
 }
 
 double KrakenAPI::get_volatility(const std::string& pair, int minutes) {
-    try {
-        // Use high-frequency volatility calculation
-        std::string endpoint = "/api/volatility/" + pair + "?minutes=" + std::to_string(minutes);
-        auto response = http_get(endpoint);
+    // For PAPER mode prefer local DB computation to avoid relying on loopback HTTP endpoints
+    if (paper_mode) {
+        std::cerr << "Paper mode: skipping HTTP volatility endpoint for " << pair << " - using local DB fallback" << std::endl;
+    } else {
+        try {
+            // Use high-frequency volatility calculation (HTTP)
+            std::string endpoint = "/api/volatility/" + pair + "?minutes=" + std::to_string(minutes);
+            auto response = http_get(endpoint);
 
-        if (response.contains("volatility")) {
-            return response["volatility"].get<double>();
+            if (response.contains("volatility")) {
+                return response["volatility"].get<double>();
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "Error getting volatility for " << pair << " via HTTP: " << e.what() << std::endl;
         }
-    } catch (const std::exception& e) {
-        std::cerr << "Error getting volatility for " << pair << ": " << e.what() << std::endl;
     }
     // Fallback: compute volatility locally from price history if HTTP endpoint fails
     try {
@@ -419,6 +480,9 @@ double KrakenAPI::get_volatility(const std::string& pair, int minutes) {
             double r = std::log(prices[i] / prices[i-1]);
             returns.push_back(std::abs(r));
         }
+        double minp = *std::min_element(prices.begin(), prices.end());
+        double maxp = *std::max_element(prices.begin(), prices.end());
+        std::cerr << "get_volatility: price range for " << pair << " -> min:" << minp << " max:" << maxp << " returns_count:" << returns.size() << std::endl;
         if (returns.empty()) return 0.0;
         double mean = std::accumulate(returns.begin(), returns.end(), 0.0) / returns.size();
         double variance = 0.0;

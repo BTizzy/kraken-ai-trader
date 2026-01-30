@@ -1,3 +1,9 @@
+# ⚠️ LEGACY DEPLOYMENT GUIDE — See `Must_read_before_any_agent_task.md` for all current info
+
+> **IMPORTANT:** This file contains legacy deployment instructions for the original web-based trading game. The current production system is a C++/SQLite trading bot. All agents and contributors should refer to `Must_read_before_any_agent_task.md` and `bot/BUILD_AND_DEPLOY.md` for up-to-date deployment and operational information.
+
+---
+
 # Deployment Guide
 
 ## 🌐 GitHub Pages Deployment (Recommended)

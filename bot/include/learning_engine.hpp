@@ -175,13 +175,45 @@ public:
         double composite_score = 0.0;  // Overall signal strength (-1 to 1)
     };
     
-    // Get technical signals for a pair based on historical price data
-    TechnicalSignals calculate_signals(const std::vector<double>& prices, 
-                                        const std::vector<double>& volumes,
-                                        double current_bid, double current_ask) const;
+    // NEW: Real-time market data interface for proactive learning
+    struct MarketDataPoint {
+        std::string pair;
+        double bid_price;
+        double ask_price;
+        double last_price;
+        double volume;
+        double vwap;
+        int64_t timestamp;
+        double volatility_pct;  // Calculated volatility
+        int market_regime;      // 0=consolidation, 1=uptrend, -1=downtrend
+    };
+
+    // Real-time market data access
+    void update_market_data(const MarketDataPoint& data);
+    MarketDataPoint get_latest_market_data(const std::string& pair) const;
+    std::vector<MarketDataPoint> get_recent_market_data(const std::string& pair, int minutes = 60) const;
     
-    // Analyze which indicators are most predictive of wins
+    // Proactive strategy adaptation based on real-time market conditions
+    void adapt_strategies_to_market_conditions();
+    StrategyConfig get_adaptive_strategy(const std::string& pair, const MarketDataPoint& current_data);
+    
+    // Real-time volatility and regime detection
+    double calculate_real_time_volatility(const std::string& pair) const;
+    int detect_real_time_regime(const std::string& pair) const;
+    // Score the direction model (logit score) if loaded
+    double score_direction_model(const MarketDataPoint& current_data) const;
+    
+    // NEW: Load real-time market data directly from SQLite database
+    void load_market_data_from_sqlite(const std::string& db_path = "../../data/market_data.db");
+    
+    // Continuous learning: update strategies every N seconds
+    void perform_continuous_learning();
+    std::chrono::seconds continuous_learning_interval = std::chrono::seconds(30);
+    
+    // Technical analysis methods
+    TechnicalSignals calculate_signals(const std::vector<double>& prices, const std::vector<double>& volumes, double current_bid, double current_ask) const;
     json analyze_indicator_effectiveness() const;
+    void load_market_data_from_cache(const std::string& cache_file);
     
 private:
     // Trade history
@@ -194,6 +226,12 @@ private:
     std::map<std::string, std::deque<double>> volume_history;
     static const size_t MAX_HISTORY_SIZE = 200;  // Store last 200 data points
     
+    // NEW: Real-time market data cache
+    std::map<std::string, std::deque<MarketDataPoint>> real_time_market_data;
+    std::map<std::string, MarketDataPoint> latest_market_data;
+    static const size_t MAX_MARKET_DATA_SIZE = 1000;  // Store last 1000 data points per pair
+    mutable std::mutex market_data_mutex;  // Thread-safe access
+    
     // Learned patterns
     std::map<std::string, PatternMetrics> pattern_database;  // key = "pair_leverage_timeframe"
     std::vector<StrategyConfig> strategy_configs;
@@ -202,6 +240,10 @@ private:
     double calculate_std_dev(const std::vector<double>& values) const;
     double calculate_sharpe_ratio(const std::vector<double>& returns) const;
     double calculate_sortino_ratio(const std::vector<double>& returns) const;
+    // Direction model (linear) for adaptive entry direction
+    std::map<std::string, double> direction_model_weights;
+    double direction_model_bias = 0.0;
+    bool direction_model_loaded = false;
     double calculate_max_drawdown(const std::vector<double>& returns) const;
     double calculate_confidence_score(const PatternMetrics& metrics) const;
     

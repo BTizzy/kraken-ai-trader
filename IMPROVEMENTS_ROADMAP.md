@@ -1,5 +1,7 @@
 # Kraken AI Trader - Improvements & Roadmap
 
+> **NOTE:** This document provides historical and technical context. For the most current architecture, operational, and strategy information, always check `Must_read_before_any_agent_task.md`.
+
 ## 🔒 Making the System Bulletproof
 
 ### 1. **Data Integrity Safeguards**

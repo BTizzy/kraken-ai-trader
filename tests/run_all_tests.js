@@ -24,6 +24,24 @@ const TESTS = [
         file: 'test_dashboard_api.js',
         description: 'API endpoints and data serving'
     }
+    ,
+    {
+        name: 'Price Collector',
+        file: 'test_price_collector.js',
+        description: 'High-frequency price collector stability and fatal threshold'
+    }
+    ,
+    {
+        name: 'Price Collector - Degraded',
+        file: 'test_price_collector_degraded.js',
+        description: 'Collector stability under flaky network'
+    }
+    ,
+    {
+        name: 'Price Collector - DB Lock',
+        file: 'test_price_collector_db_lock.js',
+        description: 'Collector resilience to short DB exclusive locks'
+    }
 ];
 
 async function runTest(testInfo) {

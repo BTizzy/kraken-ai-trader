@@ -24,7 +24,8 @@
     "trailing_start_pct": 0.5,
     "trailing_stop_pct": 0.25,
     "max_drawdown_pct": 10.0,
-    "_comment": "Lower trailing_start (0.5%) to lock in profits earlier, tighter trail (0.25%)"
+    "leverage": 5.0,
+    "_comment": "Leverage for futures trading (1.0 = no leverage, 5.0 = 5x leverage)"
   },
   
   "hold_times": {
@@ -93,7 +94,7 @@
   },
   
   "api": {
-    "kraken_rest_url": "https://api.kraken.com/0",
+    "kraken_rest_url": "https://futures.kraken.com",
     "rate_limit_requests_per_second": 1,
     "retry_max_attempts": 3,
     "retry_base_delay_ms": 1000,

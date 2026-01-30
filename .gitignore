@@ -16,6 +16,14 @@ Thumbs.db
 *.log
 npm-debug.log*
 
+# Experiment artifacts and generated data
+logs/
+data/*.json
+data/market_data.db
+
+# Build artifacts
+bot/build/
+
 # Local storage backup
 localStorage.json
 

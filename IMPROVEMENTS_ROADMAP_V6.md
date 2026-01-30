@@ -1,4 +1,7 @@
 # Kraken AI Trader - Improvement Roadmap V6
+
+> **NOTE:** This document provides historical and technical context. For the most current architecture, operational, and strategy information, always check `Must_read_before_any_agent_task.md`.
+
 **Created**: January 20, 2026
 **Status**: Bot running with regime filter, waiting for VOLATILE conditions
 

@@ -85,12 +85,12 @@ clean: CMakeFiles/kraken_bot.dir/clean
 CMakeFiles/kraken_bot.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/kraken_bot.dir/build.make CMakeFiles/kraken_bot.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/kraken_bot.dir/build.make CMakeFiles/kraken_bot.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/ryanbartell/polymarket-ai-trader/kraken-ai-trader-1/bot/build/CMakeFiles --progress-num=1,2,3,4 "Built target kraken_bot"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/ryanbartell/polymarket-ai-trader/kraken-ai-trader-1/bot/build/CMakeFiles --progress-num=1,2,3,4,5 "Built target kraken_bot"
 .PHONY : CMakeFiles/kraken_bot.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/kraken_bot.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/ryanbartell/polymarket-ai-trader/kraken-ai-trader-1/bot/build/CMakeFiles 4
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/ryanbartell/polymarket-ai-trader/kraken-ai-trader-1/bot/build/CMakeFiles 5
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/kraken_bot.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/ryanbartell/polymarket-ai-trader/kraken-ai-trader-1/bot/build/CMakeFiles 0
 .PHONY : CMakeFiles/kraken_bot.dir/rule
@@ -102,7 +102,7 @@ kraken_bot: CMakeFiles/kraken_bot.dir/rule
 # codegen rule for target.
 CMakeFiles/kraken_bot.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/kraken_bot.dir/build.make CMakeFiles/kraken_bot.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/ryanbartell/polymarket-ai-trader/kraken-ai-trader-1/bot/build/CMakeFiles --progress-num=1,2,3,4 "Finished codegen for target kraken_bot"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/ryanbartell/polymarket-ai-trader/kraken-ai-trader-1/bot/build/CMakeFiles --progress-num=1,2,3,4,5 "Finished codegen for target kraken_bot"
 .PHONY : CMakeFiles/kraken_bot.dir/codegen
 
 # clean rule for target.

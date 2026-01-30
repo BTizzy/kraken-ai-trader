@@ -91,5 +91,24 @@ This document provides a high-level summary of the kraken-ai-trader system, its 
 Additional operational note (sidecar):
 - A lightweight health sidecar (`server/health-sidecar.js`) is available that reads the `data/price_history.db` and exposes `/health/collector` on port 3006. Use this as a reliable fallback probe when `/api/collector/status` or other debug endpoints on the main proxy are returning unexpected HTML 404s (diagnostic evidence shows some local responders may intermittently answer loopback requests with HTML 404). The monitor script (`scripts/monitor_paper_run.js`) has been updated to probe this sidecar at `http://localhost:3006/health/collector` when the primary status endpoints are unavailable.
 
+## Experimentation & Automation (NEW)
+
+We maintain an autonomous experiment pipeline that continuously runs paper-mode experiments, performs offline validation, and promotes candidates that pass guardrails.
+
+- `scripts/generate_candidates_dynamic.js` — generate dynamic-vol TP/SL candidate lists from historical trades (`logs/candidates_dynamic.json`).
+- `scripts/walk_forward_backtest.js` & `scripts/walk_forward_grid_search.js` — walk-forward tests and grid searches for OOS validation.
+- `scripts/orchestrate_paper_experiments.js` — orchestrator that runs sequential candidate experiments, supports candidate files, monitor overrides, and loop mode.
+- `scripts/auto_promotion_watchdog.js` — automatic validation and promotion of candidates that exceed `PROMOTE_PNL`.
+- `scripts/train_direction_model.js` — train a simple direction model on historical trades and save `data/direction_model.json`.
+- `scripts/fetch_public_trades.js` — periodic fetch of public trades via `/api/trades/:pair` to feed model features.
+- `scripts/analyze_directional_misfires.js` — detect pairs where flipping trade direction improves historical outcomes and writes `data/direction_rules.json`.
+
+Operational notes:
+- Artifacts and logs are saved to `logs/` and `data/` — treat `data/` SQLite DBs as the single source of truth. JSON artifacts are for experiments and model training only.
+- Safety: `scripts/monitor_trade_pnl.js` enforces stop-loss and profit-target thresholds (configurable via environment variables). Use `KELLY_FRACTION_OVERRIDE` to limit exposure for aggressive experiments.
+- Model lifecycle: the direction model is retrained by the orchestrator after experiments and hot-reloaded by the bot's learning engine during continuous learning cycles.
+
+If you make changes to experiment scripts, update the README and `Must_read_before_any_agent_task.md` so future agents follow the current process.
+
 ---
 *Last updated: January 22, 2026*

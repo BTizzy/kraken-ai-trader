@@ -1,0 +1,1136 @@
+tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+listening on lo0, link-type NULL (BSD loopback), snapshot length 524288 bytes
+13:38:39.287841 IP6 localhost.61407 > localhost.exlm-agent: Flags [P.], seq 1974250634:1974251266, ack 2865353779, win 6272, options [nop,nop,TS val 1896891862 ecr 3119758762], length 632
+`......@....................................u......3...........
+q.E.....GET /api/bot/status HTTP/1.1
+Host: localhost:3002
+Connection: keep-alive
+sec-ch-ua-platform: "macOS"
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36
+sec-ch-ua: "Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"
+sec-ch-ua-mobile: ?0
+Accept: */*
+Sec-Fetch-Site: same-origin
+Sec-Fetch-Mode: cors
+Sec-Fetch-Dest: empty
+Referer: http://localhost:3002/index.html
+Accept-Encoding: gzip, deflate, br, zstd
+Accept-Language: en-US,en;q=0.9
+Cookie: __next_hmr_refresh_hash__=43
+If-None-Match: W/"91-HF7b03fzr5Pk4M8J4VINA9h0dSY"
+
+
+13:38:39.287908 IP6 localhost.exlm-agent > localhost.61407: Flags [.], ack 632, win 5913, options [nop,nop,TS val 3119759753 ecr 1896891862], length 0
+`.	.. .@.......................................3u........(.....
+....q.E.
+13:38:39.288993 IP6 localhost.exlm-agent > localhost.61407: Flags [P.], seq 1:179, ack 632, win 5913, options [nop,nop,TS val 3119759755 ecr 1896891862], length 178
+`.	....@.......................................3u..............
+....q.E.HTTP/1.1 304 Not Modified
+X-Powered-By: Express
+ETag: W/"91-HF7b03fzr5Pk4M8J4VINA9h0dSY"
+Date: Fri, 23 Jan 2026 18:38:39 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+
+13:38:39.289024 IP6 localhost.61407 > localhost.exlm-agent: Flags [.], ack 179, win 6270, options [nop,nop,TS val 1896891864 ecr 3119759755], length 0
+`.... .@....................................u..........~.(.....
+q.E.....
+13:38:39.741340 IP6 localhost.61834 > localhost.exlm-agent: Flags [S], seq 2589205280, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 344660082 ecr 0,sackOK,eol], length 0
+`....,.@.....................................T# .........4....?........
+...r........
+13:38:39.741524 IP6 localhost.exlm-agent > localhost.61834: Flags [S.], seq 190248834, ack 2589205281, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 45678187 ecr 344660082,sackOK,eol], length 0
+`
+...,.@.....................................V...T#!.....4....?........
+...k...r....
+13:38:39.741575 IP6 localhost.61834 > localhost.exlm-agent: Flags [.], ack 1, win 6372, options [nop,nop,TS val 344660082 ecr 45678187], length 0
+`.... .@.....................................T#!.V.......(.....
+...r...k
+13:38:39.741609 IP6 localhost.exlm-agent > localhost.61834: Flags [.], ack 1, win 6372, options [nop,nop,TS val 45678187 ecr 344660082], length 0
+`
+... .@.....................................V...T#!.....(.....
+...k...r
+13:38:39.741615 IP6 localhost.61834 > localhost.exlm-agent: Flags [P.], seq 1:113, ack 1, win 6372, options [nop,nop,TS val 344660082 ecr 45678187], length 112
+`......@.....................................T#!.V.............
+...r...kGET /api/collector/status HTTP/1.1
+Host: localhost:3002
+User-Agent: curl/8.7.1
+Accept: */*
+X-DIAG:probe1
+
+
+13:38:39.741641 IP6 localhost.exlm-agent > localhost.61834: Flags [.], ack 113, win 6371, options [nop,nop,TS val 45678187 ecr 344660082], length 0
+`
+... .@.....................................V...T#......(.....
+...k...r
+13:38:39.742450 IP6 localhost.exlm-agent > localhost.61834: Flags [P.], seq 1:432, ack 113, win 6371, options [nop,nop,TS val 45678188 ecr 344660082], length 431
+`
+.....@.....................................V...T#............
+...l...rHTTP/1.1 404 Not Found
+X-Powered-By: Express
+Content-Security-Policy: default-src 'none'
+X-Content-Type-Options: nosniff
+Content-Type: text/html; charset=utf-8
+Content-Length: 159
+Date: Fri, 23 Jan 2026 18:38:39 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/collector/status</pre>
+</body>
+</html>
+
+13:38:39.742509 IP6 localhost.61834 > localhost.exlm-agent: Flags [.], ack 432, win 6366, options [nop,nop,TS val 344660083 ecr 45678188], length 0
+`.... .@.....................................T#..V.2.....(.....
+...s...l
+13:38:39.742690 IP6 localhost.61834 > localhost.exlm-agent: Flags [F.], seq 113, ack 432, win 6366, options [nop,nop,TS val 344660083 ecr 45678188], length 0
+`.... .@.....................................T#..V.2.....(.....
+...s...l
+13:38:39.742735 IP6 localhost.exlm-agent > localhost.61834: Flags [.], ack 114, win 6371, options [nop,nop,TS val 45678188 ecr 344660083], length 0
+`
+... .@.....................................V.2.T#......(.....
+...l...s
+13:38:39.742777 IP6 localhost.exlm-agent > localhost.61834: Flags [F.], seq 432, ack 114, win 6371, options [nop,nop,TS val 45678188 ecr 344660083], length 0
+`
+... .@.....................................V.2.T#......(.....
+...l...s
+13:38:39.742840 IP6 localhost.61834 > localhost.exlm-agent: Flags [.], ack 433, win 6366, options [nop,nop,TS val 344660083 ecr 45678188], length 0
+`.... .@.....................................T#..V.3.....(.....
+...s...l
+13:38:39.752259 IP6 localhost.61835 > localhost.exlm-agent: Flags [S], seq 3258470650, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 3469004155 ecr 0,sackOK,eol], length 0
+`....,.@.....................................8P..........4....?........
+...{........
+13:38:39.752359 IP6 localhost.exlm-agent > localhost.61835: Flags [S.], seq 2288767892, ack 3258470651, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 3667676226 ecr 3469004155,sackOK,eol], length 0
+`....,.@.....................................k...8P......4....?........
+..LB...{....
+13:38:39.752385 IP6 localhost.61835 > localhost.exlm-agent: Flags [.], ack 1, win 6372, options [nop,nop,TS val 3469004155 ecr 3667676226], length 0
+`.... .@.....................................8P..k.......(.....
+...{..LB
+13:38:39.752403 IP6 localhost.exlm-agent > localhost.61835: Flags [.], ack 1, win 6372, options [nop,nop,TS val 3667676226 ecr 3469004155], length 0
+`.... .@.....................................k...8P......(.....
+..LB...{
+13:38:39.752418 IP6 localhost.61835 > localhost.exlm-agent: Flags [P.], seq 1:114, ack 1, win 6372, options [nop,nop,TS val 3469004155 ecr 3667676226], length 113
+`......@.....................................8P..k.............
+...{..LBGET /api/collector/status2 HTTP/1.1
+Host: localhost:3002
+User-Agent: curl/8.7.1
+Accept: */*
+X-DIAG:probe1
+
+
+13:38:39.752438 IP6 localhost.exlm-agent > localhost.61835: Flags [.], ack 114, win 6371, options [nop,nop,TS val 3667676226 ecr 3469004155], length 0
+`.... .@.....................................k...8Ql.....(.....
+..LB...{
+13:38:39.752685 IP6 localhost.exlm-agent > localhost.61835: Flags [P.], seq 1:433, ack 114, win 6371, options [nop,nop,TS val 3667676226 ecr 3469004155], length 432
+`......@.....................................k...8Ql...........
+..LB...{HTTP/1.1 404 Not Found
+X-Powered-By: Express
+Content-Security-Policy: default-src 'none'
+X-Content-Type-Options: nosniff
+Content-Type: text/html; charset=utf-8
+Content-Length: 160
+Date: Fri, 23 Jan 2026 18:38:39 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/collector/status2</pre>
+</body>
+</html>
+
+13:38:39.752715 IP6 localhost.61835 > localhost.exlm-agent: Flags [.], ack 433, win 6366, options [nop,nop,TS val 3469004155 ecr 3667676226], length 0
+`.... .@.....................................8Ql.k.E.....(.....
+...{..LB
+13:38:39.752803 IP6 localhost.61835 > localhost.exlm-agent: Flags [F.], seq 114, ack 433, win 6366, options [nop,nop,TS val 3469004155 ecr 3667676226], length 0
+`.... .@.....................................8Ql.k.E.....(.....
+...{..LB
+13:38:39.752838 IP6 localhost.exlm-agent > localhost.61835: Flags [.], ack 115, win 6371, options [nop,nop,TS val 3667676226 ecr 3469004155], length 0
+`.... .@.....................................k.E.8Qm.....(.....
+..LB...{
+13:38:39.752920 IP6 localhost.exlm-agent > localhost.61835: Flags [F.], seq 433, ack 115, win 6371, options [nop,nop,TS val 3667676227 ecr 3469004155], length 0
+`.... .@.....................................k.E.8Qm.....(.....
+..LC...{
+13:38:39.752984 IP6 localhost.61835 > localhost.exlm-agent: Flags [.], ack 434, win 6366, options [nop,nop,TS val 3469004156 ecr 3667676227], length 0
+`.... .@.....................................8Qm.k.F.....(.....
+...|..LC
+13:38:39.760274 IP6 localhost.61836 > localhost.exlm-agent: Flags [S], seq 1370534391, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 3347943017 ecr 0,sackOK,eol], length 0
+`
+
+..,.@....................................Q............4....?........
+...i........
+13:38:39.760384 IP6 localhost.exlm-agent > localhost.61836: Flags [S.], seq 383333745, ack 1370534392, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 4054316048 ecr 3347943017,sackOK,eol], length 0
+`....,.@......................................5qQ........4....?........
+.......i....
+13:38:39.760409 IP6 localhost.61836 > localhost.exlm-agent: Flags [.], ack 1, win 6372, options [nop,nop,TS val 3347943017 ecr 4054316048], length 0
+`
+
+.. .@....................................Q.....5r.....(.....
+...i....
+13:38:39.760424 IP6 localhost.exlm-agent > localhost.61836: Flags [.], ack 1, win 6372, options [nop,nop,TS val 4054316048 ecr 3347943017], length 0
+`.... .@......................................5rQ........(.....
+.......i
+13:38:39.760430 IP6 localhost.61836 > localhost.exlm-agent: Flags [P.], seq 1:100, ack 1, win 6372, options [nop,nop,TS val 3347943017 ecr 4054316048], length 99
+`
+
+....@....................................Q.....5r...........
+...i....GET /_whoami HTTP/1.1
+Host: localhost:3002
+User-Agent: curl/8.7.1
+Accept: */*
+X-DIAG:probe1
+
+
+13:38:39.760443 IP6 localhost.exlm-agent > localhost.61836: Flags [.], ack 100, win 6371, options [nop,nop,TS val 4054316048 ecr 3347943017], length 0
+`.... .@......................................5rQ..[.....(.....
+.......i
+13:38:39.760728 IP6 localhost.exlm-agent > localhost.61836: Flags [P.], seq 1:419, ack 100, win 6371, options [nop,nop,TS val 4054316048 ecr 3347943017], length 418
+`......@......................................5rQ..[...........
+.......iHTTP/1.1 404 Not Found
+X-Powered-By: Express
+Content-Security-Policy: default-src 'none'
+X-Content-Type-Options: nosniff
+Content-Type: text/html; charset=utf-8
+Content-Length: 146
+Date: Fri, 23 Jan 2026 18:38:39 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /_whoami</pre>
+</body>
+</html>
+
+13:38:39.760756 IP6 localhost.61836 > localhost.exlm-agent: Flags [.], ack 419, win 6366, options [nop,nop,TS val 3347943017 ecr 4054316048], length 0
+`
+
+.. .@....................................Q..[..7......(.....
+...i....
+13:38:39.760840 IP6 localhost.61836 > localhost.exlm-agent: Flags [F.], seq 100, ack 419, win 6366, options [nop,nop,TS val 3347943017 ecr 4054316048], length 0
+`
+
+.. .@....................................Q..[..7......(.....
+...i....
+13:38:39.760869 IP6 localhost.exlm-agent > localhost.61836: Flags [.], ack 101, win 6371, options [nop,nop,TS val 4054316048 ecr 3347943017], length 0
+`.... .@......................................7.Q..\.....(.....
+.......i
+13:38:39.760909 IP6 localhost.exlm-agent > localhost.61836: Flags [F.], seq 419, ack 101, win 6371, options [nop,nop,TS val 4054316049 ecr 3347943017], length 0
+`.... .@......................................7.Q..\.....(.....
+.......i
+13:38:39.760948 IP6 localhost.61836 > localhost.exlm-agent: Flags [.], ack 420, win 6366, options [nop,nop,TS val 3347943018 ecr 4054316049], length 0
+`
+
+.. .@....................................Q..\..7......(.....
+...j....
+13:38:39.947972 IP6 localhost.61406 > localhost.exlm-agent: Flags [P.], seq 4150344406:4150345096, ack 134998763, win 6270, options [nop,nop,TS val 1265614976 ecr 3733624610], length 690
+`......@.....................................a:........~.......
+Ko....."GET /api/bot/status HTTP/1.1
+Host: localhost:3002
+Connection: keep-alive
+sec-ch-ua-platform: "macOS"
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.105.1 Chrome/138.0.7204.251 Electron/37.6.0 Safari/537.36
+sec-ch-ua: "Not)A;Brand";v="8", "Chromium";v="138"
+sec-ch-ua-mobile: ?0
+Accept: */*
+Sec-Fetch-Site: same-origin
+Sec-Fetch-Mode: cors
+Sec-Fetch-Dest: empty
+Sec-Fetch-Storage-Access: active
+Referer: http://localhost:3002/?id=e61570c1-19c5-426b-9871-09dbf7286b44&vscodeBrowserReqId=1769115296529
+Accept-Encoding: gzip, deflate, br, zstd
+Accept-Language: en-US
+If-None-Match: W/"91-HF7b03fzr5Pk4M8J4VINA9h0dSY"
+
+
+13:38:39.948065 IP6 localhost.exlm-agent > localhost.61406: Flags [.], ack 690, win 5852, options [nop,nop,TS val 3733625605 ecr 1265614976], length 0
+`.... .@.........................................a=......(.....
+....Ko..
+13:38:39.950601 IP6 localhost.exlm-agent > localhost.61406: Flags [P.], seq 1:179, ack 690, win 5852, options [nop,nop,TS val 3733625607 ecr 1265614976], length 178
+`......@.........................................a=............
+....Ko..HTTP/1.1 304 Not Modified
+X-Powered-By: Express
+ETag: W/"91-HF7b03fzr5Pk4M8J4VINA9h0dSY"
+Date: Fri, 23 Jan 2026 18:38:39 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+
+13:38:39.950630 IP6 localhost.61406 > localhost.exlm-agent: Flags [.], ack 179, win 6268, options [nop,nop,TS val 1265614978 ecr 3733625607], length 0
+`.... .@.....................................a=........|.(.....
+Ko......
+13:38:40.289657 IP6 localhost.61407 > localhost.exlm-agent: Flags [P.], seq 632:1264, ack 179, win 6270, options [nop,nop,TS val 1896892864 ecr 3119759755], length 632
+`......@....................................u..........~.......
+q.I.....GET /api/bot/status HTTP/1.1
+Host: localhost:3002
+Connection: keep-alive
+sec-ch-ua-platform: "macOS"
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36
+sec-ch-ua: "Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"
+sec-ch-ua-mobile: ?0
+Accept: */*
+Sec-Fetch-Site: same-origin
+Sec-Fetch-Mode: cors
+Sec-Fetch-Dest: empty
+Referer: http://localhost:3002/index.html
+Accept-Encoding: gzip, deflate, br, zstd
+Accept-Language: en-US,en;q=0.9
+Cookie: __next_hmr_refresh_hash__=43
+If-None-Match: W/"91-HF7b03fzr5Pk4M8J4VINA9h0dSY"
+
+
+13:38:40.289830 IP6 localhost.exlm-agent > localhost.61407: Flags [.], ack 1264, win 5904, options [nop,nop,TS val 3119760755 ecr 1896892864], length 0
+`.	.. .@........................................u..z.....(.....
+...sq.I.
+13:38:40.289848 IP6 localhost.61408 > localhost.exlm-agent: Flags [P.], seq 4004582981:4004583617, ack 1979636176, win 6270, options [nop,nop,TS val 3874823443 ecr 3714250130], length 636
+`......@.......................................Eu......~.......
+.....b..GET /api/bot/learning HTTP/1.1
+Host: localhost:3002
+Connection: keep-alive
+sec-ch-ua-platform: "macOS"
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36
+sec-ch-ua: "Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"
+sec-ch-ua-mobile: ?0
+Accept: */*
+Sec-Fetch-Site: same-origin
+Sec-Fetch-Mode: cors
+Sec-Fetch-Dest: empty
+Referer: http://localhost:3002/index.html
+Accept-Encoding: gzip, deflate, br, zstd
+Accept-Language: en-US,en;q=0.9
+Cookie: __next_hmr_refresh_hash__=43
+If-None-Match: W/"3b92-S9rMW4EDYxbTi8i1aLwNpwDbVIY"
+
+
+13:38:40.290080 IP6 localhost.exlm-agent > localhost.61408: Flags [.], ack 636, win 5904, options [nop,nop,TS val 3714252126 ecr 3874823443], length 0
+`.... .@....................................u............(.....
+.b.^....
+13:38:40.291366 IP6 localhost.exlm-agent > localhost.61407: Flags [P.], seq 179:357, ack 1264, win 5904, options [nop,nop,TS val 3119760757 ecr 1896892864], length 178
+`.	....@........................................u..z...........
+...uq.I.HTTP/1.1 304 Not Modified
+X-Powered-By: Express
+ETag: W/"91-HF7b03fzr5Pk4M8J4VINA9h0dSY"
+Date: Fri, 23 Jan 2026 18:38:40 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+
+13:38:40.291399 IP6 localhost.61407 > localhost.exlm-agent: Flags [.], ack 357, win 6268, options [nop,nop,TS val 1896892866 ecr 3119760757], length 0
+`.... .@....................................u..z.......|.(.....
+q.I....u
+13:38:40.291880 IP6 localhost.exlm-agent > localhost.61408: Flags [P.], seq 1:181, ack 636, win 5904, options [nop,nop,TS val 3714252127 ecr 3874823443], length 180
+`......@....................................u..................
+.b._....HTTP/1.1 304 Not Modified
+X-Powered-By: Express
+ETag: W/"3b92-S9rMW4EDYxbTi8i1aLwNpwDbVIY"
+Date: Fri, 23 Jan 2026 18:38:40 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+
+13:38:40.291905 IP6 localhost.61408 > localhost.exlm-agent: Flags [.], ack 181, win 6268, options [nop,nop,TS val 3874823446 ecr 3714252127], length 0
+`.... .@........................................u......|.(.....
+.....b._
+13:38:40.948969 IP6 localhost.61406 > localhost.exlm-agent: Flags [P.], seq 690:1380, ack 179, win 6268, options [nop,nop,TS val 1265615977 ecr 3733625607], length 690
+`......@.....................................a=........|.......
+Ko.i....GET /api/bot/status HTTP/1.1
+Host: localhost:3002
+Connection: keep-alive
+sec-ch-ua-platform: "macOS"
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.105.1 Chrome/138.0.7204.251 Electron/37.6.0 Safari/537.36
+sec-ch-ua: "Not)A;Brand";v="8", "Chromium";v="138"
+sec-ch-ua-mobile: ?0
+Accept: */*
+Sec-Fetch-Site: same-origin
+Sec-Fetch-Mode: cors
+Sec-Fetch-Dest: empty
+Sec-Fetch-Storage-Access: active
+Referer: http://localhost:3002/?id=e61570c1-19c5-426b-9871-09dbf7286b44&vscodeBrowserReqId=1769115296529
+Accept-Encoding: gzip, deflate, br, zstd
+Accept-Language: en-US
+If-None-Match: W/"91-HF7b03fzr5Pk4M8J4VINA9h0dSY"
+
+
+13:38:40.949069 IP6 localhost.61427 > localhost.exlm-agent: Flags [P.], seq 4167342187:4167342881, ack 208097256, win 6270, options [nop,nop,TS val 782217506 ecr 1891314176], length 694
+`......@.....................................d.k.gO....~.......
+..."p.*.GET /api/bot/learning HTTP/1.1
+Host: localhost:3002
+Connection: keep-alive
+sec-ch-ua-platform: "macOS"
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.105.1 Chrome/138.0.7204.251 Electron/37.6.0 Safari/537.36
+sec-ch-ua: "Not)A;Brand";v="8", "Chromium";v="138"
+sec-ch-ua-mobile: ?0
+Accept: */*
+Sec-Fetch-Site: same-origin
+Sec-Fetch-Mode: cors
+Sec-Fetch-Dest: empty
+Sec-Fetch-Storage-Access: active
+Referer: http://localhost:3002/?id=e61570c1-19c5-426b-9871-09dbf7286b44&vscodeBrowserReqId=1769115296529
+Accept-Encoding: gzip, deflate, br, zstd
+Accept-Language: en-US
+If-None-Match: W/"3b92-S9rMW4EDYxbTi8i1aLwNpwDbVIY"
+
+
+13:38:40.949105 IP6 localhost.exlm-agent > localhost.61406: Flags [.], ack 1380, win 5842, options [nop,nop,TS val 3733626606 ecr 1265615977], length 0
+`.... .@.........................................a@:.....(.....
+....Ko.i
+13:38:40.949743 IP6 localhost.exlm-agent > localhost.61427: Flags [.], ack 694, win 5852, options [nop,nop,TS val 1891316174 ecr 782217506], length 0
+`.... .@.....................................gO..d.!.....(.....
+p.1...."
+13:38:40.952548 IP6 localhost.exlm-agent > localhost.61406: Flags [P.], seq 179:357, ack 1380, win 5842, options [nop,nop,TS val 3733626609 ecr 1265615977], length 178
+`......@.........................................a@:...........
+....Ko.iHTTP/1.1 304 Not Modified
+X-Powered-By: Express
+ETag: W/"91-HF7b03fzr5Pk4M8J4VINA9h0dSY"
+Date: Fri, 23 Jan 2026 18:38:40 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+
+13:38:40.952581 IP6 localhost.61406 > localhost.exlm-agent: Flags [.], ack 357, win 6266, options [nop,nop,TS val 1265615980 ecr 3733626609], length 0
+`.... .@.....................................a@:...O...z.(.....
+Ko.l....
+13:38:40.954542 IP6 localhost.exlm-agent > localhost.61427: Flags [P.], seq 1:181, ack 694, win 5852, options [nop,nop,TS val 1891316179 ecr 782217506], length 180
+`......@.....................................gO..d.!...........
+p.1...."HTTP/1.1 304 Not Modified
+X-Powered-By: Express
+ETag: W/"3b92-S9rMW4EDYxbTi8i1aLwNpwDbVIY"
+Date: Fri, 23 Jan 2026 18:38:40 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+
+13:38:40.954609 IP6 localhost.61427 > localhost.exlm-agent: Flags [.], ack 181, win 6268, options [nop,nop,TS val 782217511 ecr 1891316179], length 0
+`.... .@.....................................d.!.gP....|.(.....
+...'p.1.
+13:38:41.289128 IP6 localhost.61408 > localhost.exlm-agent: Flags [P.], seq 636:1268, ack 181, win 6268, options [nop,nop,TS val 3874824443 ecr 3714252127], length 632
+`......@........................................u......|.......
+.. ..b._GET /api/bot/status HTTP/1.1
+Host: localhost:3002
+Connection: keep-alive
+sec-ch-ua-platform: "macOS"
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36
+sec-ch-ua: "Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"
+sec-ch-ua-mobile: ?0
+Accept: */*
+Sec-Fetch-Site: same-origin
+Sec-Fetch-Mode: cors
+Sec-Fetch-Dest: empty
+Referer: http://localhost:3002/index.html
+Accept-Encoding: gzip, deflate, br, zstd
+Accept-Language: en-US,en;q=0.9
+Cookie: __next_hmr_refresh_hash__=43
+If-None-Match: W/"91-HF7b03fzr5Pk4M8J4VINA9h0dSY"
+
+
+13:38:41.289240 IP6 localhost.exlm-agent > localhost.61408: Flags [.], ack 1268, win 5895, options [nop,nop,TS val 3714253125 ecr 3874824443], length 0
+`.... .@....................................u......9.....(.....
+.c.E.. .
+13:38:41.290895 IP6 localhost.exlm-agent > localhost.61408: Flags [P.], seq 181:359, ack 1268, win 5895, options [nop,nop,TS val 3714253127 ecr 3874824443], length 178
+`......@....................................u......9...........
+.c.G.. .HTTP/1.1 304 Not Modified
+X-Powered-By: Express
+ETag: W/"91-HF7b03fzr5Pk4M8J4VINA9h0dSY"
+Date: Fri, 23 Jan 2026 18:38:41 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+
+13:38:41.290949 IP6 localhost.61408 > localhost.exlm-agent: Flags [.], ack 359, win 6266, options [nop,nop,TS val 3874824445 ecr 3714253127], length 0
+`.... .@.......................................9u..6...z.(.....
+.. ..c.G
+13:38:41.947970 IP6 localhost.61427 > localhost.exlm-agent: Flags [P.], seq 694:1384, ack 181, win 6268, options [nop,nop,TS val 782218505 ecr 1891316179], length 690
+`......@.....................................d.!.gP....|.......
+...	p.1.GET /api/bot/status HTTP/1.1
+Host: localhost:3002
+Connection: keep-alive
+sec-ch-ua-platform: "macOS"
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.105.1 Chrome/138.0.7204.251 Electron/37.6.0 Safari/537.36
+sec-ch-ua: "Not)A;Brand";v="8", "Chromium";v="138"
+sec-ch-ua-mobile: ?0
+Accept: */*
+Sec-Fetch-Site: same-origin
+Sec-Fetch-Mode: cors
+Sec-Fetch-Dest: empty
+Sec-Fetch-Storage-Access: active
+Referer: http://localhost:3002/?id=e61570c1-19c5-426b-9871-09dbf7286b44&vscodeBrowserReqId=1769115296529
+Accept-Encoding: gzip, deflate, br, zstd
+Accept-Language: en-US
+If-None-Match: W/"91-HF7b03fzr5Pk4M8J4VINA9h0dSY"
+
+
+13:38:41.948056 IP6 localhost.exlm-agent > localhost.61427: Flags [.], ack 1384, win 5842, options [nop,nop,TS val 1891317173 ecr 782218505], length 0
+`.... .@.....................................gP..d.......(.....
+p.5....	
+13:38:41.951804 IP6 localhost.exlm-agent > localhost.61427: Flags [P.], seq 181:359, ack 1384, win 5842, options [nop,nop,TS val 1891317176 ecr 782218505], length 178
+`......@.....................................gP..d.............
+p.5....	HTTP/1.1 304 Not Modified
+X-Powered-By: Express
+ETag: W/"91-HF7b03fzr5Pk4M8J4VINA9h0dSY"
+Date: Fri, 23 Jan 2026 18:38:41 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+
+13:38:41.951885 IP6 localhost.61427 > localhost.exlm-agent: Flags [.], ack 359, win 6266, options [nop,nop,TS val 782218508 ecr 1891317176], length 0
+`.... .@.....................................d...gQN...z.(.....
+....p.5.
+13:38:42.288165 IP6 localhost.61408 > localhost.exlm-agent: Flags [P.], seq 1268:1900, ack 359, win 6266, options [nop,nop,TS val 3874825442 ecr 3714253127], length 632
+`......@.......................................9u..6...z.......
+..$..c.GGET /api/bot/status HTTP/1.1
+Host: localhost:3002
+Connection: keep-alive
+sec-ch-ua-platform: "macOS"
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36
+sec-ch-ua: "Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"
+sec-ch-ua-mobile: ?0
+Accept: */*
+Sec-Fetch-Site: same-origin
+Sec-Fetch-Mode: cors
+Sec-Fetch-Dest: empty
+Referer: http://localhost:3002/index.html
+Accept-Encoding: gzip, deflate, br, zstd
+Accept-Language: en-US,en;q=0.9
+Cookie: __next_hmr_refresh_hash__=43
+If-None-Match: W/"91-HF7b03fzr5Pk4M8J4VINA9h0dSY"
+
+
+13:38:42.288232 IP6 localhost.61407 > localhost.exlm-agent: Flags [P.], seq 1264:1900, ack 357, win 6268, options [nop,nop,TS val 1896894863 ecr 3119760757], length 636
+`......@....................................u..z.......|.......
+q.Q....uGET /api/bot/learning HTTP/1.1
+Host: localhost:3002
+Connection: keep-alive
+sec-ch-ua-platform: "macOS"
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36
+sec-ch-ua: "Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"
+sec-ch-ua-mobile: ?0
+Accept: */*
+Sec-Fetch-Site: same-origin
+Sec-Fetch-Mode: cors
+Sec-Fetch-Dest: empty
+Referer: http://localhost:3002/index.html
+Accept-Encoding: gzip, deflate, br, zstd
+Accept-Language: en-US,en;q=0.9
+Cookie: __next_hmr_refresh_hash__=43
+If-None-Match: W/"3b92-S9rMW4EDYxbTi8i1aLwNpwDbVIY"
+
+
+13:38:42.288285 IP6 localhost.exlm-agent > localhost.61408: Flags [.], ack 1900, win 5886, options [nop,nop,TS val 3714254124 ecr 3874825442], length 0
+`.... .@....................................u..6.........(.....
+.c.,..$.
+13:38:42.288819 IP6 localhost.exlm-agent > localhost.61407: Flags [.], ack 1900, win 5895, options [nop,nop,TS val 3119762754 ecr 1896894863], length 0
+`.	.. .@........................................u........(.....
+...Bq.Q.
+13:38:42.291145 IP6 localhost.exlm-agent > localhost.61408: Flags [P.], seq 359:537, ack 1900, win 5886, options [nop,nop,TS val 3714254127 ecr 3874825442], length 178
+`......@....................................u..6...............
+.c./..$.HTTP/1.1 304 Not Modified
+X-Powered-By: Express
+ETag: W/"91-HF7b03fzr5Pk4M8J4VINA9h0dSY"
+Date: Fri, 23 Jan 2026 18:38:42 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+
+13:38:42.291195 IP6 localhost.61408 > localhost.exlm-agent: Flags [.], ack 537, win 6264, options [nop,nop,TS val 3874825445 ecr 3714254127], length 0
+`.... .@........................................u......x.(.....
+..$..c./
+13:38:42.292248 IP6 localhost.exlm-agent > localhost.61407: Flags [P.], seq 357:537, ack 1900, win 5895, options [nop,nop,TS val 3119762758 ecr 1896894863], length 180
+`.	....@........................................u..............
+...Fq.Q.HTTP/1.1 304 Not Modified
+X-Powered-By: Express
+ETag: W/"3b92-S9rMW4EDYxbTi8i1aLwNpwDbVIY"
+Date: Fri, 23 Jan 2026 18:38:42 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+
+13:38:42.292294 IP6 localhost.61407 > localhost.exlm-agent: Flags [.], ack 537, win 6266, options [nop,nop,TS val 1896894867 ecr 3119762758], length 0
+`.... .@....................................u......K...z.(.....
+q.Q....F
+13:38:42.617893 IP6 localhost.61849 > localhost.exlm-agent: Flags [S], seq 552458150, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 4128411408 ecr 0,sackOK,eol], length 0
+`....,.@.................................... ............4....?........
+............
+13:38:42.617895 IP6 localhost.61852 > localhost.exlm-agent: Flags [S], seq 3605587191, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 476144486 ecr 0,sackOK,eol], length 0
+`	...,.@.................................................4....?........
+.acf........
+13:38:42.617899 IP6 localhost.61853 > localhost.exlm-agent: Flags [S], seq 1217224991, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 4111212087 ecr 0,sackOK,eol], length 0
+`.
+..,.@....................................H.a..........4....?........
+...7........
+13:38:42.617908 IP6 localhost.61850 > localhost.exlm-agent: Flags [S], seq 1113079376, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 4278717180 ecr 0,sackOK,eol], length 0
+`	...,.@....................................BX>P.........4....?........
+..
+.........
+13:38:42.617933 IP6 localhost.61851 > localhost.exlm-agent: Flags [S], seq 1067261588, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 3796284672 ecr 0,sackOK,eol], length 0
+`.	..,.@....................................?............4....?........
+.F..........
+13:38:42.618007 IP6 localhost.exlm-agent > localhost.61849: Flags [S.], seq 1156957095, ack 552458151, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 1431539791 ecr 4128411408,sackOK,eol], length 0
+`....,.@....................................D... ........4....?........
+US.O........
+13:38:42.618047 IP6 localhost.exlm-agent > localhost.61852: Flags [S.], seq 388301385, ack 3605587192, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 4285390556 ecr 476144486,sackOK,eol], length 0
+`.
+..,.@.....................................%.I.........4....?........
+.m...acf....
+13:38:42.618084 IP6 localhost.exlm-agent > localhost.61853: Flags [S.], seq 3774502560, ack 1217224992, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 1501948906 ecr 4111212087,sackOK,eol], length 0
+`....,.@......................................V.H.a .....4....?........
+Y......7....
+13:38:42.618111 IP6 localhost.exlm-agent > localhost.61850: Flags [S.], seq 597761548, ack 1113079377, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 658712990 ecr 4278717180,sackOK,eol], length 0
+`....,.@....................................#...BX>Q.....4....?........
+'C)...
+.....
+13:38:42.618142 IP6 localhost.exlm-agent > localhost.61851: Flags [S.], seq 1312180758, ack 1067261589, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 1665645693 ecr 3796284672,sackOK,eol], length 0
+`....,.@....................................N6J.?........4....?........
+cG.}.F......
+13:38:42.618164 IP6 localhost.61849 > localhost.exlm-agent: Flags [.], ack 1, win 6372, options [nop,nop,TS val 4128411409 ecr 1431539791], length 0
+`.... .@.................................... ...D........(.....
+....US.O
+13:38:42.618181 IP6 localhost.61852 > localhost.exlm-agent: Flags [.], ack 1, win 6372, options [nop,nop,TS val 476144487 ecr 4285390556], length 0
+`	... .@.........................................%.J.....(.....
+.acg.m..
+13:38:42.618197 IP6 localhost.61853 > localhost.exlm-agent: Flags [.], ack 1, win 6372, options [nop,nop,TS val 4111212088 ecr 1501948906], length 0
+`.
+.. .@....................................H.a ..V......(.....
+...8Y...
+13:38:42.618213 IP6 localhost.61850 > localhost.exlm-agent: Flags [.], ack 1, win 6372, options [nop,nop,TS val 4278717181 ecr 658712990], length 0
+`	... .@....................................BX>Q#........(.....
+..
+.'C).
+13:38:42.618229 IP6 localhost.61851 > localhost.exlm-agent: Flags [.], ack 1, win 6372, options [nop,nop,TS val 3796284673 ecr 1665645693], length 0
+`.	.. .@....................................?...N6J......(.....
+.F..cG.}
+13:38:42.618254 IP6 localhost.61852 > localhost.exlm-agent: Flags [P.], seq 1:82, ack 1, win 6372, options [nop,nop,TS val 476144487 ecr 4285390556], length 81
+`	...q.@.........................................%.J.....y.....
+.acg.m..GET /api/prices/PI_ADAUSD?limit=1 HTTP/1.1
+Host: localhost:3002
+Accept: */*
+
+
+13:38:42.618256 IP6 localhost.61849 > localhost.exlm-agent: Flags [P.], seq 1:82, ack 1, win 6372, options [nop,nop,TS val 4128411409 ecr 1431539791], length 81
+`....q.@.................................... ...D........y.....
+....US.OGET /api/prices/PI_LTCUSD?limit=1 HTTP/1.1
+Host: localhost:3002
+Accept: */*
+
+
+13:38:42.618257 IP6 localhost.exlm-agent > localhost.61849: Flags [.], ack 1, win 6372, options [nop,nop,TS val 1431539791 ecr 4128411409], length 0
+`.... .@....................................D... ........(.....
+US.O....
+13:38:42.618267 IP6 localhost.61853 > localhost.exlm-agent: Flags [P.], seq 1:83, ack 1, win 6372, options [nop,nop,TS val 4111212088 ecr 1501948906], length 82
+`.
+..r.@....................................H.a ..V......z.....
+...8Y...GET /api/prices/PI_LINKUSD?limit=1 HTTP/1.1
+Host: localhost:3002
+Accept: */*
+
+
+13:38:42.618268 IP6 localhost.exlm-agent > localhost.61852: Flags [.], ack 1, win 6372, options [nop,nop,TS val 4285390556 ecr 476144487], length 0
+`.
+.. .@.....................................%.J.........(.....
+.m...acg
+13:38:42.618276 IP6 localhost.exlm-agent > localhost.61853: Flags [.], ack 1, win 6372, options [nop,nop,TS val 1501948906 ecr 4111212088], length 0
+`.... .@......................................V.H.a .....(.....
+Y......8
+13:38:42.618283 IP6 localhost.exlm-agent > localhost.61850: Flags [.], ack 1, win 6372, options [nop,nop,TS val 658712990 ecr 4278717181], length 0
+`.... .@....................................#...BX>Q.....(.....
+'C)...
+.
+13:38:42.618292 IP6 localhost.exlm-agent > localhost.61851: Flags [.], ack 1, win 6372, options [nop,nop,TS val 1665645693 ecr 3796284673], length 0
+`.... .@....................................N6J.?........(.....
+cG.}.F..
+13:38:42.618302 IP6 localhost.exlm-agent > localhost.61852: Flags [.], ack 82, win 6371, options [nop,nop,TS val 4285390556 ecr 476144487], length 0
+`.
+.. .@.....................................%.J...I.....(.....
+.m...acg
+13:38:42.618308 IP6 localhost.exlm-agent > localhost.61849: Flags [.], ack 82, win 6371, options [nop,nop,TS val 1431539791 ecr 4128411409], length 0
+`.... .@....................................D... ........(.....
+US.O....
+13:38:42.618318 IP6 localhost.exlm-agent > localhost.61853: Flags [.], ack 83, win 6371, options [nop,nop,TS val 1501948906 ecr 4111212088], length 0
+`.... .@......................................V.H.ar.....(.....
+Y......8
+13:38:42.618331 IP6 localhost.61851 > localhost.exlm-agent: Flags [P.], seq 1:82, ack 1, win 6372, options [nop,nop,TS val 3796284673 ecr 1665645693], length 81
+`.	..q.@....................................?...N6J......y.....
+.F..cG.}GET /api/prices/PI_ETHUSD?limit=1 HTTP/1.1
+Host: localhost:3002
+Accept: */*
+
+
+13:38:42.618332 IP6 localhost.61850 > localhost.exlm-agent: Flags [P.], seq 1:82, ack 1, win 6372, options [nop,nop,TS val 4278717181 ecr 658712990], length 81
+`	...q.@....................................BX>Q#........y.....
+..
+.'C).GET /api/prices/PI_XBTUSD?limit=1 HTTP/1.1
+Host: localhost:3002
+Accept: */*
+
+
+13:38:42.618351 IP6 localhost.exlm-agent > localhost.61851: Flags [.], ack 82, win 6371, options [nop,nop,TS val 1665645693 ecr 3796284673], length 0
+`.... .@....................................N6J.?........(.....
+cG.}.F..
+13:38:42.618357 IP6 localhost.exlm-agent > localhost.61850: Flags [.], ack 82, win 6371, options [nop,nop,TS val 658712990 ecr 4278717181], length 0
+`.... .@....................................#...BX>......(.....
+'C)...
+.
+13:38:42.620687 IP6 localhost.exlm-agent > localhost.61849: Flags [P.], seq 1:337, ack 82, win 6371, options [nop,nop,TS val 1431539793 ecr 4128411409], length 336
+`....p.@....................................D... ........x.....
+US.Q....HTTP/1.1 200 OK
+X-Powered-By: Express
+Content-Type: application/json; charset=utf-8
+Content-Length: 100
+ETag: W/"64-TbcxmmHLk4tvvkZZm6vO9T+1UGU"
+Date: Fri, 23 Jan 2026 18:38:42 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{"prices":[68.75516499894],"timestamps":[1769131234505],"volumes":[0],"bids":[68.71],"asks":[68.79]}
+13:38:42.620725 IP6 localhost.61849 > localhost.exlm-agent: Flags [.], ack 337, win 6367, options [nop,nop,TS val 4128411411 ecr 1431539793], length 0
+`.... .@.................................... ...D........(.....
+....US.Q
+13:38:42.620836 IP6 localhost.61849 > localhost.exlm-agent: Flags [F.], seq 82, ack 337, win 6367, options [nop,nop,TS val 4128411411 ecr 1431539793], length 0
+`.... .@.................................... ...D........(.....
+....US.Q
+13:38:42.620870 IP6 localhost.exlm-agent > localhost.61849: Flags [.], ack 83, win 6371, options [nop,nop,TS val 1431539793 ecr 4128411411], length 0
+`.... .@....................................D... ........(.....
+US.Q....
+13:38:42.621158 IP6 localhost.61854 > localhost.exlm-agent: Flags [S], seq 1502068536, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 2945691728 ecr 0,sackOK,eol], length 0
+`....,.@....................................Y..8.........4....?........
+...P........
+13:38:42.621222 IP6 localhost.exlm-agent > localhost.61854: Flags [S.], seq 3407433935, ack 1502068537, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 1153892748 ecr 2945691728,sackOK,eol], length 0
+`	
+..,.@......................................P.Y..9.....4....?........
+D......P....
+13:38:42.621237 IP6 localhost.61854 > localhost.exlm-agent: Flags [.], ack 1, win 6372, options [nop,nop,TS val 2945691728 ecr 1153892748], length 0
+`.... .@....................................Y..9..P......(.....
+...PD...
+13:38:42.621246 IP6 localhost.exlm-agent > localhost.61854: Flags [.], ack 1, win 6372, options [nop,nop,TS val 1153892748 ecr 2945691728], length 0
+`	
+.. .@......................................P.Y..9.....(.....
+D......P
+13:38:42.621277 IP6 localhost.61854 > localhost.exlm-agent: Flags [P.], seq 1:84, ack 1, win 6372, options [nop,nop,TS val 2945691728 ecr 1153892748], length 83
+`....s.@....................................Y..9..P......{.....
+...PD...GET /api/ohlc/PI_LTCUSD?interval=15 HTTP/1.1
+Host: localhost:3002
+Accept: */*
+
+
+13:38:42.621294 IP6 localhost.exlm-agent > localhost.61854: Flags [.], ack 84, win 6371, options [nop,nop,TS val 1153892748 ecr 2945691728], length 0
+`	
+.. .@......................................P.Y........(.....
+D......P
+13:38:42.621621 IP6 localhost.exlm-agent > localhost.61852: Flags [P.], seq 1:327, ack 82, win 6371, options [nop,nop,TS val 4285390559 ecr 476144487], length 326
+`.
+..f.@.....................................%.J...I.....n.....
+.m...acgHTTP/1.1 200 OK
+X-Powered-By: Express
+Content-Type: application/json; charset=utf-8
+Content-Length: 91
+ETag: W/"5b-1VyAvhnPqJRbN8vNpISZRzd5stE"
+Date: Fri, 23 Jan 2026 18:38:42 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{"prices":[0.35813637884],"timestamps":[1769131234209],"volumes":[0],"bids":[0],"asks":[0]}
+13:38:42.621640 IP6 localhost.61852 > localhost.exlm-agent: Flags [.], ack 327, win 6367, options [nop,nop,TS val 476144490 ecr 4285390559], length 0
+`	... .@.......................................I.%.......(.....
+.acj.m..
+13:38:42.621704 IP6 localhost.61852 > localhost.exlm-agent: Flags [F.], seq 82, ack 327, win 6367, options [nop,nop,TS val 476144490 ecr 4285390559], length 0
+`	... .@.......................................I.%.......(.....
+.acj.m..
+13:38:42.621722 IP6 localhost.exlm-agent > localhost.61852: Flags [.], ack 83, win 6371, options [nop,nop,TS val 4285390559 ecr 476144490], length 0
+`.
+.. .@.....................................%.....J.....(.....
+.m...acj
+13:38:42.621932 IP6 localhost.exlm-agent > localhost.61849: Flags [F.], seq 337, ack 83, win 6371, options [nop,nop,TS val 1431539795 ecr 4128411411], length 0
+`.... .@....................................D... ........(.....
+US.S....
+13:38:42.621955 IP6 localhost.61849 > localhost.exlm-agent: Flags [.], ack 338, win 6367, options [nop,nop,TS val 4128411413 ecr 1431539795], length 0
+`.... .@.................................... ...D........(.....
+....US.S
+13:38:42.621965 IP6 localhost.61855 > localhost.exlm-agent: Flags [S], seq 4246154066, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 2288040210 ecr 0,sackOK,eol], length 0
+`....,.@......................................+R.........4....?........
+.`..........
+13:38:42.621993 IP6 localhost.exlm-agent > localhost.61855: Flags [S.], seq 2875353330, ack 4246154067, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 927236581 ecr 2288040210,sackOK,eol], length 0
+`....,.@.....................................bh...+S.....4....?........
+7D...`......
+13:38:42.622002 IP6 localhost.61855 > localhost.exlm-agent: Flags [.], ack 1, win 6372, options [nop,nop,TS val 2288040210 ecr 927236581], length 0
+`.... .@......................................+S.bh......(.....
+.`..7D..
+13:38:42.622009 IP6 localhost.exlm-agent > localhost.61855: Flags [.], ack 1, win 6372, options [nop,nop,TS val 927236581 ecr 2288040210], length 0
+`.... .@.....................................bh...+S.....(.....
+7D...`..
+13:38:42.622039 IP6 localhost.61855 > localhost.exlm-agent: Flags [P.], seq 1:84, ack 1, win 6372, options [nop,nop,TS val 2288040210 ecr 927236581], length 83
+`....s.@......................................+S.bh......{.....
+.`..7D..GET /api/ohlc/PI_ADAUSD?interval=15 HTTP/1.1
+Host: localhost:3002
+Accept: */*
+
+
+13:38:42.622054 IP6 localhost.exlm-agent > localhost.61855: Flags [.], ack 84, win 6371, options [nop,nop,TS val 927236581 ecr 2288040210], length 0
+`.... .@.....................................bh...+......(.....
+7D...`..
+13:38:42.622553 IP6 localhost.exlm-agent > localhost.61853: Flags [P.], seq 1:328, ack 83, win 6371, options [nop,nop,TS val 1501948910 ecr 4111212088], length 327
+`....g.@......................................V.H.ar.....o.....
+Y......8HTTP/1.1 200 OK
+X-Powered-By: Express
+Content-Type: application/json; charset=utf-8
+Content-Length: 92
+ETag: W/"5c-gZSsHcs8gs8s0u0eoYzUNbPGD8I"
+Date: Fri, 23 Jan 2026 18:38:42 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{"prices":[12.24236856994],"timestamps":[1769131234318],"volumes":[0],"bids":[0],"asks":[0]}
+13:38:42.622576 IP6 localhost.61853 > localhost.exlm-agent: Flags [.], ack 328, win 6367, options [nop,nop,TS val 4111212092 ecr 1501948910], length 0
+`.
+.. .@....................................H.ar..W......(.....
+...<Y...
+13:38:42.622635 IP6 localhost.61853 > localhost.exlm-agent: Flags [F.], seq 83, ack 328, win 6367, options [nop,nop,TS val 4111212092 ecr 1501948910], length 0
+`.
+.. .@....................................H.ar..W......(.....
+...<Y...
+13:38:42.622651 IP6 localhost.exlm-agent > localhost.61853: Flags [.], ack 84, win 6371, options [nop,nop,TS val 1501948910 ecr 4111212092], length 0
+`.... .@......................................W.H.as.....(.....
+Y......<
+13:38:42.622808 IP6 localhost.exlm-agent > localhost.61852: Flags [F.], seq 327, ack 83, win 6371, options [nop,nop,TS val 4285390560 ecr 476144490], length 0
+`.
+.. .@.....................................%.....J.....(.....
+.m...acj
+13:38:42.622829 IP6 localhost.61852 > localhost.exlm-agent: Flags [.], ack 328, win 6367, options [nop,nop,TS val 476144491 ecr 4285390560], length 0
+`	... .@.......................................J.%.......(.....
+.ack.m..
+13:38:42.622836 IP6 localhost.61856 > localhost.exlm-agent: Flags [S], seq 2389646388, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 767299741 ecr 0,sackOK,eol], length 0
+`....,.@.....................................o.4.........4....?........
+-...........
+13:38:42.622864 IP6 localhost.exlm-agent > localhost.61856: Flags [S.], seq 2046174696, ack 2389646389, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 612993638 ecr 767299741,sackOK,eol], length 0
+`....,.@....................................y.%..o.5.....4....?........
+$..f-.......
+13:38:42.622873 IP6 localhost.61856 > localhost.exlm-agent: Flags [.], ack 1, win 6372, options [nop,nop,TS val 767299741 ecr 612993638], length 0
+`.... .@.....................................o.5y.%......(.....
+-...$..f
+13:38:42.622881 IP6 localhost.exlm-agent > localhost.61856: Flags [.], ack 1, win 6372, options [nop,nop,TS val 612993639 ecr 767299741], length 0
+`.... .@....................................y.%..o.5.....(.....
+$..g-...
+13:38:42.622903 IP6 localhost.61856 > localhost.exlm-agent: Flags [P.], seq 1:85, ack 1, win 6372, options [nop,nop,TS val 767299742 ecr 612993639], length 84
+`....t.@.....................................o.5y.%......|.....
+-...$..gGET /api/ohlc/PI_LINKUSD?interval=15 HTTP/1.1
+Host: localhost:3002
+Accept: */*
+
+
+13:38:42.622915 IP6 localhost.exlm-agent > localhost.61856: Flags [.], ack 85, win 6371, options [nop,nop,TS val 612993639 ecr 767299742], length 0
+`.... .@....................................y.%..o.......(.....
+$..g-...
+13:38:42.623161 IP6 localhost.exlm-agent > localhost.61850: Flags [P.], seq 1:337, ack 82, win 6371, options [nop,nop,TS val 658712995 ecr 4278717181], length 336
+`....p.@....................................#...BX>......x.....
+'C)...
+.HTTP/1.1 200 OK
+X-Powered-By: Express
+Content-Type: application/json; charset=utf-8
+Content-Length: 100
+ETag: W/"64-NDcYZMA4FJZCv/60Z/5frHO7V6o"
+Date: Fri, 23 Jan 2026 18:38:42 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{"prices":[89474.5],"timestamps":[1769127379945],"volumes":[320249],"bids":[89476],"asks":[89502.5]}
+13:38:42.623179 IP6 localhost.61850 > localhost.exlm-agent: Flags [.], ack 337, win 6367, options [nop,nop,TS val 4278717186 ecr 658712995], length 0
+`	... .@....................................BX>.#..].....(.....
+....'C).
+13:38:42.623223 IP6 localhost.61850 > localhost.exlm-agent: Flags [F.], seq 82, ack 337, win 6367, options [nop,nop,TS val 4278717186 ecr 658712995], length 0
+`	... .@....................................BX>.#..].....(.....
+....'C).
+13:38:42.623236 IP6 localhost.exlm-agent > localhost.61850: Flags [.], ack 83, win 6371, options [nop,nop,TS val 658712995 ecr 4278717186], length 0
+`.... .@....................................#..]BX>......(.....
+'C).....
+13:38:42.623371 IP6 localhost.exlm-agent > localhost.61853: Flags [F.], seq 328, ack 84, win 6371, options [nop,nop,TS val 1501948911 ecr 4111212092], length 0
+`.... .@......................................W.H.as.....(.....
+Y......<
+13:38:42.623376 IP6 localhost.61857 > localhost.exlm-agent: Flags [S], seq 3830578507, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 1886240615 ecr 0,sackOK,eol], length 0
+`....,.@.....................................Q.K.........4....?........
+pm.g........
+13:38:42.623392 IP6 localhost.61853 > localhost.exlm-agent: Flags [.], ack 329, win 6367, options [nop,nop,TS val 4111212093 ecr 1501948911], length 0
+`.
+.. .@....................................H.as..W......(.....
+...=Y...
+13:38:42.623415 IP6 localhost.exlm-agent > localhost.61857: Flags [S.], seq 1648053610, ack 3830578508, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 3356592426 ecr 1886240615,sackOK,eol], length 0
+`....,.@....................................b;Mj.Q.L.....4....?........
+...*pm.g....
+13:38:42.623428 IP6 localhost.61857 > localhost.exlm-agent: Flags [.], ack 1, win 6372, options [nop,nop,TS val 1886240615 ecr 3356592426], length 0
+`.... .@.....................................Q.Lb;Mk.....(.....
+pm.g...*
+13:38:42.623433 IP6 localhost.exlm-agent > localhost.61857: Flags [.], ack 1, win 6372, options [nop,nop,TS val 3356592426 ecr 1886240615], length 0
+`.... .@....................................b;Mk.Q.L.....(.....
+...*pm.g
+13:38:42.623463 IP6 localhost.61857 > localhost.exlm-agent: Flags [P.], seq 1:84, ack 1, win 6372, options [nop,nop,TS val 1886240615 ecr 3356592426], length 83
+`....s.@.....................................Q.Lb;Mk.....{.....
+pm.g...*GET /api/ohlc/PI_XBTUSD?interval=15 HTTP/1.1
+Host: localhost:3002
+Accept: */*
+
+
+13:38:42.623476 IP6 localhost.exlm-agent > localhost.61857: Flags [.], ack 84, win 6371, options [nop,nop,TS val 3356592426 ecr 1886240615], length 0
+`.... .@....................................b;Mk.Q.......(.....
+...*pm.g
+13:38:42.623867 IP6 localhost.exlm-agent > localhost.61851: Flags [P.], seq 1:338, ack 82, win 6371, options [nop,nop,TS val 1665645698 ecr 3796284673], length 337
+`....q.@....................................N6J.?........y.....
+cG...F..HTTP/1.1 200 OK
+X-Powered-By: Express
+Content-Type: application/json; charset=utf-8
+Content-Length: 101
+ETag: W/"65-+N4jsihB7bao/2GGBeDhSzuJ+08"
+Date: Fri, 23 Jan 2026 18:38:42 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{"prices":[2946.65],"timestamps":[1769127380078],"volumes":[89294],"bids":[2949.75],"asks":[2952.15]}
+13:38:42.623884 IP6 localhost.61851 > localhost.exlm-agent: Flags [.], ack 338, win 6367, options [nop,nop,TS val 3796284679 ecr 1665645698], length 0
+`.	.. .@....................................?...N6Kh.....(.....
+.F..cG..
+13:38:42.624099 IP6 localhost.exlm-agent > localhost.61850: Flags [F.], seq 337, ack 83, win 6371, options [nop,nop,TS val 658712996 ecr 4278717186], length 0
+`.... .@....................................#..]BX>......(.....
+'C).....
+13:38:42.624125 IP6 localhost.61850 > localhost.exlm-agent: Flags [.], ack 338, win 6367, options [nop,nop,TS val 4278717187 ecr 658712996], length 0
+`	... .@....................................BX>.#..^.....(.....
+....'C).
+13:38:42.624132 IP6 localhost.61851 > localhost.exlm-agent: Flags [F.], seq 82, ack 338, win 6367, options [nop,nop,TS val 3796284679 ecr 1665645698], length 0
+`.	.. .@....................................?...N6Kh.....(.....
+.F..cG..
+13:38:42.624140 IP6 localhost.exlm-agent > localhost.61851: Flags [.], ack 83, win 6371, options [nop,nop,TS val 1665645699 ecr 3796284679], length 0
+`.... .@....................................N6Kh?........(.....
+cG...F..
+13:38:42.624335 IP6 localhost.61858 > localhost.exlm-agent: Flags [S], seq 2866060943, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 3211814046 ecr 0,sackOK,eol], length 0
+`	...,.@.................................................4....?........
+.pd.........
+13:38:42.624341 IP6 localhost.exlm-agent > localhost.61851: Flags [F.], seq 338, ack 83, win 6371, options [nop,nop,TS val 1665645699 ecr 3796284679], length 0
+`.... .@....................................N6Kh?........(.....
+cG...F..
+13:38:42.624373 IP6 localhost.exlm-agent > localhost.61858: Flags [S.], seq 2093398586, ack 2866060944, win 65535, options [mss 16324,nop,wscale 6,nop,nop,TS val 2697759500 ecr 3211814046,sackOK,eol], length 0
+`.
+..,.@....................................|..:.........4....?........
+.....pd.....
+13:38:42.624381 IP6 localhost.61851 > localhost.exlm-agent: Flags [.], ack 339, win 6367, options [nop,nop,TS val 3796284679 ecr 1665645699], length 0
+`.	.. .@....................................?...N6Ki.....(.....
+.F..cG..
+13:38:42.624389 IP6 localhost.61858 > localhost.exlm-agent: Flags [.], ack 1, win 6372, options [nop,nop,TS val 3211814046 ecr 2697759500], length 0
+`	... .@........................................|..;.....(.....
+.pd.....
+13:38:42.624401 IP6 localhost.exlm-agent > localhost.61858: Flags [.], ack 1, win 6372, options [nop,nop,TS val 2697759500 ecr 3211814046], length 0
+`.
+.. .@....................................|..;.........(.....
+.....pd.
+13:38:42.624433 IP6 localhost.61858 > localhost.exlm-agent: Flags [P.], seq 1:84, ack 1, win 6372, options [nop,nop,TS val 3211814046 ecr 2697759500], length 83
+`	...s.@........................................|..;.....{.....
+.pd.....GET /api/ohlc/PI_ETHUSD?interval=15 HTTP/1.1
+Host: localhost:3002
+Accept: */*
+
+
+13:38:42.624444 IP6 localhost.exlm-agent > localhost.61858: Flags [.], ack 84, win 6371, options [nop,nop,TS val 2697759500 ecr 3211814046], length 0
+`.
+.. .@....................................|..;.........(.....
+.....pd.
+13:38:42.624645 IP6 localhost.exlm-agent > localhost.61854: Flags [P.], seq 1:405, ack 84, win 6371, options [nop,nop,TS val 1153892751 ecr 2945691728], length 404
+`	
+....@......................................P.Y..............
+D......PHTTP/1.1 200 OK
+X-Powered-By: Express
+Content-Type: application/json; charset=utf-8
+Content-Length: 168
+ETag: W/"a8-T+5oGX1Ppae5VSCtLBAqxmnsu1s"
+Date: Fri, 23 Jan 2026 18:38:42 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{"result":{"PI_LTCUSD":[[1769130900,"68.77","68.78","68.73","68.76","68.76","54","54"],[1769185800,"68.31","68.31","68.30","68.30","68.30","2","2"]],"last":1769193522}}
+13:38:42.624660 IP6 localhost.61854 > localhost.exlm-agent: Flags [.], ack 405, win 6366, options [nop,nop,TS val 2945691731 ecr 1153892751], length 0
+`.... .@....................................Y.....Rd.....(.....
+...SD...
+13:38:42.624701 IP6 localhost.61854 > localhost.exlm-agent: Flags [F.], seq 84, ack 405, win 6366, options [nop,nop,TS val 2945691731 ecr 1153892751], length 0
+`.... .@....................................Y.....Rd.....(.....
+...SD...
+13:38:42.624718 IP6 localhost.exlm-agent > localhost.61854: Flags [.], ack 85, win 6371, options [nop,nop,TS val 1153892751 ecr 2945691731], length 0
+`	
+.. .@......................................RdY........(.....
+D......S
+13:38:42.624823 IP6 localhost.exlm-agent > localhost.61855: Flags [P.], seq 1:395, ack 84, win 6371, options [nop,nop,TS val 927236583 ecr 2288040210], length 394
+`......@.....................................bh...+............
+7D...`..HTTP/1.1 200 OK
+X-Powered-By: Express
+Content-Type: application/json; charset=utf-8
+Content-Length: 158
+ETag: W/"9e-x4kFq8CkV9AkmQ6miu9coi7p0WY"
+Date: Fri, 23 Jan 2026 18:38:42 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{"result":{"PI_ADAUSD":[[1769130900,"0.36","0.36","0.36","0.36","0.36","54","54"],[1769185800,"0.36","0.36","0.36","0.36","0.36","2","2"]],"last":1769193522}}
+13:38:42.624837 IP6 localhost.61855 > localhost.exlm-agent: Flags [.], ack 395, win 6366, options [nop,nop,TS val 2288040212 ecr 927236583], length 0
+`.... .@......................................+..bj}.....(.....
+.`..7D..
+13:38:42.624876 IP6 localhost.61855 > localhost.exlm-agent: Flags [F.], seq 84, ack 395, win 6366, options [nop,nop,TS val 2288040213 ecr 927236583], length 0
+`.... .@......................................+..bj}.....(.....
+.`..7D..
+13:38:42.624891 IP6 localhost.exlm-agent > localhost.61855: Flags [.], ack 85, win 6371, options [nop,nop,TS val 927236584 ecr 2288040213], length 0
+`.... .@.....................................bj}..+......(.....
+7D...`..
+13:38:42.625122 IP6 localhost.exlm-agent > localhost.61856: Flags [P.], seq 1:406, ack 85, win 6371, options [nop,nop,TS val 612993641 ecr 767299742], length 405
+`......@....................................y.%..o.............
+$..i-...HTTP/1.1 200 OK
+X-Powered-By: Express
+Content-Type: application/json; charset=utf-8
+Content-Length: 169
+ETag: W/"a9-SLGiubuNTcX3pgoR18/ZyETqQEw"
+Date: Fri, 23 Jan 2026 18:38:42 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{"result":{"PI_LINKUSD":[[1769130900,"12.24","12.25","12.24","12.24","12.24","54","54"],[1769185800,"12.29","12.29","12.29","12.29","12.29","2","2"]],"last":1769193522}}
+13:38:42.625140 IP6 localhost.61856 > localhost.exlm-agent: Flags [.], ack 406, win 6366, options [nop,nop,TS val 767299744 ecr 612993641], length 0
+`.... .@.....................................o..y.'~.....(.....
+-...$..i
+13:38:42.625174 IP6 localhost.61856 > localhost.exlm-agent: Flags [F.], seq 85, ack 406, win 6366, options [nop,nop,TS val 767299744 ecr 612993641], length 0
+`.... .@.....................................o..y.'~.....(.....
+-...$..i
+13:38:42.625186 IP6 localhost.exlm-agent > localhost.61856: Flags [.], ack 86, win 6371, options [nop,nop,TS val 612993641 ecr 767299744], length 0
+`.... .@....................................y.'~.o.......(.....
+$..i-...
+13:38:42.625228 IP6 localhost.exlm-agent > localhost.61854: Flags [F.], seq 405, ack 85, win 6371, options [nop,nop,TS val 1153892752 ecr 2945691731], length 0
+`	
+.. .@......................................RdY........(.....
+D......S
+13:38:42.625244 IP6 localhost.61854 > localhost.exlm-agent: Flags [.], ack 406, win 6366, options [nop,nop,TS val 2945691732 ecr 1153892752], length 0
+`.... .@....................................Y.....Re.....(.....
+...TD...
+13:38:42.625275 IP6 localhost.exlm-agent > localhost.61855: Flags [F.], seq 395, ack 85, win 6371, options [nop,nop,TS val 927236584 ecr 2288040213], length 0
+`.... .@.....................................bj}..+......(.....
+7D...`..
+13:38:42.625293 IP6 localhost.61855 > localhost.exlm-agent: Flags [.], ack 396, win 6366, options [nop,nop,TS val 2288040213 ecr 927236584], length 0
+`.... .@......................................+..bj~.....(.....
+.`..7D..
+13:38:42.625417 IP6 localhost.exlm-agent > localhost.61857: Flags [P.], seq 1:361, ack 84, win 6371, options [nop,nop,TS val 3356592428 ecr 1886240615], length 360
+`......@....................................b;Mk.Q.............
+...,pm.gHTTP/1.1 200 OK
+X-Powered-By: Express
+Content-Type: application/json; charset=utf-8
+Content-Length: 124
+ETag: W/"7c-12TwAq2H3hx53JFXR0EB6POtTEg"
+Date: Fri, 23 Jan 2026 18:38:42 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{"result":{"PI_XBTUSD":[[1769127300,"89474.50","89474.50","89474.50","89474.50","89474.50","200","200"]],"last":1769193522}}
+13:38:42.625431 IP6 localhost.61857 > localhost.exlm-agent: Flags [.], ack 361, win 6367, options [nop,nop,TS val 1886240617 ecr 3356592428], length 0
+`.... .@.....................................Q..b;N......(.....
+pm.i...,
+13:38:42.625462 IP6 localhost.61857 > localhost.exlm-agent: Flags [F.], seq 84, ack 361, win 6367, options [nop,nop,TS val 1886240617 ecr 3356592428], length 0
+`.... .@.....................................Q..b;N......(.....
+pm.i...,
+13:38:42.625474 IP6 localhost.exlm-agent > localhost.61857: Flags [.], ack 85, win 6371, options [nop,nop,TS val 3356592428 ecr 1886240617], length 0
+`.... .@....................................b;N..Q.......(.....
+...,pm.i
+13:38:42.625521 IP6 localhost.exlm-agent > localhost.61856: Flags [F.], seq 406, ack 86, win 6371, options [nop,nop,TS val 612993641 ecr 767299744], length 0
+`.... .@....................................y.'~.o.......(.....
+$..i-...
+13:38:42.625537 IP6 localhost.61856 > localhost.exlm-agent: Flags [.], ack 407, win 6366, options [nop,nop,TS val 767299744 ecr 612993641], length 0
+`.... .@.....................................o..y.'......(.....
+-...$..i
+13:38:42.625746 IP6 localhost.exlm-agent > localhost.61858: Flags [P.], seq 1:356, ack 84, win 6371, options [nop,nop,TS val 2697759501 ecr 3211814046], length 355
+`.
+....@....................................|..;...............
+.....pd.HTTP/1.1 200 OK
+X-Powered-By: Express
+Content-Type: application/json; charset=utf-8
+Content-Length: 119
+ETag: W/"77-v6Kg3GLgt1gAIDsoQuksH8DrMCU"
+Date: Fri, 23 Jan 2026 18:38:42 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{"result":{"PI_ETHUSD":[[1769127300,"2948.45","2948.45","2946.65","2946.65","2946.65","200","200"]],"last":1769193522}}
+13:38:42.625759 IP6 localhost.61858 > localhost.exlm-agent: Flags [.], ack 356, win 6367, options [nop,nop,TS val 3211814047 ecr 2697759501], length 0
+`	... .@........................................|........(.....
+.pd....
+13:38:42.625794 IP6 localhost.61858 > localhost.exlm-agent: Flags [F.], seq 84, ack 356, win 6367, options [nop,nop,TS val 3211814047 ecr 2697759501], length 0
+`	... .@........................................|........(.....
+.pd....
+13:38:42.625805 IP6 localhost.exlm-agent > localhost.61858: Flags [.], ack 85, win 6371, options [nop,nop,TS val 2697759501 ecr 3211814047], length 0
+`.
+.. .@....................................|............(.....
+.....pd.
+13:38:42.625813 IP6 localhost.exlm-agent > localhost.61857: Flags [F.], seq 361, ack 85, win 6371, options [nop,nop,TS val 3356592428 ecr 1886240617], length 0
+`.... .@....................................b;N..Q.......(.....
+...,pm.i
+13:38:42.625828 IP6 localhost.61857 > localhost.exlm-agent: Flags [.], ack 362, win 6367, options [nop,nop,TS val 1886240617 ecr 3356592428], length 0
+`.... .@.....................................Q..b;N......(.....
+pm.i...,
+13:38:42.625865 IP6 localhost.exlm-agent > localhost.61858: Flags [F.], seq 356, ack 85, win 6371, options [nop,nop,TS val 2697759501 ecr 3211814047], length 0
+`.
+.. .@....................................|............(.....
+.....pd.
+13:38:42.625877 IP6 localhost.61858 > localhost.exlm-agent: Flags [.], ack 357, win 6367, options [nop,nop,TS val 3211814048 ecr 2697759501], length 0
+`	... .@........................................|........(.....
+.pd....
+13:38:42.948257 IP6 localhost.61427 > localhost.exlm-agent: Flags [P.], seq 1384:2074, ack 359, win 6266, options [nop,nop,TS val 782219505 ecr 1891317176], length 690
+`......@.....................................d...gQN...z.......
+....p.5.GET /api/bot/status HTTP/1.1
+Host: localhost:3002
+Connection: keep-alive
+sec-ch-ua-platform: "macOS"
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.105.1 Chrome/138.0.7204.251 Electron/37.6.0 Safari/537.36
+sec-ch-ua: "Not)A;Brand";v="8", "Chromium";v="138"
+sec-ch-ua-mobile: ?0
+Accept: */*
+Sec-Fetch-Site: same-origin
+Sec-Fetch-Mode: cors
+Sec-Fetch-Dest: empty
+Sec-Fetch-Storage-Access: active
+Referer: http://localhost:3002/?id=e61570c1-19c5-426b-9871-09dbf7286b44&vscodeBrowserReqId=1769115296529
+Accept-Encoding: gzip, deflate, br, zstd
+Accept-Language: en-US
+If-None-Match: W/"91-HF7b03fzr5Pk4M8J4VINA9h0dSY"
+
+
+13:38:42.948364 IP6 localhost.exlm-agent > localhost.61427: Flags [.], ack 2074, win 5832, options [nop,nop,TS val 1891318173 ecr 782219505], length 0
+`.... .@.....................................gQN.d.......(.....
+p.9.....
+13:38:42.948451 IP6 localhost.61406 > localhost.exlm-agent: Flags [P.], seq 1380:2074, ack 357, win 6266, options [nop,nop,TS val 1265617976 ecr 3733626609], length 694
+`......@.....................................a@:...O...z.......
+Ko.8....GET /api/bot/learning HTTP/1.1
+Host: localhost:3002
+Connection: keep-alive
+sec-ch-ua-platform: "macOS"
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.105.1 Chrome/138.0.7204.251 Electron/37.6.0 Safari/537.36
+sec-ch-ua: "Not)A;Brand";v="8", "Chromium";v="138"
+sec-ch-ua-mobile: ?0
+Accept: */*
+Sec-Fetch-Site: same-origin
+Sec-Fetch-Mode: cors
+Sec-Fetch-Dest: empty
+Sec-Fetch-Storage-Access: active
+Referer: http://localhost:3002/?id=e61570c1-19c5-426b-9871-09dbf7286b44&vscodeBrowserReqId=1769115296529
+Accept-Encoding: gzip, deflate, br, zstd
+Accept-Language: en-US
+If-None-Match: W/"3b92-S9rMW4EDYxbTi8i1aLwNpwDbVIY"
+
+
+13:38:42.949190 IP6 localhost.exlm-agent > localhost.61406: Flags [.], ack 2074, win 5832, options [nop,nop,TS val 3733628606 ecr 1265617976], length 0
+`.... .@.......................................O.aB......(.....
+....Ko.8
+200 packets captured
+236 packets received by filter
+0 packets dropped by kernel

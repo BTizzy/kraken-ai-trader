@@ -1,5 +1,7 @@
 # Kraken C++ Bot - Implementation Complete ✅
 
+> **NOTE:** This document provides a technical summary and historical context for the C++ bot. For the most current architecture, operational, and strategy information, always check `Must_read_before_any_agent_task.md`.
+
 ## 📋 What Was Built
 
 A production-ready **C++ trading bot** for Kraken with **50x more robust self-learning**:

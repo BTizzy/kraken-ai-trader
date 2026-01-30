@@ -8,9 +8,28 @@
 
 LearningEngine::LearningEngine() {
     // Initialize SQLite database (project root data directory)
-    // From bot/build/, go up two levels to project root, then into data/
-    std::string db_path = "../../data/trades.db";
+    // Allow override via TRADES_DB for testing/CI
+    const char* env_db = std::getenv("TRADES_DB");
+    std::string db_path = env_db && *env_db ? std::string(env_db) : std::string("../../data/trades.db");
     init_database(db_path);
+    // Attempt to load a direction model for adaptive entry direction/leveraging
+    try {
+        std::ifstream f("data/direction_model.json");
+        if (f.good()) {
+            nlohmann::json jm;
+            f >> jm;
+            if (jm.contains("weights") && jm["weights"].is_object()) {
+                for (auto it = jm["weights"].begin(); it != jm["weights"].end(); ++it) {
+                    direction_model_weights[it.key()] = it.value().get<double>();
+                }
+                direction_model_bias = jm.value("bias", 0.0);
+                direction_model_loaded = true;
+                std::cout << "Loaded direction model with " << direction_model_weights.size() << " weights" << std::endl;
+            }
+        }
+    } catch (...) {
+        // ignore
+    }
 }
 
 LearningEngine::~LearningEngine() {
@@ -23,10 +42,14 @@ LearningEngine::~LearningEngine() {
 void LearningEngine::init_database(const std::string& db_path) {
     db_path_ = db_path;
     
-    int rc = sqlite3_open(db_path.c_str(), &db_);
+    // Try to open (and create if missing) the trades DB
+    int rc = sqlite3_open_v2(db_path.c_str(), &db_, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr);
     if (rc != SQLITE_OK) {
-        std::cerr << "❌ Failed to open SQLite database: " << sqlite3_errmsg(db_) << std::endl;
-        db_ = nullptr;
+        std::cerr << "❌ Failed to open or create SQLite database at " << db_path << ": " << sqlite3_errmsg(db_) << std::endl;
+        if (db_) {
+            sqlite3_close(db_);
+            db_ = nullptr;
+        }
         return;
     }
     
@@ -158,7 +181,9 @@ void LearningEngine::load_trades_from_db() {
             timeframe_seconds, volatility_pct, bid_ask_spread,
             rsi, macd_histogram, macd_signal, bb_position, volume_ratio,
             momentum_score, atr_pct, market_regime, trend_direction
-        FROM trades ORDER BY timestamp ASC
+        FROM trades 
+        WHERE leverage > 1.0
+        ORDER BY timestamp ASC
     )";
     sqlite3_stmt* stmt;
     
@@ -227,7 +252,7 @@ void LearningEngine::load_trades_from_db() {
 int LearningEngine::get_db_trade_count() const {
     if (!db_) return 0;
     
-    const char* count_sql = "SELECT COUNT(*) FROM trades";
+    const char* count_sql = "SELECT COUNT(*) FROM trades WHERE leverage > 1.0";
     sqlite3_stmt* stmt;
     
     int rc = sqlite3_prepare_v2(db_, count_sql, -1, &stmt, nullptr);
@@ -1398,4 +1423,353 @@ void LearningEngine::analyze_indicator_patterns() {
             }
         }
     }
+}
+
+// NEW: Real-time market data interface implementations
+
+void LearningEngine::update_market_data(const MarketDataPoint& data) {
+    std::lock_guard<std::mutex> lock(market_data_mutex);
+    
+    // Update latest data
+    latest_market_data[data.pair] = data;
+    
+    // Add to historical data
+    real_time_market_data[data.pair].push_back(data);
+    
+    // Maintain size limit
+    if (real_time_market_data[data.pair].size() > MAX_MARKET_DATA_SIZE) {
+        real_time_market_data[data.pair].pop_front();
+    }
+    
+    // Update price history for indicators
+    price_history[data.pair].push_back(data.last_price);
+    volume_history[data.pair].push_back(data.volume);
+    
+    if (price_history[data.pair].size() > MAX_HISTORY_SIZE) {
+        price_history[data.pair].pop_front();
+        volume_history[data.pair].pop_front();
+    }
+}
+
+LearningEngine::MarketDataPoint LearningEngine::get_latest_market_data(const std::string& pair) const {
+    std::lock_guard<std::mutex> lock(market_data_mutex);
+    
+    auto it = latest_market_data.find(pair);
+    if (it != latest_market_data.end()) {
+        return it->second;
+    }
+    
+    // Return empty data point if not found
+    return MarketDataPoint{pair, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0};
+}
+
+std::vector<LearningEngine::MarketDataPoint> LearningEngine::get_recent_market_data(const std::string& pair, int minutes) const {
+    std::lock_guard<std::mutex> lock(market_data_mutex);
+    
+    auto it = real_time_market_data.find(pair);
+    if (it == real_time_market_data.end()) {
+        return {};
+    }
+    
+    const auto& data = it->second;
+    int64_t cutoff_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()
+    ).count() - (minutes * 60 * 1000);
+    
+    std::vector<MarketDataPoint> recent_data;
+    for (const auto& point : data) {
+        if (point.timestamp > cutoff_time) {
+            recent_data.push_back(point);
+        }
+    }
+    
+    return recent_data;
+}
+
+void LearningEngine::adapt_strategies_to_market_conditions() {
+    // Analyze current market conditions and update strategy parameters
+    for (auto& [pair, data] : latest_market_data) {
+        double current_volatility = calculate_real_time_volatility(pair);
+        int current_regime = detect_real_time_regime(pair);
+        
+        // Adjust strategy parameters based on market conditions
+        auto pattern_key = pair + "_adaptive";
+        auto it = pattern_database.find(pattern_key);
+        if (it != pattern_database.end()) {
+            auto& metrics = it->second;
+            
+            // Adjust take profit based on volatility
+            if (current_volatility > 2.0) {
+                // High volatility - tighter TP
+                metrics.total_pnl *= 0.95;  // Conservative adjustment
+            } else if (current_volatility < 0.5) {
+                // Low volatility - wider TP but longer hold time
+                metrics.total_pnl *= 1.02;  // Slight optimism
+            }
+            
+            // Adjust based on regime
+            if (current_regime == 0) {  // Consolidation
+                // Be more conservative in ranging markets
+                metrics.win_rate *= 0.98;
+            }
+        }
+    }
+}
+
+StrategyConfig LearningEngine::get_adaptive_strategy(const std::string& pair, const MarketDataPoint& current_data) {
+    // Get base strategy
+    StrategyConfig base_strategy = get_optimal_strategy(pair, current_data.volatility_pct);
+    
+    // Adapt based on real-time conditions
+    double real_time_volatility = calculate_real_time_volatility(pair);
+    int real_time_regime = detect_real_time_regime(pair);
+    
+    // Adjust take profit based on current volatility
+    if (real_time_volatility > current_data.volatility_pct * 1.5) {
+        // Market is more volatile than historical average - tighten TP
+        base_strategy.take_profit_pct *= 0.8;
+        base_strategy.stop_loss_pct *= 1.2;
+    } else if (real_time_volatility < current_data.volatility_pct * 0.7) {
+        // Market is less volatile - can afford wider TP
+        base_strategy.take_profit_pct *= 1.1;
+        base_strategy.timeframe_seconds *= 1.2;  // Longer hold time
+    }
+    
+    // Adjust based on regime
+    if (real_time_regime == 0) {  // Consolidation
+        base_strategy.take_profit_pct *= 0.9;  // More conservative
+        base_strategy.timeframe_seconds *= 0.8;  // Shorter hold time
+    } else if (real_time_regime == 1) {  // Uptrend
+        base_strategy.take_profit_pct *= 1.05;  // Slightly more aggressive
+    }
+
+    // If we have a direction model, use it to bias direction and leverage
+    if (direction_model_loaded) {
+        double score = score_direction_model(current_data);
+        double prob = 1.0 / (1.0 + std::exp(-score));
+        // If model strongly favors one direction, set a suggested leverage and mark validated
+        if (prob > 0.6) {
+            base_strategy.leverage = std::min(10.0, base_strategy.leverage * (1.0 + (prob - 0.6) * 2.0));
+            base_strategy.is_validated = true;
+            base_strategy.estimated_edge = (prob - 0.5) * 2.0 * 100.0; // percent estimate
+        } else if (prob < 0.4) {
+            // Strong short signal - also increase leverage but reversed direction will be handled by bot
+            base_strategy.leverage = std::min(10.0, base_strategy.leverage * (1.0 + (0.4 - prob) * 2.0));
+            base_strategy.is_validated = true;
+            base_strategy.estimated_edge = (0.5 - prob) * 2.0 * 100.0;
+        }
+    }
+    
+    return base_strategy;
+}
+
+// Simple direction model scoring: returns score (logit). Positive => LONG, Negative => SHORT
+double LearningEngine::score_direction_model(const MarketDataPoint& current_data) const {
+    if (!direction_model_loaded) return 0.0;
+    double s = direction_model_bias;
+    auto addw = [&](const std::string& k, double v) {
+        if (direction_model_weights.count(k)) s += direction_model_weights.at(k) * v;
+    };
+    addw("volatility_pct", current_data.volatility_pct);
+    addw("market_regime", (double)current_data.market_regime);
+    if (current_data.vwap > 0) {
+        double vdev = (current_data.last_price - current_data.vwap) / current_data.vwap * 100.0;
+        addw("vwap_dev", vdev);
+    }
+    addw("volume", current_data.volume);
+    addw("last_price", current_data.last_price);
+    addw("volatility_pct_sq", current_data.volatility_pct * current_data.volatility_pct);
+    return s;
+}
+
+double LearningEngine::calculate_real_time_volatility(const std::string& pair) const {
+    auto recent_data = get_recent_market_data(pair, 30);  // Last 30 minutes
+    
+    if (recent_data.size() < 10) {
+        return 0.0;  // Not enough data
+    }
+    
+    std::vector<double> returns;
+    for (size_t i = 1; i < recent_data.size(); ++i) {
+        double ret = (recent_data[i].last_price - recent_data[i-1].last_price) / recent_data[i-1].last_price;
+        returns.push_back(std::abs(ret));  // Use absolute returns for volatility
+    }
+    
+    if (returns.empty()) return 0.0;
+    
+    double mean = std::accumulate(returns.begin(), returns.end(), 0.0) / returns.size();
+    double variance = 0.0;
+    for (double ret : returns) {
+        variance += std::pow(ret - mean, 2);
+    }
+    variance /= returns.size();
+    
+    return std::sqrt(variance) * 100.0;  // Return as percentage
+}
+
+int LearningEngine::detect_real_time_regime(const std::string& pair) const {
+    auto recent_data = get_recent_market_data(pair, 60);  // Last hour
+    
+    if (recent_data.size() < 20) {
+        return 0;  // Not enough data, assume consolidation
+    }
+    
+    // Simple regime detection based on trend and volatility
+    double start_price = recent_data.front().last_price;
+    double end_price = recent_data.back().last_price;
+    double price_change = (end_price - start_price) / start_price * 100.0;
+    
+    double volatility = calculate_real_time_volatility(pair);
+    
+    if (std::abs(price_change) > volatility * 2) {
+        return (price_change > 0) ? 1 : -1;  // Strong trend
+    } else if (volatility > 1.0) {
+        return 2;  // Volatile/consolidation
+    } else {
+        return 0;  // Quiet consolidation
+    }
+}
+
+void LearningEngine::perform_continuous_learning() {
+    // Load latest market data directly from SQLite database
+    // Also attempt to reload direction model if updated by training script
+    try {
+        std::ifstream f("data/direction_model.json");
+        if (f.good()) {
+            nlohmann::json jm; f >> jm;
+            if (jm.contains("weights")) {
+                direction_model_weights.clear();
+                for (auto it = jm["weights"].begin(); it != jm["weights"].end(); ++it) {
+                    direction_model_weights[it.key()] = it.value().get<double>();
+                }
+                direction_model_bias = jm.value("bias", 0.0);
+                direction_model_loaded = true;
+                std::cout << "Reloaded direction model (continuous learning) with " << direction_model_weights.size() << " weights" << std::endl;
+            }
+        }
+    } catch (...) {}
+    load_market_data_from_sqlite();
+    
+    // Update market condition analysis
+    adapt_strategies_to_market_conditions();
+    
+    // Analyze recent trades for patterns
+    if (trade_history.size() >= MIN_TRADES_FOR_ANALYSIS) {
+        analyze_patterns();
+    }
+    
+    // Update strategy database with new insights
+    update_strategy_database();
+}
+
+void LearningEngine::load_market_data_from_sqlite(const std::string& db_path) {
+    sqlite3* market_db = nullptr;
+    
+    int rc = sqlite3_open(db_path.c_str(), &market_db);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Warning: Could not open market data database: " << sqlite3_errmsg(market_db) << std::endl;
+        return;
+    }
+    
+    // Query for latest data for each pair (last 5 minutes)
+    int64_t cutoff_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()
+    ).count() - (5 * 60 * 1000); // 5 minutes ago
+    
+    const char* sql = R"(
+        SELECT pair, ask, bid, last, volume, vwap, timestamp
+        FROM ticker_data 
+        WHERE timestamp > ?
+        ORDER BY timestamp DESC
+    )";
+    
+    sqlite3_stmt* stmt;
+    rc = sqlite3_prepare_v2(market_db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare market data query: " << sqlite3_errmsg(market_db) << std::endl;
+        sqlite3_close(market_db);
+        return;
+    }
+    
+    sqlite3_bind_int64(stmt, 1, cutoff_time);
+    
+    std::lock_guard<std::mutex> lock(market_data_mutex);
+    
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        std::string pair = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        double ask = sqlite3_column_double(stmt, 1);
+        double bid = sqlite3_column_double(stmt, 2);
+        double last = sqlite3_column_double(stmt, 3);
+        double volume = sqlite3_column_double(stmt, 4);
+        double vwap = sqlite3_column_double(stmt, 5);
+        int64_t timestamp = sqlite3_column_int64(stmt, 6);
+        
+        MarketDataPoint point;
+        point.pair = pair;
+        point.ask_price = ask;
+        point.bid_price = bid;
+        point.last_price = last;
+        point.volume = volume;
+        point.vwap = vwap;
+        point.timestamp = timestamp;
+        point.volatility_pct = 0.0; // Will be calculated
+        point.market_regime = 0;    // Will be detected
+        
+        // Update latest data
+        latest_market_data[pair] = point;
+        
+        // Add to historical data if not already there
+        if (real_time_market_data[pair].empty() || 
+            real_time_market_data[pair].back().timestamp != timestamp) {
+            real_time_market_data[pair].push_back(point);
+            
+            // Maintain size limit
+            if (real_time_market_data[pair].size() > MAX_MARKET_DATA_SIZE) {
+                real_time_market_data[pair].pop_front();
+            }
+        }
+        
+        // Update price history for indicators
+        price_history[pair].push_back(last);
+        volume_history[pair].push_back(volume);
+        
+        if (price_history[pair].size() > MAX_HISTORY_SIZE) {
+            price_history[pair].pop_front();
+            volume_history[pair].pop_front();
+        }
+    }
+    
+    sqlite3_finalize(stmt);
+    sqlite3_close(market_db);
+}
+
+void LearningEngine::load_market_data_from_cache(const std::string& cache_file) {
+    // Backwards-compatible: if JSON cache exists, load from it; otherwise fall back to SQLite
+    const std::string json_file = cache_file.empty() ? std::string("../../data/market_data.json") : cache_file;
+    try {
+        std::ifstream f(json_file);
+        if (f.good()) {
+            nlohmann::json j; f >> j;
+            if (j.contains("data") && j["data"].is_array()) {
+                std::lock_guard<std::mutex> lock(market_data_mutex);
+                for (const auto& item : j["data"]) {
+                    MarketDataPoint md;
+                    md.pair = item.value("pair", std::string());
+                    md.last_price = item.value("last_price", 0.0);
+                    md.volume = item.value("volume", 0.0);
+                    md.vwap = item.value("vwap", 0.0);
+                    md.timestamp = item.value("timestamp", 0);
+                    md.volatility_pct = item.value("volatility_pct", 0.0);
+                    latest_market_data[md.pair] = md;
+                    auto& dq = real_time_market_data[md.pair];
+                    dq.push_back(md);
+                    if (dq.size() > MAX_MARKET_DATA_SIZE) dq.pop_front();
+                }
+                std::cout << "Loaded market data cache for " << latest_market_data.size() << " pairs from " << json_file << std::endl;
+                return;
+            }
+        }
+    } catch (...) {}
+    // Fallback to SQLite loader
+    load_market_data_from_sqlite();
 }

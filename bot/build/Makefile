@@ -201,6 +201,30 @@ src/main.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/kraken_bot.dir/build.make CMakeFiles/kraken_bot.dir/src/main.cpp.s
 .PHONY : src/main.cpp.s
 
+src/market_data_cache.o: src/market_data_cache.cpp.o
+.PHONY : src/market_data_cache.o
+
+# target to build an object file
+src/market_data_cache.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kraken_bot.dir/build.make CMakeFiles/kraken_bot.dir/src/market_data_cache.cpp.o
+.PHONY : src/market_data_cache.cpp.o
+
+src/market_data_cache.i: src/market_data_cache.cpp.i
+.PHONY : src/market_data_cache.i
+
+# target to preprocess a source file
+src/market_data_cache.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kraken_bot.dir/build.make CMakeFiles/kraken_bot.dir/src/market_data_cache.cpp.i
+.PHONY : src/market_data_cache.cpp.i
+
+src/market_data_cache.s: src/market_data_cache.cpp.s
+.PHONY : src/market_data_cache.s
+
+# target to generate assembly for a file
+src/market_data_cache.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kraken_bot.dir/build.make CMakeFiles/kraken_bot.dir/src/market_data_cache.cpp.s
+.PHONY : src/market_data_cache.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -219,6 +243,9 @@ help:
 	@echo "... src/main.o"
 	@echo "... src/main.i"
 	@echo "... src/main.s"
+	@echo "... src/market_data_cache.o"
+	@echo "... src/market_data_cache.i"
+	@echo "... src/market_data_cache.s"
 .PHONY : help
 
 

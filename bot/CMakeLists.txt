@@ -20,6 +20,7 @@ add_executable(kraken_bot
     src/main.cpp
     src/kraken_api.cpp
     src/learning_engine.cpp
+    src/market_data_cache.cpp
 )
 
 target_link_libraries(kraken_bot

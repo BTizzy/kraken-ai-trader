@@ -1,0 +1,10 @@
+
+# Binaries
+bot/build/kraken_bot
+bot/build/*.o
+bot/build/CMakeFiles/
+
+# SQLite database
+data/*.db
+data/*.db-wal
+data/*.db-shm

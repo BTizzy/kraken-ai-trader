@@ -1,14 +1,25 @@
 # Kraken Trading Bot - C++ Self-Learning Version
 
-## 🎯 Overview
+> **NOTE:** This README contains historical and technical context for the C++ bot. For the most current architecture, operational, and strategy information, see `../Must_read_before_any_agent_task.md`.
+
+## ⚡️ Overview
 
 A **high-performance C++ trading bot** for Kraken with:
-- ⚡ **50x more robust self-learning** than baseline
-- 🚀 **C++ for speed** (microsecond-level operations)
-- 📊 **Multi-dimensional pattern recognition** (pair + leverage + timeframe)
-- 🔐 **One-click live deployment** with paper trading validation
-- 🤖 **Automatic strategy evolution** every 25 trades
-- 📈 **Statistical rigor** with confidence scoring
+- 50x more robust self-learning than baseline
+- C++ for speed (microsecond-level operations)
+- Multi-dimensional pattern recognition (pair + leverage + timeframe)
+- One-click live deployment with paper trading validation
+- Automatic strategy evolution every 25 trades
+- Statistical rigor with confidence scoring
+
+---
+
+## ⚠️ Data Persistence
+
+- **Current:** All trade records, learning data, and analytics are stored in SQLite (`data/trades.db`).
+- **Legacy:** JSON and CSV persistence is deprecated and should not be used for trading or analytics. (Kept for historical reference only.)
+
+---
 
 ## 🚀 Quick Start
 

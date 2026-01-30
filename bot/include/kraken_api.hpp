@@ -67,8 +67,11 @@ public:
     double get_current_price(const std::string& pair);
     json get_ticker(const std::string& pair);
     double get_bid_ask_spread(const std::string& pair);
+    double get_latest_price(const std::string& pair);  // High-frequency price from local collector
+    double get_volatility(const std::string& pair, int minutes = 60);  // Volatility from price history
+    std::vector<OHLC> get_ohlc(const std::string& pair, int interval = 15);
+    std::vector<double> get_price_history(const std::string& pair, int max_points = 100);
     std::vector<std::string> get_trading_pairs();
-    std::vector<OHLC> get_ohlc(const std::string& pair, int interval = 1);
     
     // Paper trading
     void set_paper_mode(bool enabled) { paper_mode = enabled; }

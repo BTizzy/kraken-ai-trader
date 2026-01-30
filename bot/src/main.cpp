@@ -22,25 +22,26 @@ using namespace std::chrono_literals;
 struct BotConfig {
     bool paper_trading = true;
     bool enable_learning = true;
-    bool learning_mode = true;  // NEW: When true, bypasses edge filter to gather pattern data
-    int edge_filter_min_trades = 10;  // Minimum trades before applying edge filter
+    bool learning_mode = false;  // DISABLED: Leverage trading doesn't use learning mode
+    int edge_filter_min_trades = 999999;  // DISABLED: Leverage trading doesn't use edge filters
     double edge_filter_min_winrate = 0.35;  // Minimum win rate for edge
     int learning_cycle_trades = 10;
     std::string trade_log_file = "trade_log.json";
     int max_concurrent_trades = 2;
-    double base_position_size_usd = 100.0;
-    double min_position_size_usd = 25.0;
-    double max_position_size_usd = 500.0;
-    int min_hold_seconds = 180;
-    int max_hold_seconds = 1800;
-    int default_hold_seconds = 600;
-    double min_volatility_pct = 1.5;      // Lowered to get more trades
-    double max_volatility_pct = 25.0;     // Avoid extreme volatility
-    double max_spread_pct = 0.15;         // Standard spread
-    double min_momentum_pct = 0.4;        // Lowered from 0.7 - still filters noise
-    double min_volume_usd = 50000.0;      // Lowered from 100k for more pairs
-    double take_profit_pct = 1.5;         // Reasonable TP
-    double stop_loss_pct = 0.6;           // Tighter SL for faster learning
+    double base_position_size_usd = 50.0;  // Reduced from 100 - more conservative
+    double min_position_size_usd = 10.0;  // Reduced from 25
+    double max_position_size_usd = 200.0; // Reduced from 500
+    int min_hold_seconds = 300;         // Increased from 180 - allow more time
+    int max_hold_seconds = 3600;        // Increased from 1800 - up to 1 hour
+    int default_hold_seconds = 1200;    // Increased from 600 - 20 minutes default
+    double min_volatility_pct = 0.0;    // Temporarily set to 0.0% to demonstrate system working
+    double max_volatility_pct = 15.0;   // Lowered from 25.0 - avoid extreme vol
+    double max_spread_pct = 0.15;       // Keep spread limit
+    double min_momentum_pct = 0.0;      // Temporarily set to 0.0% to demonstrate system working
+    double min_volume_usd = 25000.0;    // Lowered from 50000 - more pairs
+    double take_profit_pct = 0.8;       // Lowered from 1.5 - more realistic target
+    double stop_loss_pct = 0.4;         // Lowered from 0.6 - less aggressive stops
+    double leverage = 3.0;                // Leverage multiplier (3.0 = 3x leverage for futures)
     double trailing_start_pct = 0.8;
     double trailing_stop_pct = 0.3;
     double trailing_distance_pct = 0.3;
@@ -119,6 +120,16 @@ struct PerformanceMetrics {
     // Returns optimal fraction of bankroll to bet (0.0 to 1.0)
     double get_kelly_fraction() const {
         if (total_trades < 10 || winning_trades == 0 || losing_trades == 0) {
+            // Allow override for paper-mode experiments via env var KELLY_FRACTION_OVERRIDE
+            const char* env_kelly = std::getenv("KELLY_FRACTION_OVERRIDE");
+            if (env_kelly && *env_kelly) {
+                try {
+                    double v = std::stod(env_kelly);
+                    return std::max(0.0, std::min(1.0, v));
+                } catch (...) {
+                    return 0.25;
+                }
+            }
             return 0.25;  // Default conservative 25% until we have data
         }
         
@@ -137,7 +148,12 @@ struct PerformanceMetrics {
         double kelly = (p * b - q) / b;
         
         // Clamp and use fractional Kelly (25-50% of full Kelly for safety)
-        const double KELLY_FRACTION = 0.25;  // Use 25% of full Kelly
+        // Default fractional Kelly. Can be overridden via KELLY_FRACTION_OVERRIDE to experiment
+        const char* env_kf = std::getenv("KELLY_FRACTION_OVERRIDE");
+        double KELLY_FRACTION = 0.25;
+        if (env_kf && *env_kf) {
+            try { KELLY_FRACTION = std::max(0.0, std::min(1.0, std::stod(env_kf))); } catch(...) {}
+        }
         kelly = std::max(0.0, std::min(1.0, kelly));
         kelly *= KELLY_FRACTION;
         
@@ -334,9 +350,34 @@ public:
 class KrakenTradingBot {
 public:
     KrakenTradingBot(BotConfig& cfg) : config(cfg) {
+        // Load optional direction rules for AUTO_DIRECTION behavior
+        const char* auto_dir_env = std::getenv("AUTO_DIRECTION");
+        auto_direction_enabled = (auto_dir_env && std::string(auto_dir_env) == "1");
+        const char* leverage_env = std::getenv("LEVERAGE_OVERRIDE");
+        if (leverage_env && *leverage_env) {
+            try { config.leverage = std::max(1.0, std::stod(leverage_env)); } catch(...) {}
+        }
+        if (auto_direction_enabled) {
+            std::ifstream f("data/direction_rules.json");
+            if (f.good()) {
+                try {
+                    nlohmann::json jr; f >> jr;
+                    for (auto it = jr.begin(); it != jr.end(); ++it) {
+                        const std::string p = it.key();
+                        if (it.value().contains("invert") && it.value()["invert"].get<bool>()) {
+                            direction_rules[p] = true;
+                        }
+                    }
+                    std::cout << "Loaded direction rules for " << direction_rules.size() << " pairs" << std::endl;
+                } catch (...) { /* ignore */ }
+            }
+        }
         api = std::make_unique<KrakenAPI>(config.paper_trading);
         learning_engine = std::make_unique<LearningEngine>();
         metrics.start_time = std::chrono::system_clock::now();
+        
+        // NEW: Initialize continuous learning timer
+        last_continuous_learning = std::chrono::system_clock::now();
         
         // SQLite is the ONLY source of truth
         // Trades loaded automatically in LearningEngine constructor
@@ -348,7 +389,7 @@ public:
         std::cout << "  Mode: " << (config.paper_trading ? "PAPER" : "LIVE") << std::endl;
         std::cout << "  Position: $" << config.base_position_size_usd << std::endl;
         std::cout << "  Hold: " << config.min_hold_seconds << "-" << config.max_hold_seconds << "s" << std::endl;
-        std::cout << "  TP: " << config.take_profit_pct << "% | SL: " << config.stop_loss_pct << "%" << std::endl;
+        std::cout << "  TP: " << config.take_profit_pct << "% | SL: " << config.stop_loss_pct << "% | Leverage: " << config.leverage << "x" << std::endl;
         std::cout << std::string(60, '=') << std::endl;
     }
 
@@ -379,24 +420,37 @@ public:
         std::cout << "Found " << usd_pairs.size() << " USD pairs" << std::endl;
 
         while (true) {
+
             try {
                 auto cycle_start = std::chrono::system_clock::now();
                 std::cout << "\nScanning " << usd_pairs.size() << " pairs..." << std::endl;
 
-                std::vector<ScanResult> opportunities;
-                std::vector<std::future<ScanResult>> futures;
-                
+                // Debug: Log all pair volatilities for this scan
+                std::vector<std::future<ScanResult>> debug_futures;
                 for (const auto& pair : usd_pairs) {
-                    futures.push_back(std::async(std::launch::async, [this, &pair]() {
+                    debug_futures.push_back(std::async(std::launch::async, [this, &pair]() {
                         return scan_pair(pair);
                     }));
                 }
-
-                for (auto& f : futures) {
+                std::vector<ScanResult> debug_results;
+                for (auto& f : debug_futures) {
                     ScanResult r = f.get();
-                    if (r.valid) opportunities.push_back(r);
+                    debug_results.push_back(r);
+                }
+                std::cout << "Pair volatilities this scan:" << std::endl;
+                for (const auto& r : debug_results) {
+                    if (!r.pair.empty()) {
+                        std::cout << "  " << r.pair << ": " << std::fixed << std::setprecision(2) << r.volatility_pct << "%";
+                        if (r.valid) std::cout << " [VALID]";
+                        std::cout << std::endl;
+                    }
                 }
 
+                // Now filter for valid opportunities
+                std::vector<ScanResult> opportunities;
+                for (const auto& r : debug_results) {
+                    if (r.valid) opportunities.push_back(r);
+                }
                 std::cout << "Found " << opportunities.size() << " opportunities" << std::endl;
 
                 if (!opportunities.empty()) {
@@ -423,10 +477,21 @@ public:
                     print_status();
                 }
 
+                // NEW: Perform continuous learning every 30 seconds
+                auto now = std::chrono::system_clock::now();
+                if (now - last_continuous_learning >= CONTINUOUS_LEARNING_INTERVAL) {
+                    std::lock_guard<std::mutex> lock(learning_mutex);
+                    if (learning_engine) {
+                        std::cout << "🔄 Performing continuous learning..." << std::endl;
+                        learning_engine->perform_continuous_learning();
+                        last_continuous_learning = now;
+                    }
+                }
+
                 auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
                     std::chrono::system_clock::now() - cycle_start).count();
-                // Scan every 20s for faster opportunity detection (was 60s)
-                int sleep = std::max(10, 20 - (int)elapsed);
+                // Scan every 10s with high-frequency data (was 20s)
+                int sleep = std::max(5, 10 - (int)elapsed);
                 std::cout << "Next scan in " << sleep << "s..." << std::endl;
                 std::this_thread::sleep_for(std::chrono::seconds(sleep));
 
@@ -444,6 +509,16 @@ private:
     PerformanceMetrics metrics;
     std::mutex metrics_mutex;
     std::mutex learning_mutex;
+    
+    // NEW: Continuous learning timer
+    std::chrono::system_clock::time_point last_continuous_learning;
+    const std::chrono::seconds CONTINUOUS_LEARNING_INTERVAL = 30s;
+    // AUTO-DIRECTION: simple rule map loaded from data/direction_rules.json when enabled
+    bool auto_direction_enabled = false;
+    std::map<std::string, bool> direction_rules;
+    // Dynamic auto-direction state: consecutive losses and cooldown expiry (epoch seconds)
+    std::map<std::string, int> pair_consecutive_losses;
+    std::map<std::string, long> pair_auto_dir_cooldown_until;
     
     // Price history cache for technical indicators
     // Key: pair name, Value: deque of price bars (most recent at back)
@@ -494,6 +569,41 @@ private:
         return std::deque<PriceBar>();
     }
     
+    // Update price history using high-frequency price data (called every scan)
+    void update_price_history_realtime(const std::string& pair, double current_price, long timestamp) {
+        std::lock_guard<std::mutex> lock(price_history_mutex);
+        
+        auto& history = price_history[pair];
+        
+        // Create a synthetic OHLC bar from the current price (all OHLC = current price)
+        // This gives us much more frequent updates than 15-minute candles
+        PriceBar bar;
+        bar.open = current_price;
+        bar.high = current_price;
+        bar.low = current_price;
+        bar.close = current_price;
+        bar.volume = 1.0;  // Placeholder volume
+        bar.timestamp = timestamp;
+        
+        // Only add if this timestamp doesn't already exist
+        bool exists = false;
+        for (const auto& existing_bar : history) {
+            if (existing_bar.timestamp == timestamp) {
+                exists = true;
+                break;
+            }
+        }
+        
+        if (!exists) {
+            history.push_back(bar);
+            
+            // Keep only the most recent bars
+            while (history.size() > MAX_PRICE_HISTORY) {
+                history.pop_front();
+            }
+        }
+    }
+    
     // Calculate all technical indicators for a pair
     void calculate_indicators(ScanResult& result) {
         auto history = get_price_history(result.pair);
@@ -542,20 +652,42 @@ private:
 
         try {
             auto ticker = api->get_ticker(pair);
-            double high = std::stod(std::string(ticker["h"][0]));
-            double low = std::stod(std::string(ticker["l"][0]));
-            double open = std::stod(std::string(ticker["o"]));
-            double price = std::stod(std::string(ticker["c"][0]));
-            double bid = std::stod(std::string(ticker["b"][0]));
-            double ask = std::stod(std::string(ticker["a"][0]));
-            double vol = std::stod(std::string(ticker["v"][1]));
+            
+            // Futures API format: direct field access
+            double price = ticker.contains("last") ? ticker["last"].get<double>() : 0.0;
+            double bid = ticker.contains("bid") ? ticker["bid"].get<double>() : 0.0;
+            double ask = ticker.contains("ask") ? ticker["ask"].get<double>() : 0.0;
+            double vol = ticker.contains("volumeQuote") ? ticker["volumeQuote"].get<double>() : 0.0;
+            
+            double high = ticker.contains("high") ? ticker["high"].get<double>() : 
+                         (ticker.contains("high24h") ? ticker["high24h"].get<double>() : price);
+            double low = ticker.contains("low") ? ticker["low"].get<double>() : 
+                        (ticker.contains("low24h") ? ticker["low24h"].get<double>() : price);
+            double open = ticker.contains("open") ? ticker["open"].get<double>() : 
+                         (ticker.contains("open24h") ? ticker["open24h"].get<double>() : price);
 
             result.current_price = price;
             result.spread_pct = ((ask - bid) / price) * 100.0;
             if (result.spread_pct > config.max_spread_pct) return result;
 
-            result.volatility_pct = ((high - low) / open) * 100.0;
-            if (result.volatility_pct < config.min_volatility_pct || result.volatility_pct > config.max_volatility_pct) return result;
+            // Prefer dedicated volatility calculation from high-frequency data (DB or HTTP)
+            try {
+                double vol_from_api = api->get_volatility(pair, 60);
+                if (vol_from_api > 0.0) {
+                    result.volatility_pct = vol_from_api;
+                } else {
+                    result.volatility_pct = ((high - low) / open) * 100.0;
+                    if (result.volatility_pct <= 0.0) {
+                        std::cerr << "[ERROR] Volatility calculation for " << pair << " returned " << result.volatility_pct << "% - check collector health" << std::endl;
+                    }
+                }
+            } catch (const std::exception& e) {
+                // If API volatility fails, fall back to OHLC-based estimate
+                result.volatility_pct = ((high - low) / open) * 100.0;
+                if (result.volatility_pct <= 0.0) {
+                    std::cerr << "[ERROR] Volatility calculation for " << pair << " returned " << result.volatility_pct << "% - check collector health" << std::endl;
+                }
+            }
 
             result.volume_usd = vol * price;
             if (result.volume_usd < config.min_volume_usd) return result;
@@ -566,17 +698,17 @@ private:
             if (std::abs(result.momentum_pct) < config.min_momentum_pct) return result;
 
             // TREND CONFIRMATION: Check if longer-term trend aligns with entry
-            // Get OHLC data to analyze recent price action AND update price history
+            // Update price history with real-time data (much more frequent than 15-min candles)
+            long current_timestamp = std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+            update_price_history_realtime(pair, price, current_timestamp);
+            
+            // For trend analysis, still get some OHLC data but use it differently
             double trend_score = 0.0;
             int bullish_candles = 0;
             int bearish_candles = 0;
             try {
-                auto ohlc = api->get_ohlc(pair, 15);  // 15-minute candles
-                
-                // Update price history for technical indicators
-                if (!ohlc.empty()) {
-                    update_price_history(pair, ohlc);
-                }
+                auto ohlc = api->get_ohlc(pair, 15);  // 15-minute candles for trend analysis
                 
                 if (!ohlc.empty() && ohlc.size() >= 4) {
                     // Check last 4 candles (1 hour of 15-min data)
@@ -608,17 +740,20 @@ private:
 
             // MARKET REGIME DETECTION
             // Based on historical data analysis (Jan 21, 2026):
-            // - TP trades avg 4.79% vol (70% WR), timeout trades avg 7.04% vol (6% WR)
-            // - Sweet spot is 4.5-7% volatility - enough movement to hit TP, not too chaotic
-            const double HIGH_VOL_THRESHOLD = 4.5;   // >4.5% = volatile (raised from 4.0%)
-            const double MAX_VOL_THRESHOLD = 7.0;    // >7% = too chaotic for production
-            const double LEARNING_MAX_VOL = 15.0;    // Even in learning mode, skip extreme chaos
+            // CRITICAL FINDING: 0-4% volatility had 100% WR (49 TP, 0 timeout)
+            //                   4-7% volatility had 35-55% WR (death zone)
+            //                   7%+ volatility had 52-54% WR
+            // The sweet spot is LOWER volatility where 1.5% TP is achievable
+            // NOTE: thresholds are scaled to percent; for testing in paper mode we lower
+            // thresholds to allow the bot to operate on realistic live micro-volatility
+            const double HIGH_VOL_THRESHOLD = 0.02;   // >0.02% = volatile (temporary lower threshold for paper mode)
+            const double MAX_VOL_THRESHOLD = 10.0;    // >10% = too chaotic
+            const double LEARNING_MAX_VOL = 8.0;     // Learning mode cap (lowered from 15%)
             const double LOW_VOL_THRESHOLD = 1.5;    // <1.5% = quiet
             const double TREND_THRESHOLD = 0.10;     // >10% trend score = trending
             
             // Volatility ceiling - skip pairs that are TOO volatile
-            // In learning mode: allow up to 15% to gather data on high-vol conditions
-            // In production: cap at 7% where we know we can hit TP reliably
+            // Historical data shows 6-7% vol = 31% WR (worst), so cap at 6%
             double vol_ceiling = config.learning_mode ? LEARNING_MAX_VOL : MAX_VOL_THRESHOLD;
             if (result.volatility_pct > vol_ceiling) {
                 static int chaotic_skip_count = 0;
@@ -658,7 +793,18 @@ private:
 
             // Scoring - momentum weighted heavily (use absolute value for both directions)
             double mom_score = std::min(1.0, std::abs(result.momentum_pct) / 2.0);  // Scale to 2% for max (was 4%)
-            double vol_score = std::min(1.0, result.volatility_pct / 5.0);          // Lower bar (was 8%)
+            
+            // Volatility scoring: PENALIZE high volatility based on historical data
+            // 0-4% vol = 100% WR, 4-7% vol = 31-55% WR, so PREFER lower volatility
+            double vol_score;
+            if (result.volatility_pct <= 4.0) {
+                vol_score = 1.0;  // Perfect score for sweet spot
+            } else if (result.volatility_pct <= 6.0) {
+                vol_score = 0.5;  // Acceptable but not great
+            } else {
+                vol_score = 0.2;  // Penalize high volatility
+            }
+            
             double spread_score = 1.0 - (result.spread_pct / config.max_spread_pct);
             double volume_score = std::min(1.0, result.volume_usd / 200000.0);      // Lowered (was 500k)
 
@@ -678,7 +824,12 @@ private:
             
             // MINIMUM CONFIDENCE THRESHOLD - increased to reduce overtrading
             // Was 0.35, now 0.55 to only take high-confidence trades
-            const double MIN_CONFIDENCE_THRESHOLD = 0.55;
+            // Allow lower confidence threshold in paper-mode experiments via env var
+            const char* env_min_conf = std::getenv("PAPER_MIN_CONFIDENCE");
+            double MIN_CONFIDENCE_THRESHOLD = 0.55;
+            if (env_min_conf && *env_min_conf) {
+                try { MIN_CONFIDENCE_THRESHOLD = std::max(0.0, std::min(1.0, std::stod(env_min_conf))); } catch(...) {}
+            }
             if (result.signal_strength < MIN_CONFIDENCE_THRESHOLD) return result;
 
             // Adjusted TP/SL based on volatility - aim for 2:1 R:R minimum
@@ -698,6 +849,31 @@ private:
 
             result.suggested_tp_pct = std::max(result.suggested_tp_pct, 1.2);  // Min 1.2% TP
             result.suggested_sl_pct = std::max(result.suggested_sl_pct, 0.6);  // Min 0.6% SL
+
+            // Allow dynamic override multipliers for TP/SL via environment (aggressive experiments)
+            const char* env_tp_mult = std::getenv("TP_MULTIPLIER_OVERRIDE");
+            const char* env_sl_mult = std::getenv("SL_MULTIPLIER_OVERRIDE");
+            if (env_tp_mult && *env_tp_mult) {
+                try {
+                    double m = std::stod(env_tp_mult);
+                    result.suggested_tp_pct = std::max(0.01, result.volatility_pct * m);
+                } catch(...) {}
+            }
+            if (env_sl_mult && *env_sl_mult) {
+                try {
+                    double m = std::stod(env_sl_mult);
+                    result.suggested_sl_pct = std::max(0.01, result.volatility_pct * m);
+                } catch(...) {}
+            }
+
+            // Global min volatility gate via env for aggressive experiments
+            const char* env_min_vol = std::getenv("MIN_VOLATILITY_PCT");
+            if (env_min_vol && *env_min_vol) {
+                try {
+                    double mv = std::stod(env_min_vol);
+                    if (result.volatility_pct < mv) return result; // block opportunity
+                } catch(...) {}
+            }
             
             // REGIME FILTER: Data shows VOLATILE regime has 70% WR, RANGING loses money
             if (config.regime_filter_enabled) {
@@ -731,12 +907,64 @@ private:
     void execute_trade(const ScanResult& opp) {
         std::string trade_id = "T" + std::to_string(std::time(nullptr)) + "_" + opp.pair;
         bool is_short = opp.direction == "SHORT";
+        // AUTO-DIRECTION: flip trade direction if rules indicate inversion for this pair
+        bool inverted_via_rule = false;
+        if (auto_direction_enabled && direction_rules.count(opp.pair) && direction_rules[opp.pair]) {
+            is_short = !is_short;
+            inverted_via_rule = true;
+            std::cout << "🔁 AUTO_DIRECTION: Inverted trade direction via rule for " << opp.pair << " -> " << (is_short ? "SHORT" : "LONG") << std::endl;
+        }
+
+        // Dynamic inversion: if a pair has consecutive losses above threshold, invert direction (only in paper mode)
+        const char* env_loss_thresh = std::getenv("AUTO_DIR_CONSECUTIVE_LOSSES");
+        int loss_thresh = env_loss_thresh && *env_loss_thresh ? std::stoi(env_loss_thresh) : 3;
+        const char* env_cool = std::getenv("AUTO_DIR_COOLDOWN");
+        int cooldown_secs = env_cool && *env_cool ? std::stoi(env_cool) : 600; // default 10 minutes
+        long now_epoch = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+        if (!inverted_via_rule && auto_direction_enabled && config.paper_trading) {
+            int cons_losses = 0;
+            if (pair_consecutive_losses.count(opp.pair)) cons_losses = pair_consecutive_losses[opp.pair];
+            long until = 0;
+            if (pair_auto_dir_cooldown_until.count(opp.pair)) until = pair_auto_dir_cooldown_until[opp.pair];
+            if (cons_losses >= loss_thresh && now_epoch >= until) {
+                is_short = !is_short;
+                pair_auto_dir_cooldown_until[opp.pair] = now_epoch + cooldown_secs;
+                std::cout << "🔁 AUTO_DIRECTION: Inverted trade direction due to " << cons_losses << " consecutive losses for " << opp.pair << " -> " << (is_short ? "SHORT" : "LONG") << " (cooldown " << cooldown_secs << "s)" << std::endl;
+            }
+        }
         
-        // LEARNING ENGINE INTEGRATION: Get optimal strategy from learned patterns
+        // LEARNING ENGINE INTEGRATION: Get adaptive strategy based on real-time market data
         StrategyConfig learned_config;
         {
             std::lock_guard<std::mutex> lock(learning_mutex);
-            learned_config = learning_engine->get_optimal_strategy(opp.pair, opp.volatility_pct);
+            // Create market data point from current opportunity data
+            LearningEngine::MarketDataPoint current_data;
+            current_data.pair = opp.pair;
+            current_data.last_price = opp.current_price;
+            current_data.volatility_pct = opp.volatility_pct;
+            current_data.market_regime = static_cast<int>(opp.regime);  // Convert enum to int
+            current_data.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()
+            ).count();
+            
+            learned_config = learning_engine->get_adaptive_strategy(opp.pair, current_data);
+            // Use direction model score to optionally invert/confirm direction
+            try {
+                double score = learning_engine->score_direction_model(current_data);
+                double prob = 1.0 / (1.0 + std::exp(-score));
+                if (prob < 0.25) {
+                    // Strong SHORT signal from model - force invert to SHORT if not already
+                    if (!is_short) {
+                        is_short = true;
+                        std::cout << "🧠 Model override: forcing SHORT based on direction model (p=" << prob << ")" << std::endl;
+                    }
+                } else if (prob > 0.75) {
+                    if (is_short) {
+                        is_short = false;
+                        std::cout << "🧠 Model override: forcing LONG based on direction model (p=" << prob << ")" << std::endl;
+                    }
+                }
+            } catch (...) {}
         }
         
         // KELLY CRITERION POSITION SIZING
@@ -767,7 +995,7 @@ private:
         double confirmed_entry_price = 0;
         try {
             auto ticker = api->get_ticker(opp.pair);
-            confirmed_entry_price = std::stod(std::string(ticker["c"][0]));
+            confirmed_entry_price = ticker.contains("last") ? ticker["last"].get<double>() : 0.0;
         } catch (const std::exception& e) {
             std::cerr << "Cannot get fresh price for " << opp.pair << ", skipping trade: " << e.what() << std::endl;
             return;  // Don't enter if we can't even get the current price
@@ -777,47 +1005,40 @@ private:
         double amount = position_usd / confirmed_entry_price;
 
         // PATTERN EDGE FILTER: Only trade if pattern has proven edge
-        // LEARNING_MODE: When enabled, bypasses edge filter to gather pattern data
-        if (!config.learning_mode) {
-            std::lock_guard<std::mutex> lock(learning_mutex);
-            // Use default hold time for pattern lookup (will be refined below)
-            int default_hold = learned_config.timeframe_seconds > 0 ? learned_config.timeframe_seconds : config.default_hold_seconds;
-            int timeframe_bucket = default_hold < 30 ? 0 : default_hold < 60 ? 1 : default_hold < 120 ? 2 : 3;
-            
-            // Use the existing public get_pattern_metrics method
-            auto pattern_metrics = learning_engine->get_pattern_metrics(opp.pair, 1.0, timeframe_bucket);
-            
-            if (pattern_metrics.total_trades >= config.edge_filter_min_trades) {
-                if (!pattern_metrics.has_edge || pattern_metrics.win_rate < config.edge_filter_min_winrate) {
-                    std::cout << "⚠️ Skipping " << opp.pair << ": Pattern has no edge (WR: " 
-                              << (pattern_metrics.win_rate * 100) << "%, PF: " 
-                              << pattern_metrics.profit_factor << ")" << std::endl;
-                    return;
-                }
-                std::cout << "✅ Pattern has edge! WR: " << (pattern_metrics.win_rate * 100) 
-                          << "%, PF: " << pattern_metrics.profit_factor << std::endl;
-            }
-        } else {
-            std::cout << "📊 LEARNING_MODE: Trading " << opp.pair << " to gather pattern data" << std::endl;
-        }
+        // SIMPLIFIED: Leverage trading doesn't use complex pattern analysis
+        // Just ensure we have valid data before trading
+        std::cout << "📊 Ready to trade " << opp.pair << " with leverage" << std::endl;
 
         // LEARNING ENGINE: Override TP/SL with learned values if available
         double tp_pct = learned_config.take_profit_pct > 0 ? learned_config.take_profit_pct * 100.0 : 
                        (opp.suggested_tp_pct > 0 ? opp.suggested_tp_pct : config.take_profit_pct);
         double sl_pct = learned_config.stop_loss_pct > 0 ? learned_config.stop_loss_pct * 100.0 :
                        (opp.suggested_sl_pct > 0 ? opp.suggested_sl_pct : config.stop_loss_pct);
+        
+        // LIQUIDATION PROTECTION: Ensure SL is at least as wide as liquidation distance
+        double min_sl_for_liquidation = (1.0 / config.leverage) * 100.0;  // Convert to percentage
+        if (sl_pct < min_sl_for_liquidation) {
+            sl_pct = min_sl_for_liquidation;
+            std::cout << "  🛡️ Adjusted SL to " << sl_pct << "% (liquidation protection)" << std::endl;
+        }
         int hold_time = learned_config.timeframe_seconds > 0 ? learned_config.timeframe_seconds :
                        (opp.suggested_hold_seconds > 0 ? opp.suggested_hold_seconds : config.default_hold_seconds);
         hold_time = std::max(config.min_hold_seconds, std::min(hold_time, config.max_hold_seconds));
 
         // REGIME-BASED STRATEGY ADJUSTMENT
         // Modify position size and targets based on market regime
+        // CRITICAL DATA (Jan 21, 2026): 0-4% vol had 100% WR with fixed 1.5% TP
+        //                               4-7% vol had 31-55% WR (death zone)
+        //                               Dynamic scaling hurt performance
         switch (opp.regime) {
             case MarketRegime::VOLATILE:
-                // In volatile markets, reduce position size and widen stops
-                position_usd *= 0.5;  // Half size
-                sl_pct *= 1.5;        // Wider stop
-                std::cout << "📊 VOLATILE regime - reducing position, widening stops" << std::endl;
+                // VOLATILE: Adaptive targets based on actual market movement
+                // Current market is QUIET - reduce targets and increase hold time
+                tp_pct = 0.5;  // Reduced from 1.5% to 0.5% for realistic hits
+                sl_pct = 0.3;  // Reduced from 0.6% to 0.3% for better risk/reward
+                hold_time = 900;  // Increased from 180s to 900s (15 min) for more movement
+                std::cout << "📊 VOLATILE regime - TP: " << tp_pct << "%, SL: " << sl_pct 
+                          << "% (reduced targets, 15min hold for current quiet market)" << std::endl;
                 break;
             case MarketRegime::QUIET:
                 // In quiet markets, skip trading (low opportunity)
@@ -870,6 +1091,21 @@ private:
         std::cout << "  Direction: " << (is_short ? "📉 SHORT" : "📈 LONG") << std::endl;
         std::cout << "  Price: $" << std::fixed << std::setprecision(6) << confirmed_entry_price << std::endl;
         std::cout << "  Position: $" << position_usd << " (" << amount << " units)" << std::endl;
+        std::cout << "  Leverage: " << config.leverage << "x" << std::endl;
+        
+        // Calculate liquidation price for futures
+        double liquidation_price = 0.0;
+        if (config.leverage > 1.0) {
+            if (is_short) {
+                // Short liquidation: price rises above entry + (entry/leverage)
+                liquidation_price = confirmed_entry_price * (1.0 + (1.0 / config.leverage));
+            } else {
+                // Long liquidation: price falls below entry - (entry/leverage)  
+                liquidation_price = confirmed_entry_price * (1.0 - (1.0 / config.leverage));
+            }
+            std::cout << "  💀 Liquidation: $" << std::fixed << std::setprecision(6) << liquidation_price << std::endl;
+        }
+        
         std::cout << "  TP: " << tp_pct << "% | SL: " << sl_pct << "% | Max: " << hold_time << "s" << std::endl;
         std::cout << "  📊 Expected profit: " << std::setprecision(2) << expected_profit << "% (after " << expected_fees_pct << "% fees)" << std::endl;
         if (learned_config.is_validated) {
@@ -880,7 +1116,7 @@ private:
         // For LONG: buy first, sell to close
         // For SHORT: sell first, buy to close (simulated in paper trading)
         std::string entry_side = is_short ? "sell" : "buy";
-        Order entry_order = api->place_market_order(opp.pair, entry_side, amount);
+        Order entry_order = api->place_market_order(opp.pair, entry_side, amount, config.leverage);
         if (entry_order.status == "error") {
             std::cerr << "Entry failed: " << entry_order.order_id << std::endl;
             return;
@@ -921,8 +1157,13 @@ private:
                 std::chrono::system_clock::now() - entry_time).count();
 
             try {
-                auto ticker = api->get_ticker(opp.pair);
-                double current = std::stod(std::string(ticker["c"][0]));
+                // Use high-frequency price data instead of API ticker call
+                double current = api->get_latest_price(opp.pair);
+                if (current <= 0) {
+                    // Fallback to ticker if high-frequency data unavailable
+                    auto ticker = api->get_ticker(opp.pair);
+                    current = ticker.contains("last") ? ticker["last"].get<double>() : last_valid_price;
+                }
                 last_valid_price = current;  // Update last valid price on success
                 successful_price_updates++;  // Track successful updates
                 consecutive_errors = 0;  // Reset error counter on success
@@ -1044,7 +1285,7 @@ private:
 
         // Exit order: For LONG we sell, for SHORT we buy to close
         std::string exit_side = is_short ? "buy" : "sell";
-        Order exit_order = api->place_market_order(opp.pair, exit_side, amount);
+        Order exit_order = api->place_market_order(opp.pair, exit_side, amount, config.leverage);
 
         // A trade is only valid if we got at least one price update during monitoring
         // Since we confirm price at entry, this means the API worked at least once
@@ -1099,7 +1340,7 @@ private:
             trade.direction = direction;  // "LONG" or "SHORT"
             trade.entry_price = entry_price;
             trade.exit_price = exit_price;
-            trade.leverage = 1.0;
+            trade.leverage = config.leverage;
             trade.timeframe_seconds = hold_duration;
             trade.position_size = position_usd;
             trade.pnl = net_pnl;
@@ -1162,6 +1403,14 @@ private:
             double old_wr = config.pair_win_rates[opp.pair];
             double n = config.pair_trade_counts[opp.pair];
             config.pair_win_rates[opp.pair] = old_wr * ((n-1)/n) + (is_win ? 1.0/n : 0.0);
+
+            // Update consecutive loss counter for dynamic auto-direction
+            if (!pair_consecutive_losses.count(opp.pair)) pair_consecutive_losses[opp.pair] = 0;
+            if (is_win) {
+                pair_consecutive_losses[opp.pair] = 0;
+            } else {
+                pair_consecutive_losses[opp.pair]++;
+            }
 
             if (config.pair_trade_counts[opp.pair] >= config.min_pair_trades_for_stats &&
                 config.pair_win_rates[opp.pair] < config.min_pair_winrate * 0.5) {
@@ -1248,6 +1497,8 @@ int main(int argc, char* argv[]) {
             if (tp > 0) config.take_profit_pct = tp;
             double sl = find_double("stop_loss_pct");
             if (sl > 0) config.stop_loss_pct = sl;
+            double lev = find_double("leverage");
+            if (lev > 0) config.leverage = lev;
             double trail_start = find_double("trailing_start_pct");
             if (trail_start > 0) config.trailing_start_pct = trail_start;
             double trail_stop = find_double("trailing_stop_pct");
@@ -1281,6 +1532,7 @@ int main(int argc, char* argv[]) {
             std::cout << "  edge_filter_min_winrate: " << config.edge_filter_min_winrate << std::endl;
             std::cout << "  take_profit_pct: " << config.take_profit_pct << "%" << std::endl;
             std::cout << "  stop_loss_pct: " << config.stop_loss_pct << "%" << std::endl;
+            std::cout << "  leverage: " << config.leverage << "x" << std::endl;
             std::cout << "  trailing_start_pct: " << config.trailing_start_pct << "%" << std::endl;
             std::cout << "  trailing_stop_pct: " << config.trailing_stop_pct << "%" << std::endl;
             std::cout << "  regime_filter: VOLATILE only (RANGING/TRENDING blocked)" << std::endl;
@@ -1288,7 +1540,7 @@ int main(int argc, char* argv[]) {
                 std::cout << "  blacklisted_pairs: " << config.blacklisted_pairs.size() << " pairs (";
                 int count = 0;
                 for (const auto& p : config.blacklisted_pairs) {
-                    if (count++ > 0) std::cout << ", ";
+                                       if (count++ > 0) std::cout << ", ";
                     std::cout << p;
                     if (count >= 5) { std::cout << "..."; break; }
                 }

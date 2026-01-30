@@ -5,6 +5,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/kraken_bot.dir/src/learning_engine.cpp.o.d"
   "CMakeFiles/kraken_bot.dir/src/main.cpp.o"
   "CMakeFiles/kraken_bot.dir/src/main.cpp.o.d"
+  "CMakeFiles/kraken_bot.dir/src/market_data_cache.cpp.o"
+  "CMakeFiles/kraken_bot.dir/src/market_data_cache.cpp.o.d"
   "kraken_bot"
   "kraken_bot.pdb"
 )

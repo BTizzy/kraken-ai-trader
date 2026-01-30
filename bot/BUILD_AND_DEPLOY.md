@@ -1,5 +1,11 @@
 # Kraken Trading Bot - C++ Version
 
+> **NOTE:** For the most current build, deployment, and operational information, always check `../Must_read_before_any_agent_task.md`.
+
+## ⚠️ Data Persistence
+- **Current:** All trade records, learning data, and analytics are stored in SQLite (`data/trades.db`).
+- **Legacy:** JSON persistence is deprecated and should not be used for trading or analytics. (Kept for historical reference only.)
+
 ## 🚀 Quick Start
 
 ### 1. Environment Setup

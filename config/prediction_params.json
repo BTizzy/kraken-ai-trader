@@ -1,0 +1,72 @@
+{
+    "_comment": "Prediction Market Bot Configuration",
+    "_version": "1.0.0",
+    "_updated": "2026-02-16",
+
+    "trading": {
+        "mode": "paper",
+        "enable_learning": true,
+        "starting_balance": 500.0,
+        "scan_interval_ms": 2000
+    },
+
+    "entry": {
+        "min_opportunity_score": 60,
+        "price_velocity_threshold": 0.03,
+        "velocity_window_seconds": 10,
+        "spread_diff_threshold": 0.05,
+        "max_gemini_volume": 30000,
+        "min_match_confidence": 0.7,
+        "max_concurrent_positions": 5,
+        "max_per_category": 2
+    },
+
+    "position_sizing": {
+        "kelly_multiplier": 0.25,
+        "max_position_usd": 100.0,
+        "min_position_usd": 5.0,
+        "max_capital_at_risk_pct": 50
+    },
+
+    "exit": {
+        "take_profit_buffer": 0.01,
+        "stop_loss_width": 0.03,
+        "max_hold_time_seconds": 600,
+        "staleness_threshold_seconds": 300
+    },
+
+    "risk_management": {
+        "max_drawdown_kill_switch_pct": 20,
+        "daily_loss_limit_usd": -50,
+        "max_single_trade_loss_alert_usd": -10,
+        "min_orderbook_depth_usd": 50,
+        "slippage_penalty": 0.005
+    },
+
+    "learning": {
+        "cycle_interval_seconds": 30,
+        "win_rate_aggressive_threshold": 0.65,
+        "win_rate_conservative_threshold": 0.50,
+        "avg_pnl_aggressive_threshold": 2.0,
+        "param_adjustment_rate": 0.05
+    },
+
+    "api": {
+        "polymarket_rpm": 30,
+        "kalshi_rpm": 60,
+        "gemini_rpm": 60,
+        "cache_ttl_ms": 5000,
+        "request_timeout_ms": 10000
+    },
+
+    "market_matching": {
+        "min_confidence": 0.5,
+        "rematch_interval_minutes": 5,
+        "max_simulated_markets": 30
+    },
+
+    "server": {
+        "port": 3003,
+        "dashboard_refresh_ms": 5000
+    }
+}

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prediction Market Trading Bot</title>
+    <link rel="stylesheet" href="styles_prediction.css">
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <h1>🎯 Prediction Market Bot</h1>
+            <span id="bot-status" class="status-badge status-stopped">STOPPED</span>
+        </div>
+        <div class="header-right">
+            <div class="wallet-display">
+                <span class="wallet-label">Paper Wallet</span>
+                <span id="wallet-balance" class="wallet-amount">$500.00</span>
+                <span id="wallet-pnl" class="wallet-pnl">+$0.00</span>
+            </div>
+            <button id="btn-start" class="btn btn-start" onclick="toggleBot()">Start Bot</button>
+        </div>
+    </header>
+
+    <div class="dashboard">
+        <!-- Top Row: Key Metrics -->
+        <div class="metrics-row">
+            <div class="metric-card">
+                <div class="metric-label">Daily P&L</div>
+                <div id="daily-pnl" class="metric-value">$0.00</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Win Rate</div>
+                <div id="win-rate" class="metric-value">--</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Open Positions</div>
+                <div id="open-positions" class="metric-value">0</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Total Trades</div>
+                <div id="total-trades" class="metric-value">0</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Max Drawdown</div>
+                <div id="max-drawdown" class="metric-value">0%</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Cycle #</div>
+                <div id="cycle-count" class="metric-value">0</div>
+            </div>
+        </div>
+
+        <!-- Main Content Grid -->
+        <div class="content-grid">
+            <!-- Left: Signals Table -->
+            <div class="panel signals-panel">
+                <div class="panel-header">
+                    <h2>📡 Live Signals</h2>
+                    <span id="signal-count" class="badge">0</span>
+                </div>
+                <div class="table-container">
+                    <table id="signals-table">
+                        <thead>
+                            <tr>
+                                <th>Market</th>
+                                <th>Score</th>
+                                <th>Dir</th>
+                                <th>Gemini</th>
+                                <th>Poly/Kalshi</th>
+                                <th>Spread Diff</th>
+                                <th>Volume</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="signals-body">
+                            <tr><td colspan="8" class="empty-state">Waiting for signals...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Right: Open Positions -->
+            <div class="panel positions-panel">
+                <div class="panel-header">
+                    <h2>📊 Open Positions</h2>
+                    <span id="position-count" class="badge">0</span>
+                </div>
+                <div class="table-container">
+                    <table id="positions-table">
+                        <thead>
+                            <tr>
+                                <th>Market</th>
+                                <th>Dir</th>
+                                <th>Entry</th>
+                                <th>Current</th>
+                                <th>Size</th>
+                                <th>P&L</th>
+                                <th>Hold</th>
+                                <th>TP/SL</th>
+                            </tr>
+                        </thead>
+                        <tbody id="positions-body">
+                            <tr><td colspan="8" class="empty-state">No open positions</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Row: Trade Log + Parameters -->
+        <div class="content-grid bottom-grid">
+            <!-- Trade Log -->
+            <div class="panel log-panel">
+                <div class="panel-header">
+                    <h2>📝 Trade Log</h2>
+                    <button class="btn btn-small" onclick="loadRecentTrades()">Refresh</button>
+                </div>
+                <div class="table-container">
+                    <table id="trades-table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Market</th>
+                                <th>Dir</th>
+                                <th>Entry</th>
+                                <th>Exit</th>
+                                <th>Size</th>
+                                <th>P&L</th>
+                                <th>Hold</th>
+                                <th>Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trades-body">
+                            <tr><td colspan="9" class="empty-state">No trades yet</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Parameters & Bot Log -->
+            <div class="panel params-panel">
+                <div class="panel-header">
+                    <h2>⚙️ Parameters</h2>
+                </div>
+                <div id="params-container" class="params-grid">
+                    <div class="param-loading">Loading parameters...</div>
+                </div>
+
+                <div class="panel-header" style="margin-top: 1rem;">
+                    <h2>📋 Bot Log</h2>
+                </div>
+                <div id="bot-log" class="bot-log">
+                    <div class="log-entry">Waiting for bot to start...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="prediction_charts.js"></script>
+</body>
+</html>

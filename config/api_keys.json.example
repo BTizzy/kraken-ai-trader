@@ -1,0 +1,7 @@
+{
+    "POLYMARKET_API_KEY": "",
+    "KALSHI_API_KEY": "",
+    "GEMINI_API_KEY": "",
+    "GEMINI_API_SECRET": "",
+    "_note": "API keys are optional for public data. Copy this file to api_keys.json and fill in values."
+}

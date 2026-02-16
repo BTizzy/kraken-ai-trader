@@ -1,4 +1,12 @@
 {
+  "name": "kraken-ai-trader",
+  "version": "2.0.0",
+  "description": "Prediction market trading bot exploiting cross-platform price inefficiencies",
+  "scripts": {
+    "prediction": "node server/prediction-proxy.js",
+    "test:prediction": "node tests/test_prediction_bot.js",
+    "start": "node server/prediction-proxy.js"
+  },
   "dependencies": {
     "better-sqlite3": "^12.6.2",
     "dotenv": "^17.2.3",

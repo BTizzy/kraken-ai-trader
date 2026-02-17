@@ -6,12 +6,12 @@
 
 #SKILLS
 EXAMPLE: react.md(including a ton of repos and best practices to help you if you need it for a specific language/librabry or even a topic or any general skill debugging included)
-1. 
-2. 
+1. [skills/prediction_bot_architecture.md](skills/prediction_bot_architecture.md) — Full architecture, data flow, component map, parameters, API endpoints, and design decisions for the prediction market trading bot.
+2. [skills/prediction_bot_debugging.md](skills/prediction_bot_debugging.md) — Debugging checklist, common issues & fixes (10 root causes documented), stress test usage, quick status commands, and lessons learned.
 3. 
 4. 
 
 #More information about the project and how to use it can be found in the following files:
-1.
-2
-3
+1. [README.md](README.md) — Project overview and setup
+2. [README_PREDICTION_MARKETS.md](README_PREDICTION_MARKETS.md) — Prediction market strategy details
+3. [PARAMETERS_GUIDE.md](PARAMETERS_GUIDE.md) — Configuration parameter reference

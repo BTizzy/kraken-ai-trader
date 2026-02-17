@@ -8,7 +8,7 @@
 EXAMPLE: react.md(including a ton of repos and best practices to help you if you need it for a specific language/librabry or even a topic or any general skill debugging included)
 1. [skills/prediction_bot_architecture.md](skills/prediction_bot_architecture.md) — Full architecture, data flow, component map, parameters, API endpoints, and design decisions for the prediction market trading bot.
 2. [skills/prediction_bot_debugging.md](skills/prediction_bot_debugging.md) — Debugging checklist, common issues & fixes (10 root causes documented), stress test usage, quick status commands, and lessons learned.
-3. 
+3. [skills/prediction_market_strategies.md](skills/prediction_market_strategies.md) — 5 viable strategies (fair-value, Kalshi-informed, momentum, market-making, synthetic arb), fee landscape, platform structures, implementation priority.
 4. 
 
 #More information about the project and how to use it can be found in the following files:

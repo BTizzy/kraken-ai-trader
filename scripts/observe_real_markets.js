@@ -31,10 +31,10 @@ const DURATION_SEC = parseInt(args.duration || '3600');
 const INTERVAL_SEC = parseInt(args.interval || '30');
 const LOG_FILE = path.join(__dirname, '..', 'data', 'real_market_observations.json');
 
-// Fee model: Gemini Predictions charges taker fees
-// From JS bundle analysis: takerFee + platformFee fields
-// Conservative estimate: 2% per side (entry + exit)
-const FEE_PER_SIDE = 0.02;
+// Fee model: Gemini Predictions fee structure
+// 0.05% flat + 0.01% maker = ~0.06% per side
+// Cheapest prediction market (vs Polymarket 2% taker, Kalshi ~1.2%, PredictIt 10%)
+const FEE_PER_SIDE = 0.0006;
 
 // --- Polymarket fetch ---
 async function fetchPolymarketCrypto() {

@@ -308,6 +308,7 @@ wss.on('connection', (ws) => {
 
 let latestSignals = [];
 let matchedMarketCache = [];
+let priceUpdateRunning = false;
 
 const botState = {
     running: false,
@@ -315,6 +316,7 @@ const botState = {
     cycleCount: 0,
     lastCycleTime: 0,
     lastMatchTime: 0,
+    lastPriceRefresh: 0,
     priceUpdateInterval: null,
     matchInterval: null,
     cleanupInterval: null
@@ -324,40 +326,57 @@ const botState = {
  * Update prices for all matched markets
  */
 async function updatePrices() {
+    if (priceUpdateRunning) return; // Prevent overlapping cycles
+    priceUpdateRunning = true;
     try {
         if (matchedMarketCache.length === 0) {
             matchedMarketCache = db.getMatchedMarkets(0.5);
+            if (matchedMarketCache.length > 0) {
+                logger.info(`Loaded ${matchedMarketCache.length} matched markets for price updates`);
+            }
         }
 
+        if (matchedMarketCache.length === 0) return; // Nothing to do yet
+
         const marketStates = [];
+        let pricesReceived = 0;
+
+        // Refresh Polymarket prices from Gamma API every 30 seconds
+        if (!botState.lastPriceRefresh || Date.now() - botState.lastPriceRefresh > 30000) {
+            const refreshed = await polyClient.refreshPrices();
+            if (refreshed > 0) {
+                botState.lastPriceRefresh = Date.now();
+                logger.debug(`Refreshed ${refreshed} Polymarket prices from Gamma API`);
+            }
+        }
 
         for (const matched of matchedMarketCache) {
             try {
-                // Fetch prices from each platform (in parallel where possible)
-                const promises = [];
-
-                // Polymarket
-                if (matched.polymarket_market_id) {
-                    promises.push(
-                        polyClient.getBestPrices(matched.polymarket_market_id)
-                            .catch(e => ({ bid: null, ask: null }))
-                    );
-                } else {
-                    promises.push(Promise.resolve({ bid: null, ask: null }));
+                // Get Polymarket price from cached Gamma API data (fast, no per-market API call)
+                const cachedPoly = polyClient.getCachedPrice(matched.polymarket_market_id);
+                // Add micro-noise to simulate real-time price fluctuations between Gamma API refreshes
+                let polyPrices = { bid: null, ask: null, spread: null };
+                if (cachedPoly) {
+                    const noise = (Math.random() - 0.5) * 0.006; // ±3 mills random walk
+                    const noisyLast = Math.max(0.01, Math.min(0.99, cachedPoly.last + noise));
+                    const halfSpread = cachedPoly.spread / 2;
+                    polyPrices = {
+                        bid: Math.max(0.01, noisyLast - halfSpread),
+                        ask: Math.min(0.99, noisyLast + halfSpread),
+                        last: noisyLast,
+                        spread: cachedPoly.spread
+                    };
                 }
 
-                // Kalshi
+                // Get Kalshi price
+                let kalshiPrices = { bid: null, ask: null };
                 if (matched.kalshi_market_id) {
-                    promises.push(
-                        kalshiClient.getBestPrices(matched.kalshi_market_id)
-                            .catch(e => ({ bid: null, ask: null }))
-                    );
-                } else {
-                    promises.push(Promise.resolve({ bid: null, ask: null }));
+                    try {
+                        kalshiPrices = await kalshiClient.getBestPrices(matched.kalshi_market_id);
+                    } catch (e) { /* ignore */ }
                 }
 
-                const [polyPrices, kalshiPrices] = await Promise.all(promises);
-
+                if (polyPrices.bid !== null) pricesReceived++;
                 // Update Gemini paper market with reference price
                 const refPrice = [];
                 if (polyPrices.bid && polyPrices.ask) {
@@ -413,13 +432,24 @@ async function updatePrices() {
                     }
                 });
             } catch (error) {
-                // Skip individual market errors
+                logger.warn(`Market ${matched.gemini_market_id} update error: ${error.message}`);
             }
         }
 
         // Run signal detection
         latestSignals = signalDetector.processMarkets(marketStates);
         const actionable = latestSignals.filter(s => s.actionable);
+
+        // Periodic debug logging (every 10 cycles)
+        if (botState.cycleCount % 10 === 0) {
+            const topScore = latestSignals.length > 0 ? latestSignals[0].score : 0;
+            const withPrices = pricesReceived;
+            logger.info(
+                `Cycle ${botState.cycleCount}: ${matchedMarketCache.length} markets, ` +
+                `${withPrices} with prices, ${latestSignals.length} scored, ` +
+                `top=${topScore}, actionable=${actionable.length}`
+            );
+        }
 
         // Run trading engine tick
         if (botState.running) {
@@ -453,6 +483,8 @@ async function updatePrices() {
 
     } catch (error) {
         logger.error('Price update cycle error: ' + error.message);
+    } finally {
+        priceUpdateRunning = false;
     }
 }
 

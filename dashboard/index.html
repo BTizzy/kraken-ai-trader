@@ -110,6 +110,59 @@
 
         <!-- Bottom Row: Trade Log + Parameters -->
         <div class="content-grid bottom-grid">
+            <!-- Arb Events Panel -->
+            <div class="panel arb-panel">
+                <div class="panel-header">
+                    <h2>⚡ Arb Events</h2>
+                    <span id="arb-count" class="badge">0</span>
+                </div>
+                <div class="table-container">
+                    <table id="arb-table">
+                        <thead>
+                            <tr>
+                                <th>Market</th>
+                                <th>Dir</th>
+                                <th>Net Edge</th>
+                                <th>Gemini Bid/Ask</th>
+                                <th>Kalshi FV</th>
+                                <th>Score</th>
+                            </tr>
+                        </thead>
+                        <tbody id="arb-body">
+                            <tr><td colspan="6" class="empty-state">No arb events detected</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Momentum Panel -->
+            <div class="panel momentum-panel">
+                <div class="panel-header">
+                    <h2>🚀 Momentum Alerts</h2>
+                    <span id="momentum-count" class="badge">0</span>
+                </div>
+                <div class="table-container">
+                    <table id="momentum-table">
+                        <thead>
+                            <tr>
+                                <th>Market</th>
+                                <th>Asset</th>
+                                <th>Dir</th>
+                                <th>Lag</th>
+                                <th>Urgency</th>
+                                <th>Score</th>
+                            </tr>
+                        </thead>
+                        <tbody id="momentum-body">
+                            <tr><td colspan="6" class="empty-state">No momentum alerts</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trade Log + Parameters -->
+        <div class="content-grid bottom-grid">
             <!-- Trade Log -->
             <div class="panel log-panel">
                 <div class="panel-header">

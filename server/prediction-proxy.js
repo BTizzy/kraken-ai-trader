@@ -23,6 +23,8 @@ const SignalDetector = require('../lib/signal_detector');
 const PaperTradingEngine = require('../lib/paper_trading_engine');
 const FairValueEngine = require('../lib/fair_value_engine');
 const RateLimiter = require('./rate-limiter');
+const Alerts = require('../lib/alerts');
+const KalshiWS = require('../lib/kalshi_ws');
 const { Logger } = require('../lib/logger');
 
 const logger = new Logger({ component: 'SERVER', level: 'INFO' });
@@ -132,6 +134,23 @@ const signalDetector = new SignalDetector(db, {
     kalshiClient: kalshiClient
 });
 const tradingEngine = new PaperTradingEngine(db, geminiClient);
+const alerts = new Alerts({ webhookUrl: process.env.DISCORD_WEBHOOK_URL });
+const kalshiWS = new KalshiWS({ apiKey: process.env.KALSHI_API_KEY });
+
+// Wire Kalshi WS tick data into kalshiClient bracket cache
+kalshiWS.on('tick', (tick) => {
+    // Update kalshiClient's internal price cache so analyzeGeminiContract() gets fresh data
+    if (kalshiClient.bracketCache) {
+        kalshiClient.bracketCache.set(tick.marketTicker, {
+            yesBid: tick.yesBid,
+            yesAsk: tick.yesAsk,
+            lastPrice: tick.lastPrice,
+            volume: tick.volume,
+            ts: tick.ts,
+            source: 'ws'
+        });
+    }
+});
 
 // Spot price state — fed to FairValueEngine for Black-Scholes pricing
 let spotPriceCache = {};
@@ -286,12 +305,42 @@ app.get('/api/matched-markets', (req, res) => {
     }
 });
 
-// Get current signals (opportunities)
+// Get current signals (opportunities) + arb/momentum events
 app.get('/api/signals', (req, res) => {
     try {
         const minScore = parseFloat(req.query.min_score || 0);
         const signals = latestSignals.filter(s => s.score >= minScore);
-        res.json({ signals, count: signals.length });
+
+        // Extract arb and momentum events from the latest actionable signals
+        const allActionable = latestActionable || [];
+        const arbEvents = allActionable
+            .filter(s => s.arb && (s.netEdge || 0) >= 0.03)
+            .map(s => ({
+                marketId:    s.marketId,
+                title:       s.title,
+                direction:   s.direction,
+                netEdge:     s.netEdge,
+                geminiBid:   s.gemini_bid,
+                geminiAsk:   s.gemini_ask,
+                kalshiFV:    s.arb?.kalshiFairValue || s.referencePrice,
+                score:       s.score,
+                timestamp:   s.timestamp
+            }));
+
+        const momentumAlerts = allActionable
+            .filter(s => s.momentum)
+            .map(s => ({
+                marketId:    s.marketId,
+                title:       s.title,
+                direction:   s.direction,
+                contractLag: s.momentum?.contractLag,
+                urgency:     s.momentum?.urgency,
+                asset:       s.momentum?.asset,
+                score:       s.score,
+                timestamp:   s.timestamp
+            }));
+
+        res.json({ signals, count: signals.length, arbEvents, momentumAlerts });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -449,7 +498,8 @@ app.get('/api/bot/status', (req, res) => {
         signal_detector: signalDetector.getStats(),
         gemini: geminiClient.getStats(),
         polymarket: polyClient.getStats(),
-        kalshi: kalshiClient.getStats()
+        kalshi: kalshiClient.getStats(),
+        kalshi_ws: kalshiWS.getStats()
     });
 });
 
@@ -519,6 +569,7 @@ const wsHeartbeatInterval = setInterval(() => {
 // ===== Main Trading Bot Loop =====
 
 let latestSignals = [];
+let latestActionable = [];
 let matchedMarketCache = [];
 let priceUpdateRunning = false;
 
@@ -761,6 +812,19 @@ async function updatePrices() {
                                 `dir=${arb.direction} Gemini=${gemini.bid?.toFixed(3)}/${gemini.ask?.toFixed(3)} ` +
                                 `KalshiFV=${kalshiAnalysis.kalshiFairValue?.toFixed(3)}`
                             );
+                            // Send Discord arb alert (rate-limited per market)
+                            const arbSignal = {
+                                marketId,
+                                title: state.matchedMarket?.event_title || '',
+                                direction: arb.direction,
+                                netEdge: arb.netProfit || arb.bestEdge,
+                                gemini_bid: gemini.bid,
+                                gemini_ask: gemini.ask,
+                                score: Math.min(100, Math.round((arb.bestEdge || 0) * 1500)),
+                                arb: { ...arb, kalshiFairValue: kalshiAnalysis.kalshiFairValue },
+                                timestamp: Date.now()
+                            };
+                            alerts.sendArbAlert(arbSignal).catch(() => {});
                             // Inject as high-priority actionable signal
                             const seenIds = new Set(actionable.map(s => s.marketId));
                             if (!seenIds.has(marketId)) {
@@ -773,6 +837,7 @@ async function updatePrices() {
                                     referencePrice: kalshiAnalysis.kalshiFairValue,
                                     gemini_bid: gemini.bid,
                                     gemini_ask: gemini.ask,
+                                    gemini_ask_depth: gemini.ask_depth || null,
                                     edge: arb.bestEdge,
                                     netEdge: arb.netProfit || arb.bestEdge,
                                     confidence: 'high',
@@ -804,6 +869,7 @@ async function updatePrices() {
 
         // Run trading engine tick
         if (botState.running) {
+            latestActionable = actionable; // capture for /api/signals
             const result = tradingEngine.tick(actionable);
 
             if (result.entries.length > 0 || result.exits.length > 0) {
@@ -853,6 +919,15 @@ async function runMatchCycle() {
         botState.lastMatchTime = Date.now();
         logger.info(`Match cycle complete: ${result.matched_count} markets matched`);
 
+        // Subscribe Kalshi WS to all matched Kalshi market tickers
+        const kalshiTickers = matchedMarketCache
+            .filter(m => m.kalshi_market_id)
+            .map(m => m.kalshi_market_id);
+        if (kalshiTickers.length > 0) {
+            kalshiWS.subscribe(kalshiTickers);
+            logger.info(`Kalshi WS: subscribed to ${kalshiTickers.length} brackets`);
+        }
+
         broadcastToClients({
             type: 'match_update',
             data: result
@@ -871,6 +946,11 @@ function runCleanup() {
         db.cleanOldPrices(cutoff);
         signalDetector.cleanup();
         signalDetector.updateCategoryWinRates();
+
+        // Daily P&L alert (fires once per calendar day; Alerts module deduplicates)
+        const wallet = db.getWallet();
+        const dailyPnL = db.getDailyPnL();
+        alerts.sendDailyPnL(wallet, dailyPnL).catch(() => {});
     } catch (error) {
         logger.warn('Cleanup error: ' + error.message);
     }
@@ -890,6 +970,9 @@ function startBot() {
     signalDetector.loadParameters();
     signalDetector.updateCategoryWinRates();
 
+    // Connect Kalshi WebSocket for real-time bracket prices
+    kalshiWS.connect().catch(err => logger.warn('Kalshi WS connect failed: ' + err.message));
+
     // Initial market match
     runMatchCycle();
 
@@ -902,7 +985,7 @@ function startBot() {
     // Cleanup every hour
     botState.cleanupInterval = setInterval(runCleanup, 3600000);
 
-    logger.info('🚀 Prediction Market Bot STARTED (paper mode)');
+    logger.info('Prediction Market Bot STARTED (paper mode)');
 }
 
 /**
@@ -916,7 +999,9 @@ function stopBot() {
     if (botState.matchInterval) clearInterval(botState.matchInterval);
     if (botState.cleanupInterval) clearInterval(botState.cleanupInterval);
 
-    logger.info('⏹️ Prediction Market Bot STOPPED');
+    kalshiWS.disconnect();
+
+    logger.info('Prediction Market Bot STOPPED');
 }
 
 // ===== Start Server =====

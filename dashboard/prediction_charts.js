@@ -333,6 +333,77 @@ function addLog(message, type = 'info') {
     }
 }
 
+// ===== Arb + Momentum Panel Updates =====
+
+function updateArbEvents(arbEvents) {
+    const tbody = document.getElementById('arb-body');
+    const countEl = document.getElementById('arb-count');
+    if (!tbody) return;
+
+    const events = arbEvents || [];
+    countEl.textContent = events.length;
+
+    if (events.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No arb events detected</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = events.map(e => {
+        const edgeCents = ((e.netEdge || 0) * 100).toFixed(1);
+        const edgeClass = (e.netEdge || 0) >= 0.05 ? 'score-high' : 'score-medium';
+        const dirClass  = e.direction === 'YES' ? 'dir-yes' : 'dir-no';
+        const title     = (e.title || e.marketId || '').substring(0, 35);
+        const bidAsk    = (e.geminiBid != null && e.geminiAsk != null)
+            ? `${e.geminiBid.toFixed(3)}/${e.geminiAsk.toFixed(3)}`
+            : '--';
+        const kFV = e.kalshiFV != null ? e.kalshiFV.toFixed(3) : '--';
+        return `<tr>
+            <td title="${e.title}">${title}</td>
+            <td class="${dirClass}">${e.direction || '--'}</td>
+            <td class="${edgeClass}">${edgeCents}¢</td>
+            <td>${bidAsk}</td>
+            <td>${kFV}</td>
+            <td>${e.score || '--'}</td>
+        </tr>`;
+    }).join('');
+}
+
+function updateMomentumAlerts(momentumAlerts) {
+    const tbody = document.getElementById('momentum-body');
+    const countEl = document.getElementById('momentum-count');
+    if (!tbody) return;
+
+    const alerts = momentumAlerts || [];
+    countEl.textContent = alerts.length;
+
+    if (alerts.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No momentum alerts</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = alerts.map(a => {
+        const lagCents  = a.contractLag != null ? (a.contractLag * 100).toFixed(1) + '¢' : '--';
+        const urgency   = a.urgency != null ? a.urgency.toFixed(2) : '--';
+        const dirClass  = a.direction === 'YES' ? 'dir-yes' : 'dir-no';
+        const title     = (a.title || a.marketId || '').substring(0, 35);
+        return `<tr>
+            <td title="${a.title}">${title}</td>
+            <td>${a.asset || '--'}</td>
+            <td class="${dirClass}">${a.direction || '--'}</td>
+            <td>${lagCents}</td>
+            <td>${urgency}</td>
+            <td>${a.score || '--'}</td>
+        </tr>`;
+    }).join('');
+}
+
+async function loadSignalPanels() {
+    const data = await apiFetch('/api/signals');
+    if (!data) return;
+    updateArbEvents(data.arbEvents);
+    updateMomentumAlerts(data.momentumAlerts);
+}
+
 // ===== Periodic Refresh =====
 
 async function periodicRefresh() {
@@ -353,8 +424,10 @@ document.addEventListener('DOMContentLoaded', () => {
     connectWebSocket();
     periodicRefresh();
     loadRecentTrades();
+    loadSignalPanels();
 
     // Periodic refresh every 5 seconds (backup for WebSocket)
     setInterval(periodicRefresh, 5000);
     setInterval(loadRecentTrades, 15000);
+    setInterval(loadSignalPanels, 5000); // arb/momentum panels update every 5s
 });

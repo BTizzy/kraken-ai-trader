@@ -157,7 +157,40 @@ DISCORD_WEBHOOK_URL=    # For alerts (optional but recommended)
 
 ---
 
-## Current Version: V11
+## Current Version: V12
+
+**Merged in V12:**
+- `lib/kalshi_ws.js`: **Complete rewrite** — RSA-PSS SHA256 signing (Kalshi requires `KALSHI-ACCESS-KEY` + `KALSHI-ACCESS-TIMESTAMP` + `KALSHI-ACCESS-SIGNATURE` headers, NOT Bearer tokens). Loads private key from PEM file (`KALSHI_PRIVATE_KEY_PATH`) or inline env var (`KALSHI_PRIVATE_KEY`). WS URL corrected to `wss://api.elections.kalshi.com/trade-api/ws/v2`. Fixed `stopped` flag bug: `connect()` now resets `this.stopped = false` so bot stop→start cycle reconnects properly.
+- `server/prediction-proxy.js`: Gemini polling sped up (`realFetchInterval` 15s→10s, `tickerFetchInterval` 5s→2s, `cacheTTL` 3s→2s, `realCacheTTL` 10s→2s, `realApiInterval` 2s→1s). Added `recordApiResult()` calls for Kraken (in `fetchSpotPrices`), Kalshi (in market loop), and Gemini (after `getMarketState`) so all 4 API health dots work. Added `ws_clients: wss.clients.size` to `/api/health` response. Added `emergencyExitAll`, `validateStartup`, mode+Sharpe API endpoints.
+- `dashboard/index.html`: V12 dashboard HTML — API health dots (Polymarket/Kalshi/Kraken/Gemini), mode badge (PAPER/LIVE), emergency kill switch button, Sharpe ratio metric, 8-column metrics row.
+- `dashboard/prediction_charts.js`: WSS protocol auto-detection (`wss://` when page is HTTPS, `ws://` when HTTP) to fix Mixed Content blocking on GitHub Codespaces. Added try/catch fallback for WS construction. Added `ws_clients` display in health panel.
+- `dashboard/styles_prediction.css`: All V12 styles — emergency button pulse animation, mode badge, API health dots, health panel, close position button, circuit breaker, trade reason badges. `metrics-row` grid expanded from 6→8 columns.
+- `lib/gemini_client.js`: Updated comments to reflect new polling intervals.
+- `.gitignore`: Added `*.pem` and `*private_key*` to protect RSA key files from accidental commit.
+
+**V12 Key Lessons:**
+- **Kalshi auth**: Bearer tokens don't work. Must RSA-PSS sign `timestamp + 'GET' + '/trade-api/ws/v2'` and send 3 headers. Private key must be a full PKCS#8 PEM file (1679 bytes), NOT truncated.
+- **WSS on HTTPS**: Always detect protocol: `window.location.protocol === 'https:' ? 'wss:' : 'ws:'` — hardcoded `ws://` is blocked by browsers when page is served over HTTPS.
+- **KalshiWS lifecycle**: `disconnect()` sets `stopped = true`. Always reset it at the start of `connect()` or bot restart won't reconnect.
+- **API health dots**: `recordApiResult(source, success)` must be called after every platform fetch, not just Polymarket.
+
+**V12 .env additions:**
+```
+KALSHI_PRIVATE_KEY_PATH=./kalshi_private_key.pem   # Path to RSA private key PEM file
+# OR
+KALSHI_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----
+```
+
+**V13 candidates:**
+- Live mode E2E test harness (test HMAC auth against Gemini sandbox/testnet if available)
+- Walk-forward backtest on paper trade log once 500+ trades accumulated
+- Gemini order book WebSocket (if Gemini opens WS for prediction markets)
+- Auto-flip to live mode when paper Sharpe > 2.0 and 500+ trades
+- Telegram alerts (replacing Discord)
+
+---
+
+## Previous Version: V11
 
 **Merged in V11:**
 - `server/prediction-proxy.js`: Added `require('dotenv').config()` at top — env vars from `.env` were silently ignored before
@@ -167,10 +200,3 @@ DISCORD_WEBHOOK_URL=    # For alerts (optional but recommended)
 - `.env.example`: Added root-level template for all prediction bot env vars
 - `skills/BTizzy/prediction-market-architecture.md`: Architecture deep-dive (platform fees, strategy types, failure modes)
 - `skills/BTizzy/statistical-validation.md`: 5-phase validation framework, anti-patterns, go-live gates
-
-**V12 candidates:**
-- Live mode E2E test harness (test HMAC auth against Gemini sandbox/testnet if available)
-- Walk-forward backtest on paper trade log once 500+ trades accumulated
-- Gemini order book WebSocket (if Gemini opens WS for prediction markets)
-- Auto-flip to live mode when paper Sharpe > 2.0 and 500+ trades (DEPLOYMENT CHECKLIST)
-- Telegram alerts (replacing Discord)

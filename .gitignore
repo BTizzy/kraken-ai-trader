@@ -1,6 +1,8 @@
 # Do not commit API keys
 .env
 *.env
+*.pem
+*private_key*
 
 # OS files
 .DS_Store

@@ -114,6 +114,67 @@ function checkDrawdownKillSwitch() {
     }
 }
 
+// ===== Emergency Exit All Positions =====
+
+function emergencyExitAll() {
+    const openTrades = db.getOpenTrades();
+    if (openTrades.length === 0) return { closed: 0, totalPnl: 0, exits: [] };
+
+    const exits = [];
+    let totalPnl = 0;
+    const now = Math.floor(Date.now() / 1000);
+
+    for (const trade of openTrades) {
+        try {
+            const exitPrice = geminiClient.getPaperExitPrice(trade.gemini_market_id, trade.direction);
+            if (exitPrice === null) continue;
+
+            const entryFee = trade.position_size * (tradingEngine.params?.fee_per_side || 0.0001);
+            const exitValue = trade.direction === 'YES'
+                ? (exitPrice - trade.entry_price) * trade.position_size / trade.entry_price
+                : (trade.entry_price - exitPrice) * trade.position_size / (1 - trade.entry_price);
+            const exitFee = Math.abs(exitValue + trade.position_size) * (tradingEngine.params?.fee_per_side || 0.0001);
+            const pnl = exitValue - entryFee - exitFee;
+
+            db.closeTrade(trade.id, {
+                exit_price: exitPrice,
+                pnl: pnl,
+                exit_reason: 'emergency_stop',
+                hold_time: now - trade.timestamp
+            });
+
+            totalPnl += pnl;
+            exits.push({
+                tradeId: trade.id,
+                market: trade.market_title || trade.gemini_market_id,
+                direction: trade.direction,
+                exitPrice,
+                pnl,
+                holdTime: now - trade.timestamp
+            });
+
+            logger.warn(`EMERGENCY EXIT: ${trade.direction} "${trade.market_title}" @ ${exitPrice.toFixed(3)} P&L: $${pnl.toFixed(2)}`);
+        } catch (e) {
+            logger.error(`Failed to emergency exit trade ${trade.id}: ${e.message}`);
+        }
+    }
+
+    // Update wallet
+    if (totalPnl !== 0) {
+        try {
+            const wallet = db.getWallet();
+            if (wallet) {
+                db.updateWallet(wallet.balance + totalPnl);
+            }
+        } catch (e) {
+            logger.error(`Failed to update wallet after emergency exit: ${e.message}`);
+        }
+    }
+
+    logger.warn(`EMERGENCY EXIT COMPLETE: ${exits.length} positions closed, total P&L: $${totalPnl.toFixed(2)}`);
+    return { closed: exits.length, totalPnl, exits };
+}
+
 // ===== Initialize Components =====
 
 const db = new PredictionDatabase();
@@ -124,13 +185,17 @@ const kalshiClient = new KalshiClient({ rateLimiter });
 const geminiClient = new GeminiClient({
     mode: 'paper',
     rateLimiter,
-    useRealPrices: true,    // Use real Gemini Predictions API prices instead of simulation
-    realFetchInterval: 15000 // Refresh every 15s (matches spot price cadence)
+    useRealPrices: true,        // Use real Gemini Predictions API prices instead of simulation
+    realFetchInterval: 10000,   // Full market refresh every 10s (metadata + prices)
+    tickerFetchInterval: 2000,  // Batch ticker every 2s (lightweight price-only, matches cycle)
+    cacheTTL: 2000,             // 2s cache TTL (was 3s)
+    realCacheTTL: 2000,         // 2s real client cache TTL (was 10s)
+    realApiInterval: 1000       // 1s min between Gemini requests (was 2s)
 });
 
 const matcher = new MarketMatcher(db);
 const signalDetector = new SignalDetector(db, {
-    feePerSide: 0.0006,
+    feePerSide: 0.0001,
     minEdge: 0.03,
     highConfidenceEdge: 0.08,
     kalshiClient: kalshiClient
@@ -187,9 +252,11 @@ async function fetchSpotPrices() {
                 }
             }
             lastSpotFetch = Date.now();
+            recordApiResult('kraken', true);
         }
     } catch (e) {
         logger.debug('Spot price fetch: ' + e.message);
+        recordApiResult('kraken', false, e);
     }
     return spotPriceCache;
 }
@@ -268,6 +335,7 @@ app.get('/api/health', (req, res) => {
             last_error: health.lastError
         },
         api_health: health.apiHealth,
+        ws_clients: wss.clients.size,
         drawdown_limit: `${DRAWDOWN_LIMIT * 100}%`,
         peak_balance: peakBalance
     });
@@ -487,14 +555,113 @@ app.post('/api/bot/stop', (req, res) => {
     res.json({ status: 'stopped' });
 });
 
+// Emergency stop: stops bot AND closes all positions
+app.post('/api/bot/emergency-stop', (req, res) => {
+    try {
+        stopBot();
+        const result = emergencyExitAll();
+
+        // Broadcast to dashboard WS clients
+        wss.clients.forEach(client => {
+            if (client.readyState === 1) {
+                client.send(JSON.stringify({
+                    type: 'emergency_stop',
+                    data: result
+                }));
+            }
+        });
+
+        res.json({ status: 'emergency_stopped', ...result });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Close a single position manually
+app.post('/api/bot/close-position/:tradeId', (req, res) => {
+    try {
+        const tradeId = parseInt(req.params.tradeId);
+        const openTrades = db.getOpenTrades();
+        const trade = openTrades.find(t => t.id === tradeId);
+
+        if (!trade) {
+            return res.status(404).json({ error: 'Trade not found or already closed' });
+        }
+
+        const exitPrice = geminiClient.getPaperExitPrice(trade.gemini_market_id, trade.direction);
+        if (exitPrice === null) {
+            return res.status(400).json({ error: 'Could not determine exit price' });
+        }
+
+        const now = Math.floor(Date.now() / 1000);
+        const feeSide = tradingEngine.params?.fee_per_side || 0.0001;
+        const entryFee = trade.position_size * feeSide;
+        const exitValue = trade.direction === 'YES'
+            ? (exitPrice - trade.entry_price) * trade.position_size / trade.entry_price
+            : (trade.entry_price - exitPrice) * trade.position_size / (1 - trade.entry_price);
+        const exitFee = Math.abs(exitValue + trade.position_size) * feeSide;
+        const pnl = exitValue - entryFee - exitFee;
+
+        db.closeTrade(tradeId, {
+            exit_price: exitPrice,
+            pnl: pnl,
+            exit_reason: 'manual_close',
+            hold_time: now - trade.timestamp
+        });
+
+        // Update wallet
+        const wallet = db.getWallet();
+        if (wallet) {
+            db.updateWallet(wallet.balance + pnl);
+        }
+
+        logger.info(`MANUAL CLOSE: ${trade.direction} "${trade.market_title}" @ ${exitPrice.toFixed(3)} P&L: $${pnl.toFixed(2)}`);
+        res.json({
+            success: true,
+            tradeId,
+            market: trade.market_title,
+            direction: trade.direction,
+            exitPrice,
+            pnl,
+            holdTime: now - trade.timestamp
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Bot status
 app.get('/api/bot/status', (req, res) => {
+    // Calculate Sharpe ratio from trade history
+    let sharpe = null;
+    try {
+        const recentTrades = db.getRecentTrades(200);
+        if (recentTrades && recentTrades.length >= 5) {
+            const pnls = recentTrades.map(t => t.pnl || 0);
+            const mean = pnls.reduce((a, b) => a + b, 0) / pnls.length;
+            const variance = pnls.reduce((sum, p) => sum + (p - mean) ** 2, 0) / pnls.length;
+            const stddev = Math.sqrt(variance);
+            if (stddev > 0) {
+                // Annualize: assume ~50 trades/day based on 2s cycles
+                const tradesPerDay = Math.min(pnls.length, 50);
+                sharpe = (mean / stddev) * Math.sqrt(tradesPerDay * 252);
+            }
+        }
+    } catch (e) { /* sharpe stays null */ }
+
     res.json({
         running: botState.running,
+        mode: geminiClient.mode,
         uptime: botState.startTime ? Date.now() - botState.startTime : 0,
         cycle_count: botState.cycleCount,
         last_cycle_time: botState.lastCycleTime,
         last_match_time: botState.lastMatchTime,
+        sharpe,
+        circuit_breaker: {
+            open: health.circuitOpen,
+            consecutive_errors: health.consecutiveErrors,
+            total_errors: health.totalErrors
+        },
         ...tradingEngine.getStatus(),
         rate_limiter: rateLimiter.getStats(),
         signal_detector: signalDetector.getStats(),
@@ -649,7 +816,10 @@ async function updatePrices() {
                 if (matched.kalshi_market_id) {
                     try {
                         kalshiPrices = await kalshiClient.getBestPrices(matched.kalshi_market_id);
-                    } catch (e) { /* ignore */ }
+                        recordApiResult('kalshi', true);
+                    } catch (e) {
+                        recordApiResult('kalshi', false, e);
+                    }
                 }
 
                 if (polyPrices.bid !== null) pricesReceived++;
@@ -671,6 +841,9 @@ async function updatePrices() {
 
                 // Get Gemini state
                 const geminiState = await geminiClient.getMarketState(matched.gemini_market_id);
+                if (geminiState && geminiState.bid !== null) {
+                    recordApiResult('gemini', true);
+                }
 
                 // Save price snapshot to DB
                 db.insertPrice({
@@ -709,6 +882,7 @@ async function updatePrices() {
                 });
             } catch (error) {
                 logger.warn(`Market ${matched.gemini_market_id} update error: ${error.message}`);
+                recordApiResult('gemini', false, error);
             }
         }
 
@@ -991,6 +1165,69 @@ function startBot() {
 }
 
 /**
+ * Pre-boot validation: check env vars, API connectivity, spot prices
+ */
+async function validateStartup() {
+    const issues = [];
+    const warnings = [];
+
+    logger.info('=== STARTUP VALIDATION ===');
+
+    // 1. Env var checks for live mode
+    if (geminiClient.mode === 'live') {
+        if (!process.env.GEMINI_API_KEY) issues.push('GEMINI_API_KEY not set (required for live mode)');
+        if (!process.env.GEMINI_API_SECRET) issues.push('GEMINI_API_SECRET not set (required for live mode)');
+    }
+
+    // 2. Database + wallet check
+    try {
+        const wallet = db.getWallet();
+        if (!wallet) {
+            warnings.push('No wallet found — will be created on first trade');
+        } else {
+            logger.info(`Wallet: $${wallet.balance.toFixed(2)} (initial: $${wallet.initial_balance.toFixed(2)})`);
+        }
+    } catch (e) {
+        issues.push('Database error: ' + e.message);
+    }
+
+    // 3. Polymarket connectivity
+    try {
+        await polyClient.refreshPrices();
+        logger.info('Polymarket API: OK');
+    } catch (e) {
+        warnings.push('Polymarket unreachable: ' + e.message);
+    }
+
+    // 4. Kraken spot prices
+    try {
+        await fetchSpotPrices();
+        if (spotPriceCache.BTC && spotPriceCache.BTC > 10000) {
+            logger.info(`Spot prices: BTC=$${spotPriceCache.BTC.toLocaleString()}, ETH=$${spotPriceCache.ETH?.toLocaleString() || 'N/A'}, SOL=$${spotPriceCache.SOL?.toLocaleString() || 'N/A'}`);
+        } else {
+            warnings.push('BTC spot price missing or unreasonable');
+        }
+    } catch (e) {
+        warnings.push('Kraken spot prices unreachable: ' + e.message);
+    }
+
+    // 5. Kalshi API (optional — bot works without it)
+    if (process.env.KALSHI_API_KEY) {
+        logger.info('Kalshi API key: SET (WS auth enabled)');
+    } else {
+        logger.info('Kalshi API key: NOT SET (REST polling only)');
+    }
+
+    // Report results
+    for (const w of warnings) logger.warn(`STARTUP WARNING: ${w}`);
+    for (const i of issues) logger.error(`STARTUP CRITICAL: ${i}`);
+
+    logger.info(`=== VALIDATION COMPLETE: ${issues.length} critical, ${warnings.length} warnings ===`);
+
+    return { issues, warnings, canStart: issues.length === 0 };
+}
+
+/**
  * Stop the trading bot
  */
 function stopBot() {
@@ -1010,31 +1247,70 @@ function stopBot() {
 
 const PORT = process.env.PREDICTION_PORT || 3003;
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
     logger.info(`Prediction Market Proxy running on port ${PORT}`);
     logger.info(`Dashboard: http://localhost:${PORT}`);
     logger.info(`WebSocket: ws://localhost:${PORT}/ws`);
     logger.info(`API: http://localhost:${PORT}/api/health`);
 
+    // Run pre-boot validation
+    const validation = await validateStartup();
+    if (!validation.canStart) {
+        logger.error('STARTUP BLOCKED: critical issues must be resolved before starting');
+        return; // Server stays up (dashboard accessible) but bot doesn't start
+    }
+
     // Auto-start bot
     startBot();
 });
 
-// Graceful shutdown
+// Graceful shutdown — close positions before exiting
 process.on('SIGINT', () => {
-    logger.info('Shutting down...');
+    logger.info('Shutting down (SIGINT)...');
     stopBot();
+    const result = emergencyExitAll();
+    if (result.closed > 0) {
+        logger.info(`Shutdown: closed ${result.closed} positions, P&L: $${result.totalPnl.toFixed(2)}`);
+    }
     clearInterval(wsHeartbeatInterval);
     db.close();
     process.exit(0);
 });
 
 process.on('SIGTERM', () => {
-    logger.info('Shutting down...');
+    logger.info('Shutting down (SIGTERM)...');
     stopBot();
+    const result = emergencyExitAll();
+    if (result.closed > 0) {
+        logger.info(`Shutdown: closed ${result.closed} positions, P&L: $${result.totalPnl.toFixed(2)}`);
+    }
     clearInterval(wsHeartbeatInterval);
     db.close();
     process.exit(0);
 });
 
-module.exports = { app, server, startBot, stopBot };
+// Crash handlers — close positions on unhandled errors
+process.on('uncaughtException', (err) => {
+    logger.error(`UNCAUGHT EXCEPTION: ${err.message}`);
+    logger.error(err.stack);
+    try {
+        stopBot();
+        const result = emergencyExitAll();
+        if (result.closed > 0) {
+            logger.info(`Crash handler: closed ${result.closed} positions, P&L: $${result.totalPnl.toFixed(2)}`);
+        }
+        clearInterval(wsHeartbeatInterval);
+        db.close();
+    } catch (e) {
+        logger.error(`Crash handler failed: ${e.message}`);
+    }
+    process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    logger.error(`UNHANDLED REJECTION: ${reason}`);
+    // Don't exit for unhandled rejections — just log and continue
+    // The circuit breaker will handle persistent API failures
+});
+
+module.exports = { app, server, startBot, stopBot, emergencyExitAll };

@@ -9,8 +9,15 @@
 <body>
     <header>
         <div class="header-left">
-            <h1>🎯 Prediction Market Bot</h1>
+            <h1>Prediction Market Bot</h1>
             <span id="bot-status" class="status-badge status-stopped">STOPPED</span>
+            <span id="mode-badge" class="mode-badge mode-paper">PAPER</span>
+            <div id="api-health" class="api-health">
+                <span class="api-dot api-dot-unknown" id="dot-poly" title="Polymarket">P</span>
+                <span class="api-dot api-dot-unknown" id="dot-kalshi" title="Kalshi">K</span>
+                <span class="api-dot api-dot-unknown" id="dot-kraken" title="Kraken">R</span>
+                <span class="api-dot api-dot-unknown" id="dot-gemini" title="Gemini">G</span>
+            </div>
         </div>
         <div class="header-right">
             <div class="wallet-display">
@@ -19,6 +26,7 @@
                 <span id="wallet-pnl" class="wallet-pnl">+$0.00</span>
             </div>
             <button id="btn-start" class="btn btn-start" onclick="toggleBot()">Start Bot</button>
+            <button id="btn-emergency" class="btn btn-emergency" onclick="emergencyStop()">EMERGENCY STOP</button>
         </div>
     </header>
 
@@ -46,6 +54,14 @@
                 <div id="max-drawdown" class="metric-value">0%</div>
             </div>
             <div class="metric-card">
+                <div class="metric-label">Sharpe Ratio</div>
+                <div id="sharpe-ratio" class="metric-value">--</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Circuit Breaker</div>
+                <div id="circuit-breaker" class="metric-value cb-ok">OK</div>
+            </div>
+            <div class="metric-card">
                 <div class="metric-label">Cycle #</div>
                 <div id="cycle-count" class="metric-value">0</div>
             </div>
@@ -56,7 +72,7 @@
             <!-- Left: Signals Table -->
             <div class="panel signals-panel">
                 <div class="panel-header">
-                    <h2>📡 Live Signals</h2>
+                    <h2>Live Signals</h2>
                     <span id="signal-count" class="badge">0</span>
                 </div>
                 <div class="table-container">
@@ -83,7 +99,7 @@
             <!-- Right: Open Positions -->
             <div class="panel positions-panel">
                 <div class="panel-header">
-                    <h2>📊 Open Positions</h2>
+                    <h2>Open Positions</h2>
                     <span id="position-count" class="badge">0</span>
                 </div>
                 <div class="table-container">
@@ -98,22 +114,23 @@
                                 <th>P&L</th>
                                 <th>Hold</th>
                                 <th>TP/SL</th>
+                                <th>Action</th>
                             </tr>
                         </thead>
                         <tbody id="positions-body">
-                            <tr><td colspan="8" class="empty-state">No open positions</td></tr>
+                            <tr><td colspan="9" class="empty-state">No open positions</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
 
-        <!-- Bottom Row: Trade Log + Parameters -->
+        <!-- Arb + Momentum Panels -->
         <div class="content-grid bottom-grid">
             <!-- Arb Events Panel -->
             <div class="panel arb-panel">
                 <div class="panel-header">
-                    <h2>⚡ Arb Events</h2>
+                    <h2>Arb Events</h2>
                     <span id="arb-count" class="badge">0</span>
                 </div>
                 <div class="table-container">
@@ -138,7 +155,7 @@
             <!-- Momentum Panel -->
             <div class="panel momentum-panel">
                 <div class="panel-header">
-                    <h2>🚀 Momentum Alerts</h2>
+                    <h2>Momentum Alerts</h2>
                     <span id="momentum-count" class="badge">0</span>
                 </div>
                 <div class="table-container">
@@ -161,12 +178,53 @@
             </div>
         </div>
 
+        <!-- System Health Panel -->
+        <div class="panel health-panel">
+            <div class="panel-header">
+                <h2>System Health</h2>
+            </div>
+            <div class="health-grid" id="health-container">
+                <div class="health-item">
+                    <span class="health-label">Uptime</span>
+                    <span class="health-value" id="health-uptime">--</span>
+                </div>
+                <div class="health-item">
+                    <span class="health-label">Mode</span>
+                    <span class="health-value" id="health-mode">--</span>
+                </div>
+                <div class="health-item">
+                    <span class="health-label">Polymarket</span>
+                    <span class="health-value" id="health-poly">--</span>
+                </div>
+                <div class="health-item">
+                    <span class="health-label">Kalshi</span>
+                    <span class="health-value" id="health-kalshi">--</span>
+                </div>
+                <div class="health-item">
+                    <span class="health-label">Kraken</span>
+                    <span class="health-value" id="health-kraken">--</span>
+                </div>
+                <div class="health-item">
+                    <span class="health-label">Gemini</span>
+                    <span class="health-value" id="health-gemini">--</span>
+                </div>
+                <div class="health-item">
+                    <span class="health-label">CB Errors</span>
+                    <span class="health-value" id="health-errors">0</span>
+                </div>
+                <div class="health-item">
+                    <span class="health-label">WS Clients</span>
+                    <span class="health-value" id="health-ws">--</span>
+                </div>
+            </div>
+        </div>
+
         <!-- Trade Log + Parameters -->
         <div class="content-grid bottom-grid">
             <!-- Trade Log -->
             <div class="panel log-panel">
                 <div class="panel-header">
-                    <h2>📝 Trade Log</h2>
+                    <h2>Trade Log</h2>
                     <button class="btn btn-small" onclick="loadRecentTrades()">Refresh</button>
                 </div>
                 <div class="table-container">
@@ -194,14 +252,14 @@
             <!-- Parameters & Bot Log -->
             <div class="panel params-panel">
                 <div class="panel-header">
-                    <h2>⚙️ Parameters</h2>
+                    <h2>Parameters</h2>
                 </div>
                 <div id="params-container" class="params-grid">
                     <div class="param-loading">Loading parameters...</div>
                 </div>
 
                 <div class="panel-header" style="margin-top: 1rem;">
-                    <h2>📋 Bot Log</h2>
+                    <h2>Bot Log</h2>
                 </div>
                 <div id="bot-log" class="bot-log">
                     <div class="log-entry">Waiting for bot to start...</div>

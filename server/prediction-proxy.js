@@ -1,6 +1,6 @@
 /**
  * Prediction Market Proxy Server
- * 
+ *
  * Express.js server that:
  *   1. Aggregates price data from Polymarket, Kalshi, and Gemini
  *   2. Runs signal detection and opportunity scoring
@@ -8,6 +8,8 @@
  *   4. Provides REST API + WebSocket for dashboard
  *   5. Manages the main trading loop
  */
+
+require('dotenv').config();
 
 const express = require('express');
 const http = require('http');

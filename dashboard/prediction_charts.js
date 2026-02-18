@@ -4,7 +4,8 @@
  */
 
 const API_BASE = window.location.origin;
-const WS_URL = `ws://${window.location.host}/ws`;
+const WS_PROTOCOL = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const WS_URL = `${WS_PROTOCOL}//${window.location.host}/ws`;
 
 let ws = null;
 let botRunning = false;
@@ -16,7 +17,14 @@ const maxLogEntries = 100;
 function connectWebSocket() {
     if (ws && ws.readyState === WebSocket.OPEN) return;
 
-    ws = new WebSocket(WS_URL);
+    try {
+        ws = new WebSocket(WS_URL);
+    } catch (e) {
+        console.warn('WebSocket construction failed, using REST polling only:', e.message);
+        document.querySelector('h1').classList.remove('ws-connected');
+        document.querySelector('h1').classList.add('ws-disconnected');
+        return;
+    }
 
     ws.onopen = () => {
         addLog('WebSocket connected', 'info');
@@ -77,6 +85,11 @@ function handleWSMessage(msg) {
         case 'match_update':
             addLog(`Market match: ${msg.data.matched_count} markets matched (Poly=${msg.data.polymarket_count}, Kalshi=${msg.data.kalshi_count})`, 'info');
             break;
+        case 'emergency_stop':
+            addLog(`EMERGENCY STOP: ${msg.data.closed} positions closed, P&L: $${msg.data.totalPnl.toFixed(2)}`, 'error');
+            loadRecentTrades();
+            periodicRefresh();
+            break;
     }
 }
 
@@ -134,6 +147,42 @@ function updateStatus(status) {
     startBtn.textContent = status.running ? 'Stop Bot' : 'Start Bot';
     startBtn.className = `btn ${status.running ? 'btn-stop' : 'btn-start'}`;
 
+    // Mode badge
+    if (status.mode) {
+        const modeBadge = document.getElementById('mode-badge');
+        const isLive = status.mode === 'live';
+        modeBadge.textContent = isLive ? 'LIVE' : 'PAPER';
+        modeBadge.className = `mode-badge ${isLive ? 'mode-live' : 'mode-paper'}`;
+
+        // Update wallet label
+        const walletLabel = document.querySelector('.wallet-label');
+        if (walletLabel) walletLabel.textContent = isLive ? 'Live Wallet' : 'Paper Wallet';
+    }
+
+    // Sharpe ratio
+    if (status.sharpe !== undefined) {
+        const sharpeEl = document.getElementById('sharpe-ratio');
+        if (status.sharpe !== null) {
+            sharpeEl.textContent = status.sharpe.toFixed(2);
+            sharpeEl.className = `metric-value ${status.sharpe >= 2 ? 'positive' : status.sharpe >= 1 ? '' : 'negative'}`;
+        } else {
+            sharpeEl.textContent = '--';
+        }
+    }
+
+    // Circuit breaker
+    if (status.circuit_breaker) {
+        const cbEl = document.getElementById('circuit-breaker');
+        if (status.circuit_breaker.open) {
+            cbEl.textContent = 'OPEN';
+            cbEl.className = 'metric-value cb-open';
+        } else {
+            cbEl.textContent = 'OK';
+            cbEl.className = 'metric-value cb-ok';
+        }
+        document.getElementById('health-errors').textContent = status.circuit_breaker.consecutive_errors || 0;
+    }
+
     if (status.wallet) updateWallet(status.wallet);
 
     if (status.daily_pnl) {
@@ -152,8 +201,19 @@ function updateStatus(status) {
     document.getElementById('open-positions').textContent = status.open_positions || 0;
 
     if (status.wallet) {
-        document.getElementById('max-drawdown').textContent = 
+        document.getElementById('max-drawdown').textContent =
             (status.wallet.max_drawdown_pct || 0).toFixed(1) + '%';
+    }
+
+    // Uptime
+    if (status.uptime) {
+        const secs = Math.floor(status.uptime / 1000);
+        const h = Math.floor(secs / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        document.getElementById('health-uptime').textContent = h > 0 ? `${h}h ${m}m` : `${m}m`;
+    }
+    if (status.mode) {
+        document.getElementById('health-mode').textContent = status.mode.toUpperCase();
     }
 
     // Update parameters
@@ -186,18 +246,19 @@ function updateSignals(signals) {
         const refMid = s.referencePrice ? s.referencePrice.toFixed(2) : '--';
         const spreadDiff = s.details?.spread_differential ? s.details.spread_differential.toFixed(3) : '--';
         const volume = s.gemini_volume ? `$${(s.gemini_volume / 1000).toFixed(1)}k` : '--';
-        const status = s.actionable ? '🟢 TRADE' : s.on_cooldown ? '🔵 COOL' : s.score >= 50 ? '🟡 WATCH' : '⚫ LOW';
+        const status = s.actionable ? 'TRADE' : s.on_cooldown ? 'COOL' : s.score >= 50 ? 'WATCH' : 'LOW';
+        const statusClass = s.actionable ? 'status-trade' : s.on_cooldown ? 'status-cool' : s.score >= 50 ? 'status-watch' : 'status-low';
         const title = (s.title || 'Unknown').substring(0, 40);
 
         return `<tr class="${rowClass}">
             <td title="${s.title}">${title}</td>
             <td class="${scoreClass}">${s.score.toFixed(0)}</td>
             <td class="${dirClass}">${s.direction || '--'}</td>
-            <td>${geminiMid}¢</td>
-            <td>${refMid}¢</td>
+            <td>${geminiMid}</td>
+            <td>${refMid}</td>
             <td>${spreadDiff}</td>
             <td>${volume}</td>
-            <td>${status}</td>
+            <td class="${statusClass}">${status}</td>
         </tr>`;
     }).join('');
 }
@@ -207,7 +268,7 @@ function updatePositionsTable(trades) {
     document.getElementById('position-count').textContent = trades.length;
 
     if (!trades || trades.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No open positions</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No open positions</td></tr>';
         return;
     }
 
@@ -226,6 +287,7 @@ function updatePositionsTable(trades) {
             <td>--</td>
             <td>${holdStr}</td>
             <td>${t.take_profit_price?.toFixed(2) || '--'}/${t.stop_loss_price?.toFixed(2) || '--'}</td>
+            <td><button class="btn btn-close-position" onclick="closePosition(${t.id})" title="Close position">X</button></td>
         </tr>`;
     }).join('');
 }
@@ -238,7 +300,7 @@ function updateParameters(params) {
     if (paramEntries.length === 0) return;
 
     container.innerHTML = paramEntries.map(([key, value]) => {
-        const displayValue = typeof value === 'number' ? 
+        const displayValue = typeof value === 'number' ?
             (Number.isInteger(value) ? value : value.toFixed(4)) : value;
         const shortKey = key.replace(/_/g, ' ');
 
@@ -266,6 +328,8 @@ async function loadRecentTrades() {
         const holdStr = t.hold_time < 60 ? `${t.hold_time}s` : `${Math.floor(t.hold_time / 60)}m`;
         const dirClass = t.direction === 'YES' ? 'dir-yes' : 'dir-no';
         const title = (t.market_title || 'Unknown').substring(0, 30);
+        const reasonClass = t.exit_reason === 'emergency_stop' ? 'reason-emergency' :
+                           t.exit_reason === 'manual_close' ? 'reason-manual' : '';
 
         return `<tr>
             <td>${time}</td>
@@ -276,7 +340,7 @@ async function loadRecentTrades() {
             <td>$${t.position_size?.toFixed(0) || '--'}</td>
             <td class="${pnlClass}">${pnlStr}</td>
             <td>${holdStr}</td>
-            <td>${t.exit_reason || '--'}</td>
+            <td class="${reasonClass}">${t.exit_reason || '--'}</td>
         </tr>`;
     }).join('');
 }
@@ -299,6 +363,52 @@ async function toggleBot() {
     }, 500);
 }
 
+async function emergencyStop() {
+    if (!confirm('EMERGENCY STOP\n\nThis will:\n1. Stop the trading bot immediately\n2. Close ALL open positions at current market prices\n\nContinue?')) {
+        return;
+    }
+
+    const btn = document.getElementById('btn-emergency');
+    btn.textContent = 'STOPPING...';
+    btn.disabled = true;
+
+    const result = await apiPost('/api/bot/emergency-stop');
+
+    if (result) {
+        const pnlStr = result.totalPnl >= 0 ? `+$${result.totalPnl.toFixed(2)}` : `-$${Math.abs(result.totalPnl).toFixed(2)}`;
+        addLog(`EMERGENCY STOP: ${result.closed} positions closed, P&L: ${pnlStr}`, 'error');
+        alert(`Emergency Stop Complete\n\nPositions closed: ${result.closed}\nTotal P&L: ${pnlStr}`);
+    } else {
+        addLog('Emergency stop request failed', 'error');
+    }
+
+    btn.textContent = 'EMERGENCY STOP';
+    btn.disabled = false;
+
+    setTimeout(async () => {
+        const status = await apiFetch('/api/bot/status');
+        if (status) updateStatus(status);
+        loadRecentTrades();
+    }, 500);
+}
+
+async function closePosition(tradeId) {
+    if (!confirm('Close this position at current market price?')) return;
+
+    const result = await apiPost(`/api/bot/close-position/${tradeId}`);
+    if (result && result.success) {
+        const pnlStr = result.pnl >= 0 ? `+$${result.pnl.toFixed(2)}` : `-$${Math.abs(result.pnl).toFixed(2)}`;
+        addLog(`CLOSED: ${result.direction} "${result.market}" P&L: ${pnlStr}`, 'exit');
+    } else {
+        addLog(`Failed to close position ${tradeId}: ${result?.error || 'unknown error'}`, 'error');
+    }
+
+    // Refresh
+    const status = await apiFetch('/api/bot/status');
+    if (status) updateStatus(status);
+    loadRecentTrades();
+}
+
 async function editParam(key, currentValue) {
     const newValue = prompt(`Edit parameter: ${key}\nCurrent value: ${currentValue}`, currentValue);
     if (newValue === null || newValue === '') return;
@@ -310,11 +420,60 @@ async function editParam(key, currentValue) {
     }
 
     await apiPost(`/api/parameters/${key}`, { value: parsed });
-    addLog(`Parameter ${key} updated: ${currentValue} → ${parsed}`, 'info');
+    addLog(`Parameter ${key} updated: ${currentValue} -> ${parsed}`, 'info');
 
     // Refresh
     const status = await apiFetch('/api/bot/status');
     if (status) updateStatus(status);
+}
+
+// ===== Health Indicators =====
+
+async function updateHealthIndicators() {
+    const healthData = await apiFetch('/api/health');
+    if (!healthData) return;
+
+    // API health dots
+    const apis = { poly: 'polymarket', kalshi: 'kalshi', kraken: 'kraken', gemini: 'gemini' };
+    for (const [dotId, apiName] of Object.entries(apis)) {
+        const dot = document.getElementById(`dot-${dotId}`);
+        const apiStats = healthData.api_health?.[apiName];
+        if (!dot || !apiStats) continue;
+
+        const total = (apiStats.ok || 0) + (apiStats.fail || 0);
+        if (total === 0) {
+            dot.className = 'api-dot api-dot-unknown';
+        } else if (apiStats.fail > 0 && apiStats.lastFail && Date.now() - apiStats.lastFail < 60000) {
+            dot.className = 'api-dot api-dot-fail';
+        } else {
+            dot.className = 'api-dot api-dot-ok';
+        }
+
+        // Health panel details
+        const healthEl = document.getElementById(`health-${dotId}`);
+        if (healthEl) {
+            const rate = total > 0 ? ((apiStats.ok / total) * 100).toFixed(0) : '--';
+            healthEl.textContent = `${rate}% (${apiStats.ok}/${total})`;
+            healthEl.className = `health-value ${total > 0 && apiStats.fail === 0 ? 'positive' : ''}`;
+        }
+    }
+
+    // Circuit breaker in health panel
+    if (healthData.circuit_breaker) {
+        const cbEl = document.getElementById('circuit-breaker');
+        if (healthData.circuit_breaker.open) {
+            cbEl.textContent = 'OPEN';
+            cbEl.className = 'metric-value cb-open';
+        } else {
+            cbEl.textContent = 'OK';
+            cbEl.className = 'metric-value cb-ok';
+        }
+    }
+
+    // WS client count
+    if (healthData.ws_clients !== undefined) {
+        document.getElementById('health-ws').textContent = healthData.ws_clients;
+    }
 }
 
 // ===== Logging =====
@@ -360,7 +519,7 @@ function updateArbEvents(arbEvents) {
         return `<tr>
             <td title="${e.title}">${title}</td>
             <td class="${dirClass}">${e.direction || '--'}</td>
-            <td class="${edgeClass}">${edgeCents}¢</td>
+            <td class="${edgeClass}">${edgeCents}c</td>
             <td>${bidAsk}</td>
             <td>${kFV}</td>
             <td>${e.score || '--'}</td>
@@ -382,7 +541,7 @@ function updateMomentumAlerts(momentumAlerts) {
     }
 
     tbody.innerHTML = alerts.map(a => {
-        const lagCents  = a.contractLag != null ? (a.contractLag * 100).toFixed(1) + '¢' : '--';
+        const lagCents  = a.contractLag != null ? (a.contractLag * 100).toFixed(1) + 'c' : '--';
         const urgency   = a.urgency != null ? a.urgency.toFixed(2) : '--';
         const dirClass  = a.direction === 'YES' ? 'dir-yes' : 'dir-no';
         const title     = (a.title || a.marketId || '').substring(0, 35);
@@ -425,9 +584,11 @@ document.addEventListener('DOMContentLoaded', () => {
     periodicRefresh();
     loadRecentTrades();
     loadSignalPanels();
+    updateHealthIndicators();
 
     // Periodic refresh every 5 seconds (backup for WebSocket)
     setInterval(periodicRefresh, 5000);
     setInterval(loadRecentTrades, 15000);
-    setInterval(loadSignalPanels, 5000); // arb/momentum panels update every 5s
+    setInterval(loadSignalPanels, 5000);
+    setInterval(updateHealthIndicators, 5000);
 });

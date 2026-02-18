@@ -45,9 +45,14 @@ kraken-ai-trader/
 │   ├── prediction_bot_architecture.md
 │   ├── prediction_bot_debugging.md
 │   ├── prediction_market_strategies.md
-│   └── BTizzy/                 ← Validation + architecture deep-dives
-│       ├── prediction-market-architecture.md  ← Platform comparison, strategy types, fee math
-│       └── statistical-validation.md          ← 5-phase validation, anti-patterns, go-live gates
+│   ├── BTizzy/                 ← Validation + architecture deep-dives
+│   │   ├── prediction-market-architecture.md  ← Platform comparison, strategy types, fee math
+│   │   └── statistical-validation.md          ← 5-phase validation, anti-patterns, go-live gates
+│   └── community/              ← Curated skills from openclaw/skills
+│       ├── websocket.md                  ← Backoff+jitter, heartbeat timing, close codes
+│       ├── sqlite.md                     ← WAL, busy_timeout, pragma reference, batch inserts
+│       ├── polymarket-fast-markets.md    ← 10% fast-market fee warning, momentum signal formula
+│       └── prediction-market-arb-types.md ← 5-type arb taxonomy, per-type min edge, exit rules
 ├── scripts/                    ← Analysis + backtest tools
 ├── tests/                      ← Unit + integration tests
 └── archive/                    ← Legacy Kraken crypto bot (ignore)
@@ -63,6 +68,10 @@ kraken-ai-trader/
 4. [skills/prediction_market_strategies.md](skills/prediction_market_strategies.md) — 5 strategies, fee landscape, platform structures
 5. [skills/BTizzy/prediction-market-architecture.md](skills/BTizzy/prediction-market-architecture.md) — Platform comparison (Poly/Kalshi/Gemini), 3 strategy types, fee math, common failure modes, deployment checklist
 6. [skills/BTizzy/statistical-validation.md](skills/BTizzy/statistical-validation.md) — 5-phase validation framework, backtesting anti-patterns (incl. artificial convergence), KPI tables, go-live gates (8 checks)
+7. [skills/community/websocket.md](skills/community/websocket.md) — Backoff+jitter formula, ping/pong timing (30s/10s), `readyState` machine, close codes, applied notes for KalshiWS
+8. [skills/community/sqlite.md](skills/community/sqlite.md) — WAL mode, `busy_timeout`, `foreign_keys` per-connection, 64MB cache pragma, batch insert transactions
+9. [skills/community/polymarket-fast-markets.md](skills/community/polymarket-fast-markets.md) — **10% fee on fast/sprint markets** (5× normal), CEX momentum signal formula, USDC.e distinction
+10. [skills/community/prediction-market-arb-types.md](skills/community/prediction-market-arb-types.md) — 5-type arb taxonomy with per-type min edge thresholds, exit rules, position limits
 
 ---
 

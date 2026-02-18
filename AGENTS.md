@@ -143,22 +143,21 @@ DISCORD_WEBHOOK_URL=    # For alerts (optional but recommended)
 
 ---
 
-## Current Version: V9
+## Current Version: V10
 
-**Merged in V9:**
-- Real Gemini API integration (useRealPrices: true)
-- Order book depth fetching (getOrderbookDepth via REST)
-- Polymarket noise removed (fixed 0.5¢ spread)
-- FK constraints fixed (PRAGMA foreign_keys ON + parent upsert)
-- Kalshi IV extracted and fed to Black-Scholes
-- Event-driven momentum wired into main loop
-- Cross-platform arb detection in main loop
-- Time-decay stop acceleration (final 20% of hold window)
+**Merged in V10:**
+- `lib/alerts.js`: Discord webhook alerts for arb events (≥3¢) + daily P&L summary
+- `lib/kalshi_ws.js`: Real-time Kalshi WebSocket (ticker_v2, auto-reconnect, bracket subscriptions)
+- `lib/gemini_client.js`: HMAC-SHA384 `_signedPost()` + `placeOrder()` (paper-guarded), `cancelOrder()`, `getOpenOrders()`
+- `lib/gemini_predictions_real.js`: `fetchBatchTickers(category)` — lightweight 5s price-only updates
+- `lib/paper_trading_engine.js`: Depth-based Kelly cap (max 10% of real `ask_depth`), `time_decay_stop` ML feedback
+- `lib/prediction_db.js`: `getWinRateByExitReason()` — breakdown by exit reason for learning cycle
+- `server/prediction-proxy.js`: Alerts + KalshiWS wired; arb detection → Discord; Kalshi brackets auto-subscribed after match cycle; `/api/signals` exposes `arbEvents` + `momentumAlerts`
+- `dashboard/index.html` + `prediction_charts.js`: Arb Events + Momentum Alerts panels, polled every 5s
 
-**V10 in progress:**
-- Discord alerts (arb ≥3¢, daily P&L)
-- Live HMAC order execution (paper-guarded)
-- Kalshi WebSocket (replaces polling)
-- Depth-based Kelly cap (max 10% of ask depth)
-- Dashboard arb/momentum panels
-- Gemini ticker batch endpoint
+**V11 candidates:**
+- Live mode E2E test harness (test HMAC auth against Gemini sandbox/testnet if available)
+- Kalshi WS bracket ticker → `kalshiClient.getBracketsByEvent()` cache integration (currently feeds `bracketCache` directly)
+- Walk-forward backtest on paper trade log once 500+ trades accumulated
+- Gemini order book WebSocket (if Gemini opens WS for prediction markets)
+- Auto-flip to live mode when paper Sharpe > 2.0 and 500+ trades (DEPLOYMENT CHECKLIST)

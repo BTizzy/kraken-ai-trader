@@ -21,10 +21,94 @@ const GeminiClient = require('../lib/gemini_client');
 const MarketMatcher = require('../lib/market_matcher');
 const SignalDetector = require('../lib/signal_detector');
 const PaperTradingEngine = require('../lib/paper_trading_engine');
+const FairValueEngine = require('../lib/fair_value_engine');
 const RateLimiter = require('./rate-limiter');
 const { Logger } = require('../lib/logger');
 
 const logger = new Logger({ component: 'SERVER', level: 'INFO' });
+
+// ===== Circuit Breaker + Health Monitor =====
+
+const health = {
+    consecutiveErrors: 0,
+    totalErrors: 0,
+    lastError: null,
+    circuitOpen: false,
+    circuitOpenedAt: null,
+    circuitCooldownMs: 30000,  // 30s cooldown after 5 consecutive errors
+    maxConsecutiveErrors: 5,
+    apiHealth: {
+        polymarket: { ok: 0, fail: 0, lastFail: null },
+        kalshi:     { ok: 0, fail: 0, lastFail: null },
+        kraken:     { ok: 0, fail: 0, lastFail: null },
+        gemini:     { ok: 0, fail: 0, lastFail: null }
+    }
+};
+
+function recordApiResult(source, success, error) {
+    const h = health.apiHealth[source];
+    if (!h) return;
+    if (success) {
+        h.ok++;
+    } else {
+        h.fail++;
+        h.lastFail = Date.now();
+    }
+}
+
+function isCircuitOpen() {
+    if (!health.circuitOpen) return false;
+    // Auto-close after cooldown
+    if (Date.now() - health.circuitOpenedAt > health.circuitCooldownMs) {
+        health.circuitOpen = false;
+        health.consecutiveErrors = 0;
+        logger.info('Circuit breaker CLOSED — resuming trading');
+        return false;
+    }
+    return true;
+}
+
+function recordCycleResult(success, error) {
+    if (success) {
+        health.consecutiveErrors = 0;
+    } else {
+        health.consecutiveErrors++;
+        health.totalErrors++;
+        health.lastError = { message: error?.message, time: Date.now() };
+
+        if (health.consecutiveErrors >= health.maxConsecutiveErrors && !health.circuitOpen) {
+            health.circuitOpen = true;
+            health.circuitOpenedAt = Date.now();
+            logger.error(`Circuit breaker OPEN — ${health.consecutiveErrors} consecutive errors. Cooldown ${health.circuitCooldownMs / 1000}s`);
+        }
+    }
+}
+
+// ===== Drawdown Kill-Switch =====
+
+const DRAWDOWN_LIMIT = 0.20;  // 20% max drawdown → auto-stop
+let peakBalance = null;
+
+function checkDrawdownKillSwitch() {
+    try {
+        const wallet = db.getWallet();
+        if (!wallet) return false;
+        const balance = wallet.balance || wallet.total || 500;
+
+        if (peakBalance === null) peakBalance = balance;
+        if (balance > peakBalance) peakBalance = balance;
+
+        const drawdown = (peakBalance - balance) / peakBalance;
+        if (drawdown > DRAWDOWN_LIMIT) {
+            logger.error(`DRAWDOWN KILL-SWITCH: ${(drawdown * 100).toFixed(1)}% drawdown (peak $${peakBalance.toFixed(2)}, current $${balance.toFixed(2)}). Stopping bot.`);
+            stopBot();
+            return true;
+        }
+        return false;
+    } catch (e) {
+        return false;
+    }
+}
 
 // ===== Initialize Components =====
 
@@ -36,8 +120,95 @@ const kalshiClient = new KalshiClient({ rateLimiter });
 const geminiClient = new GeminiClient({ mode: 'paper', rateLimiter });
 
 const matcher = new MarketMatcher(db);
-const signalDetector = new SignalDetector(db);
+const signalDetector = new SignalDetector(db, {
+    feePerSide: 0.0006,
+    minEdge: 0.03,
+    highConfidenceEdge: 0.08,
+    kalshiClient: kalshiClient
+});
 const tradingEngine = new PaperTradingEngine(db, geminiClient);
+
+// Spot price state — fed to FairValueEngine for Black-Scholes pricing
+let spotPriceCache = {};
+let lastSpotFetch = 0;
+const SPOT_REFRESH_INTERVAL = 15000; // 15s between Kraken spot requests
+
+/**
+ * Fetch live BTC/ETH/SOL spot prices from Kraken public API
+ * Used by FairValueEngine for Black-Scholes binary option pricing
+ */
+async function fetchSpotPrices() {
+    if (Date.now() - lastSpotFetch < SPOT_REFRESH_INTERVAL) return spotPriceCache;
+    try {
+        const resp = await fetch(
+            'https://api.kraken.com/0/public/Ticker?pair=XXBTZUSD,XETHZUSD,SOLUSD',
+            { signal: AbortSignal.timeout(5000) }
+        );
+        if (!resp.ok) return spotPriceCache;
+        const data = await resp.json();
+        if (data.result) {
+            for (const [key, val] of Object.entries(data.result)) {
+                const price = parseFloat(val.c[0]);
+                if (key.includes('XBT') || key.includes('BTC')) {
+                    spotPriceCache.BTC = price;
+                    signalDetector.recordSpotPrice('BTC', price);
+                } else if (key.includes('ETH')) {
+                    spotPriceCache.ETH = price;
+                    signalDetector.recordSpotPrice('ETH', price);
+                } else if (key.includes('SOL')) {
+                    spotPriceCache.SOL = price;
+                    signalDetector.recordSpotPrice('SOL', price);
+                }
+            }
+            lastSpotFetch = Date.now();
+        }
+    } catch (e) {
+        logger.debug('Spot price fetch: ' + e.message);
+    }
+    return spotPriceCache;
+}
+
+/**
+ * Build Gemini contracts for fair-value analysis from matched markets
+ * Parses contract labels like "BTC > $67,500" into structured data
+ */
+function buildGeminiContracts(matchedMarkets, marketStates) {
+    const contracts = [];
+    for (const state of marketStates) {
+        const title = state.matchedMarket?.event_title || '';
+        const parsed = FairValueEngine.parseContractLabel(title);
+        if (!parsed) continue;
+
+        // Determine settlement time
+        const settlementHour = FairValueEngine.parseSettlementHour(title);
+
+        // Build expiry date: today or tomorrow at settlement hour EST
+        let expiryDate = null;
+        if (settlementHour !== null) {
+            const now = new Date();
+            expiryDate = new Date(now);
+            expiryDate.setUTCHours(settlementHour + 5, 0, 0, 0); // EST → UTC
+            if (expiryDate <= now) {
+                expiryDate.setDate(expiryDate.getDate() + 1);
+            }
+        } else {
+            // Default: 12 hours from now
+            expiryDate = new Date(Date.now() + 12 * 3600 * 1000);
+        }
+
+        contracts.push({
+            asset: parsed.asset,
+            strike: parsed.strike,
+            bid: state.gemini?.bid || null,
+            ask: state.gemini?.ask || null,
+            expiryDate,
+            marketId: state.marketId,
+            eventTitle: title,
+            settlementHour
+        });
+    }
+    return contracts;
+}
 
 // ===== Express App =====
 
@@ -60,10 +231,19 @@ app.use((req, res, next) => {
 // Health check
 app.get('/api/health', (req, res) => {
     res.json({
-        status: 'ok',
+        status: health.circuitOpen ? 'degraded' : 'ok',
         uptime: process.uptime(),
         bot_running: botState.running,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        circuit_breaker: {
+            open: health.circuitOpen,
+            consecutive_errors: health.consecutiveErrors,
+            total_errors: health.totalErrors,
+            last_error: health.lastError
+        },
+        api_health: health.apiHealth,
+        drawdown_limit: `${DRAWDOWN_LIMIT * 100}%`,
+        peak_balance: peakBalance
     });
 });
 
@@ -138,6 +318,21 @@ app.get('/api/wallet', (req, res) => {
     try {
         const wallet = db.getWallet();
         res.json(wallet);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get spot prices + fair value engine stats
+app.get('/api/fair-value', async (req, res) => {
+    try {
+        const spots = await fetchSpotPrices();
+        const fvStats = signalDetector.fairValueEngine.getStats();
+        res.json({
+            spot_prices: spots,
+            fair_value_engine: fvStats,
+            last_spot_fetch: lastSpotFetch ? new Date(lastSpotFetch).toISOString() : null
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -288,6 +483,9 @@ function broadcastToClients(data) {
 
 wss.on('connection', (ws) => {
     logger.info('Dashboard WebSocket client connected');
+    ws.isAlive = true;
+
+    ws.on('pong', () => { ws.isAlive = true; });
 
     // Send initial state
     ws.send(JSON.stringify({
@@ -303,6 +501,15 @@ wss.on('connection', (ws) => {
         logger.debug('Dashboard WebSocket client disconnected');
     });
 });
+
+// WebSocket heartbeat — drop dead connections every 30s
+const wsHeartbeatInterval = setInterval(() => {
+    wss.clients.forEach(ws => {
+        if (!ws.isAlive) return ws.terminate();
+        ws.isAlive = false;
+        ws.ping();
+    });
+}, 30000);
 
 // ===== Main Trading Bot Loop =====
 
@@ -327,8 +534,14 @@ const botState = {
  */
 async function updatePrices() {
     if (priceUpdateRunning) return; // Prevent overlapping cycles
+    if (isCircuitOpen()) return;    // Circuit breaker active
     priceUpdateRunning = true;
+    let cycleSuccess = true;
     try {
+        // Drawdown kill-switch (check every 10 cycles)
+        if (botState.cycleCount % 10 === 0 && checkDrawdownKillSwitch()) {
+            return;
+        }
         if (matchedMarketCache.length === 0) {
             matchedMarketCache = db.getMatchedMarkets(0.5);
             if (matchedMarketCache.length > 0) {
@@ -343,12 +556,20 @@ async function updatePrices() {
 
         // Refresh Polymarket prices from Gamma API every 30 seconds
         if (!botState.lastPriceRefresh || Date.now() - botState.lastPriceRefresh > 30000) {
-            const refreshed = await polyClient.refreshPrices();
-            if (refreshed > 0) {
-                botState.lastPriceRefresh = Date.now();
-                logger.debug(`Refreshed ${refreshed} Polymarket prices from Gamma API`);
+            try {
+                const refreshed = await polyClient.refreshPrices();
+                if (refreshed > 0) {
+                    botState.lastPriceRefresh = Date.now();
+                    logger.debug(`Refreshed ${refreshed} Polymarket prices from Gamma API`);
+                    recordApiResult('polymarket', true);
+                }
+            } catch (e) {
+                recordApiResult('polymarket', false, e);
             }
         }
+
+        // Fetch live spot prices for FairValueEngine (BTC, ETH, SOL)
+        await fetchSpotPrices();
 
         for (const matched of matchedMarketCache) {
             try {
@@ -436,18 +657,51 @@ async function updatePrices() {
             }
         }
 
-        // Run signal detection
+        // Run signal detection — DUAL STRATEGY
+        // Strategy 1: Composite score (velocity + spread + consensus)
         latestSignals = signalDetector.processMarkets(marketStates);
-        const actionable = latestSignals.filter(s => s.actionable);
+        let actionable = latestSignals.filter(s => s.actionable);
+
+        // Strategy 2: Fair Value (Black-Scholes + Kalshi ensemble) — for crypto contracts
+        try {
+            const geminiContracts = buildGeminiContracts(matchedMarketCache, marketStates);
+            if (geminiContracts.length > 0) {
+                const fvSignals = await signalDetector.generateFairValueSignals(geminiContracts);
+
+                // Merge: fair-value signals take priority (model-based > heuristic)
+                // De-duplicate by marketId, preferring higher edge
+                const seenIds = new Set(actionable.map(s => s.marketId));
+                for (const fvs of fvSignals) {
+                    if (seenIds.has(fvs.marketId)) {
+                        // Replace composite signal with fair-value if higher edge
+                        const idx = actionable.findIndex(s => s.marketId === fvs.marketId);
+                        if (idx >= 0 && (fvs.netEdge || 0) > (actionable[idx].edge || 0)) {
+                            actionable[idx] = fvs;
+                        }
+                    } else {
+                        actionable.push(fvs);
+                        seenIds.add(fvs.marketId);
+                    }
+                }
+
+                if (fvSignals.length > 0 && botState.cycleCount % 10 === 0) {
+                    logger.info(`FairValue: ${geminiContracts.length} contracts analyzed, ${fvSignals.length} actionable`);
+                }
+            }
+        } catch (fvErr) {
+            logger.debug('FairValue signals: ' + fvErr.message);
+        }
 
         // Periodic debug logging (every 10 cycles)
         if (botState.cycleCount % 10 === 0) {
             const topScore = latestSignals.length > 0 ? latestSignals[0].score : 0;
             const withPrices = pricesReceived;
+            const spotInfo = Object.entries(spotPriceCache).map(([a, p]) => `${a}=$${Math.round(p)}`).join(' ');
             logger.info(
                 `Cycle ${botState.cycleCount}: ${matchedMarketCache.length} markets, ` +
                 `${withPrices} with prices, ${latestSignals.length} scored, ` +
-                `top=${topScore}, actionable=${actionable.length}`
+                `top=${topScore}, actionable=${actionable.length}` +
+                (spotInfo ? ` | Spot: ${spotInfo}` : '')
             );
         }
 
@@ -474,6 +728,7 @@ async function updatePrices() {
                 signals: latestSignals.slice(0, 20),
                 wallet: db.getWallet(),
                 open_trades: db.getOpenTrades().length,
+                spot_prices: spotPriceCache,
                 timestamp: Date.now()
             }
         });
@@ -482,8 +737,10 @@ async function updatePrices() {
         botState.lastCycleTime = Date.now();
 
     } catch (error) {
+        cycleSuccess = false;
         logger.error('Price update cycle error: ' + error.message);
     } finally {
+        recordCycleResult(cycleSuccess, cycleSuccess ? null : new Error('cycle failed'));
         priceUpdateRunning = false;
     }
 }
@@ -583,6 +840,7 @@ server.listen(PORT, () => {
 process.on('SIGINT', () => {
     logger.info('Shutting down...');
     stopBot();
+    clearInterval(wsHeartbeatInterval);
     db.close();
     process.exit(0);
 });
@@ -590,6 +848,7 @@ process.on('SIGINT', () => {
 process.on('SIGTERM', () => {
     logger.info('Shutting down...');
     stopBot();
+    clearInterval(wsHeartbeatInterval);
     db.close();
     process.exit(0);
 });

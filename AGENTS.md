@@ -44,7 +44,10 @@ kraken-ai-trader/
 │   ├── gemini_api_skill.md     ← HMAC auth, order placement, ticker API
 │   ├── prediction_bot_architecture.md
 │   ├── prediction_bot_debugging.md
-│   └── prediction_market_strategies.md
+│   ├── prediction_market_strategies.md
+│   └── BTizzy/                 ← Validation + architecture deep-dives
+│       ├── prediction-market-architecture.md  ← Platform comparison, strategy types, fee math
+│       └── statistical-validation.md          ← 5-phase validation, anti-patterns, go-live gates
 ├── scripts/                    ← Analysis + backtest tools
 ├── tests/                      ← Unit + integration tests
 └── archive/                    ← Legacy Kraken crypto bot (ignore)
@@ -58,6 +61,8 @@ kraken-ai-trader/
 2. [skills/prediction_bot_architecture.md](skills/prediction_bot_architecture.md) — Full system architecture, state model, data flow
 3. [skills/prediction_bot_debugging.md](skills/prediction_bot_debugging.md) — 10 root causes, emergency procedures, quick status commands
 4. [skills/prediction_market_strategies.md](skills/prediction_market_strategies.md) — 5 strategies, fee landscape, platform structures
+5. [skills/BTizzy/prediction-market-architecture.md](skills/BTizzy/prediction-market-architecture.md) — Platform comparison (Poly/Kalshi/Gemini), 3 strategy types, fee math, common failure modes, deployment checklist
+6. [skills/BTizzy/statistical-validation.md](skills/BTizzy/statistical-validation.md) — 5-phase validation framework, backtesting anti-patterns (incl. artificial convergence), KPI tables, go-live gates (8 checks)
 
 ---
 
@@ -143,21 +148,20 @@ DISCORD_WEBHOOK_URL=    # For alerts (optional but recommended)
 
 ---
 
-## Current Version: V10
+## Current Version: V11
 
-**Merged in V10:**
-- `lib/alerts.js`: Discord webhook alerts for arb events (≥3¢) + daily P&L summary
-- `lib/kalshi_ws.js`: Real-time Kalshi WebSocket (ticker_v2, auto-reconnect, bracket subscriptions)
-- `lib/gemini_client.js`: HMAC-SHA384 `_signedPost()` + `placeOrder()` (paper-guarded), `cancelOrder()`, `getOpenOrders()`
-- `lib/gemini_predictions_real.js`: `fetchBatchTickers(category)` — lightweight 5s price-only updates
-- `lib/paper_trading_engine.js`: Depth-based Kelly cap (max 10% of real `ask_depth`), `time_decay_stop` ML feedback
-- `lib/prediction_db.js`: `getWinRateByExitReason()` — breakdown by exit reason for learning cycle
-- `server/prediction-proxy.js`: Alerts + KalshiWS wired; arb detection → Discord; Kalshi brackets auto-subscribed after match cycle; `/api/signals` exposes `arbEvents` + `momentumAlerts`
-- `dashboard/index.html` + `prediction_charts.js`: Arb Events + Momentum Alerts panels, polled every 5s
+**Merged in V11:**
+- `server/prediction-proxy.js`: Added `require('dotenv').config()` at top — env vars from `.env` were silently ignored before
+- `lib/kalshi_client.js`: Added `this.bracketCache = new Map()` to constructor — WS tick data was being discarded
+- `lib/paper_trading_engine.js`: Fee calibration `0.0006` → `0.0001` (0.01% maker-or-cancel rate, 6× more accurate)
+- `lib/kalshi_ws.js`: API key guard (skip connect if no key) + removed `this.emit('error')` that crashed Node with no listener
+- `.env.example`: Added root-level template for all prediction bot env vars
+- `skills/BTizzy/prediction-market-architecture.md`: Architecture deep-dive (platform fees, strategy types, failure modes)
+- `skills/BTizzy/statistical-validation.md`: 5-phase validation framework, anti-patterns, go-live gates
 
-**V11 candidates:**
+**V12 candidates:**
 - Live mode E2E test harness (test HMAC auth against Gemini sandbox/testnet if available)
-- Kalshi WS bracket ticker → `kalshiClient.getBracketsByEvent()` cache integration (currently feeds `bracketCache` directly)
 - Walk-forward backtest on paper trade log once 500+ trades accumulated
 - Gemini order book WebSocket (if Gemini opens WS for prediction markets)
 - Auto-flip to live mode when paper Sharpe > 2.0 and 500+ trades (DEPLOYMENT CHECKLIST)
+- Telegram alerts (replacing Discord)

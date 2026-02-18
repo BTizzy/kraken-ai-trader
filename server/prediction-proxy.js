@@ -117,7 +117,12 @@ const rateLimiter = new RateLimiter();
 
 const polyClient = new PolymarketClient({ rateLimiter });
 const kalshiClient = new KalshiClient({ rateLimiter });
-const geminiClient = new GeminiClient({ mode: 'paper', rateLimiter });
+const geminiClient = new GeminiClient({
+    mode: 'paper',
+    rateLimiter,
+    useRealPrices: true,    // Use real Gemini Predictions API prices instead of simulation
+    realFetchInterval: 15000 // Refresh every 15s (matches spot price cadence)
+});
 
 const matcher = new MarketMatcher(db);
 const signalDetector = new SignalDetector(db, {
@@ -575,16 +580,13 @@ async function updatePrices() {
             try {
                 // Get Polymarket price from cached Gamma API data (fast, no per-market API call)
                 const cachedPoly = polyClient.getCachedPrice(matched.polymarket_market_id);
-                // Add micro-noise to simulate real-time price fluctuations between Gamma API refreshes
                 let polyPrices = { bid: null, ask: null, spread: null };
                 if (cachedPoly) {
-                    const noise = (Math.random() - 0.5) * 0.006; // ±3 mills random walk
-                    const noisyLast = Math.max(0.01, Math.min(0.99, cachedPoly.last + noise));
                     const halfSpread = cachedPoly.spread / 2;
                     polyPrices = {
-                        bid: Math.max(0.01, noisyLast - halfSpread),
-                        ask: Math.min(0.99, noisyLast + halfSpread),
-                        last: noisyLast,
+                        bid: Math.max(0.01, cachedPoly.last - halfSpread),
+                        ask: Math.min(0.99, cachedPoly.last + halfSpread),
+                        last: cachedPoly.last,
                         spread: cachedPoly.spread
                     };
                 }
@@ -690,6 +692,101 @@ async function updatePrices() {
             }
         } catch (fvErr) {
             logger.debug('FairValue signals: ' + fvErr.message);
+        }
+
+        // Strategy 3: Event-Driven Momentum — boost signals when spot moves but contracts lag
+        // Strategy 4: Cross-Platform Synthetic Arb — Gemini YES price vs Kalshi implied NO
+        try {
+            const geminiContracts = buildGeminiContracts(matchedMarketCache, marketStates);
+            for (const state of marketStates) {
+                const { marketId, gemini, kalshi } = state;
+                const contractInfo = geminiContracts.find(c => c.marketId === marketId);
+                if (!contractInfo) continue;
+
+                const { asset } = contractInfo;
+                const spotPrice = spotPriceCache[asset];
+                if (!spotPrice) continue;
+
+                // Momentum: detect when spot moves fast but contract has not repriced
+                const contractState = {
+                    marketId,
+                    bid: gemini?.bid,
+                    ask: gemini?.ask,
+                    delta: contractInfo.delta || 0   // delta from last FV signal (0 if unknown)
+                };
+                const momentum = signalDetector.detectMomentum(asset, spotPrice, contractState);
+                if (momentum) {
+                    // Boost any existing actionable signal for this market, or add new one
+                    const idx = actionable.findIndex(s => s.marketId === marketId);
+                    if (idx >= 0) {
+                        actionable[idx] = signalDetector.applyMomentumBoost(actionable[idx], momentum);
+                    } else {
+                        // Create a momentum-only signal to enter on
+                        actionable.push({
+                            marketId,
+                            title: state.matchedMarket?.event_title || '',
+                            category: state.category || 'crypto',
+                            score: Math.min(100, Math.round(momentum.urgency * 75)),
+                            direction: momentum.direction,
+                            referencePrice: gemini?.last,
+                            targetPrice: null,
+                            gemini_bid: gemini?.bid,
+                            gemini_ask: gemini?.ask,
+                            gemini_last: gemini?.last,
+                            edge: momentum.contractLag,
+                            netEdge: momentum.contractLag,
+                            confidence: 'medium',
+                            momentum,
+                            actionable: true,
+                            timestamp: Date.now()
+                        });
+                    }
+                }
+
+                // Cross-platform arb: Gemini vs Kalshi synthetic
+                if (kalshi && gemini) {
+                    const kalshiAnalysis = await kalshiClient.analyzeGeminiContract(
+                        asset,
+                        contractInfo.strike,
+                        gemini.bid,
+                        gemini.ask,
+                        contractInfo.settlementHour
+                    ).catch(() => null);
+
+                    if (kalshiAnalysis && kalshiAnalysis.matched) {
+                        const arb = signalDetector.detectCrossPlatformArb(gemini, kalshiAnalysis);
+                        if (arb) {
+                            logger.info(
+                                `CROSS-PLATFORM ARB: ${marketId} edge=${arb.bestEdge?.toFixed(3)} ` +
+                                `dir=${arb.direction} Gemini=${gemini.bid?.toFixed(3)}/${gemini.ask?.toFixed(3)} ` +
+                                `KalshiFV=${kalshiAnalysis.kalshiFairValue?.toFixed(3)}`
+                            );
+                            // Inject as high-priority actionable signal
+                            const seenIds = new Set(actionable.map(s => s.marketId));
+                            if (!seenIds.has(marketId)) {
+                                actionable.push({
+                                    marketId,
+                                    title: state.matchedMarket?.event_title || '',
+                                    category: state.category || 'crypto',
+                                    score: Math.min(100, Math.round((arb.bestEdge || 0) * 1500)),
+                                    direction: arb.direction,
+                                    referencePrice: kalshiAnalysis.kalshiFairValue,
+                                    gemini_bid: gemini.bid,
+                                    gemini_ask: gemini.ask,
+                                    edge: arb.bestEdge,
+                                    netEdge: arb.netProfit || arb.bestEdge,
+                                    confidence: 'high',
+                                    arb,
+                                    actionable: true,
+                                    timestamp: Date.now()
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (momentumErr) {
+            logger.debug('Momentum/arb scan: ' + momentumErr.message);
         }
 
         // Periodic debug logging (every 10 cycles)

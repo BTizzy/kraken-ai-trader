@@ -24,6 +24,8 @@ const MarketMatcher = require('../lib/market_matcher');
 const SignalDetector = require('../lib/signal_detector');
 const PaperTradingEngine = require('../lib/paper_trading_engine');
 const FairValueEngine = require('../lib/fair_value_engine');
+const OddsApiClient = require('../lib/odds_api_client');
+const MetaculusClient = require('../lib/metaculus_client');
 const RateLimiter = require('./rate-limiter');
 const Alerts = require('../lib/alerts');
 const KalshiWS = require('../lib/kalshi_ws');
@@ -182,10 +184,13 @@ const rateLimiter = new RateLimiter();
 
 const polyClient = new PolymarketClient({ rateLimiter });
 const kalshiClient = new KalshiClient({ rateLimiter });
+const geminiMode = process.env.GEMINI_MODE || 'paper'; // 'paper' | 'live' | 'sandbox'
 const geminiClient = new GeminiClient({
-    mode: 'paper',
+    mode: geminiMode,
     rateLimiter,
+    categories: ['crypto', 'politics', 'elections', 'finance', 'sports', 'tech', 'culture'],
     useRealPrices: true,        // Use real Gemini Predictions API prices instead of simulation
+    realisticPaper: true,       // Use actual bid/ask for paper fills (not synthetic mid)
     realFetchInterval: 10000,   // Full market refresh every 10s (metadata + prices)
     tickerFetchInterval: 2000,  // Batch ticker every 2s (lightweight price-only, matches cycle)
     cacheTTL: 2000,             // 2s cache TTL (was 3s)
@@ -194,6 +199,8 @@ const geminiClient = new GeminiClient({
 });
 
 const matcher = new MarketMatcher(db);
+const oddsClient = new OddsApiClient({ apiKey: process.env.ODDS_API_KEY });
+const metaculusClient = new MetaculusClient();
 const signalDetector = new SignalDetector(db, {
     feePerSide: 0.0001,
     minEdge: 0.03,
@@ -668,7 +675,9 @@ app.get('/api/bot/status', (req, res) => {
         gemini: geminiClient.getStats(),
         polymarket: polyClient.getStats(),
         kalshi: kalshiClient.getStats(),
-        kalshi_ws: kalshiWS.getStats()
+        kalshi_ws: kalshiWS.getStats(),
+        odds_api: oddsClient.getStats(),
+        metaculus: metaculusClient.getStats()
     });
 });
 
@@ -740,6 +749,7 @@ const wsHeartbeatInterval = setInterval(() => {
 let latestSignals = [];
 let latestActionable = [];
 let matchedMarketCache = [];
+let cryptoMatchMeta = new Map(); // GEMI-* → { crypto_match, kalshi_synthetic_bid/ask/mid, ... }
 let priceUpdateRunning = false;
 
 const botState = {
@@ -769,6 +779,11 @@ async function updatePrices() {
         }
         if (matchedMarketCache.length === 0) {
             matchedMarketCache = db.getMatchedMarkets(0.5);
+            // Merge any crypto match metadata from last match cycle
+            for (const m of matchedMarketCache) {
+                const meta = cryptoMatchMeta.get(m.gemini_market_id);
+                if (meta) Object.assign(m, meta);
+            }
             if (matchedMarketCache.length > 0) {
                 logger.info(`Loaded ${matchedMarketCache.length} matched markets for price updates`);
             }
@@ -813,7 +828,20 @@ async function updatePrices() {
 
                 // Get Kalshi price
                 let kalshiPrices = { bid: null, ask: null };
-                if (matched.kalshi_market_id) {
+                const isCryptoMatch = matched.crypto_match ||
+                    (matched.gemini_market_id && matched.gemini_market_id.startsWith('GEMI-'));
+                if (isCryptoMatch && matched.kalshi_synthetic_bid != null) {
+                    // Crypto structural match: use synthetic above-probability from brackets
+                    kalshiPrices = {
+                        bid: matched.kalshi_synthetic_bid,
+                        ask: matched.kalshi_synthetic_ask,
+                        last: matched.kalshi_synthetic_mid,
+                        spread: matched.kalshi_synthetic_ask - matched.kalshi_synthetic_bid,
+                        source: 'synthetic'
+                    };
+                } else if (isCryptoMatch) {
+                    // Crypto match but no synthetic data yet (match cycle pending) — skip
+                } else if (matched.kalshi_market_id) {
                     try {
                         kalshiPrices = await kalshiClient.getBestPrices(matched.kalshi_market_id);
                         recordApiResult('kalshi', true);
@@ -844,6 +872,25 @@ async function updatePrices() {
                 if (geminiState && geminiState.bid !== null) {
                     recordApiResult('gemini', true);
                 }
+
+                // Look up additional reference sources (from match cycle cache)
+                let metaculusProb = null;
+                let oddsApiProb = null;
+                try {
+                    metaculusProb = metaculusClient.getProbability(matched.event_title);
+                } catch (e) { /* ignore */ }
+                try {
+                    const oddsMatch = oddsClient.findMatchingOdds(matched.event_title);
+                    if (oddsMatch && oddsMatch.outcomes) {
+                        const titleLower = (matched.event_title || '').toLowerCase();
+                        for (const [name, prob] of Object.entries(oddsMatch.outcomes)) {
+                            if (titleLower.includes(name.toLowerCase())) {
+                                oddsApiProb = prob;
+                                break;
+                            }
+                        }
+                    }
+                } catch (e) { /* ignore */ }
 
                 // Save price snapshot to DB
                 db.insertPrice({
@@ -878,7 +925,9 @@ async function updatePrices() {
                         ask: kalshiPrices.ask,
                         last: kalshiPrices.bid && kalshiPrices.ask ? (kalshiPrices.bid + kalshiPrices.ask) / 2 : null,
                         spread: kalshiPrices.spread
-                    }
+                    },
+                    metaculus: metaculusProb != null ? { probability: metaculusProb } : null,
+                    oddsApi: oddsApiProb != null ? { probability: oddsApiProb } : null
                 });
             } catch (error) {
                 logger.warn(`Market ${matched.gemini_market_id} update error: ${error.message}`);
@@ -895,7 +944,17 @@ async function updatePrices() {
         try {
             const geminiContracts = buildGeminiContracts(matchedMarketCache, marketStates);
             if (geminiContracts.length > 0) {
-                const fvSignals = await signalDetector.generateFairValueSignals(geminiContracts);
+                const fvSignals = await signalDetector.generateFairValueSignals(geminiContracts, (contract) => {
+                    // Look up reference data for this contract from marketStates
+                    const state = marketStates.find(s => s.marketId === contract.marketId);
+                    if (!state) return {};
+                    return {
+                        polymarket: state.polymarket?.last,
+                        metaculus: state.metaculus?.probability,
+                        oddsApi: state.oddsApi?.probability,
+                        category: state.category || 'crypto'
+                    };
+                });
 
                 // Merge: fair-value signals take priority (model-based > heuristic)
                 // De-duplicate by marketId, preferring higher edge
@@ -1002,6 +1061,9 @@ async function updatePrices() {
                             };
                             alerts.sendArbAlert(arbSignal).catch(() => {});
                             // Inject as high-priority actionable signal
+                            // Normalize arb direction: BUY_GEMINI_YES/SYNTHETIC_ARB → YES, SELL_GEMINI_YES → NO
+                            // Paper trading engine expects 'YES'/'NO', not the arb-specific direction names
+                            const arbDirection = (arb.direction === 'SELL_GEMINI_YES') ? 'NO' : 'YES';
                             const seenIds = new Set(actionable.map(s => s.marketId));
                             if (!seenIds.has(marketId)) {
                                 actionable.push({
@@ -1009,7 +1071,7 @@ async function updatePrices() {
                                     title: state.matchedMarket?.event_title || '',
                                     category: state.category || 'crypto',
                                     score: Math.min(100, Math.round((arb.bestEdge || 0) * 1500)),
-                                    direction: arb.direction,
+                                    direction: arbDirection,
                                     referencePrice: kalshiAnalysis.kalshiFairValue,
                                     gemini_bid: gemini.bid,
                                     gemini_ask: gemini.ask,
@@ -1030,23 +1092,100 @@ async function updatePrices() {
             logger.debug('Momentum/arb scan: ' + momentumErr.message);
         }
 
+        // Strategy 5: Multi-source ensemble FV for non-crypto markets
+        // Uses Polymarket + Kalshi + Metaculus + OddsAPI probabilities as fair value
+        try {
+            const seenIdsForFV = new Set(actionable.map(s => s.marketId));
+            for (const state of marketStates) {
+                if (state.category === 'crypto') continue; // Already handled by BS-based FV
+                if (!state.gemini?.bid || !state.gemini?.ask) continue;
+                if (seenIdsForFV.has(state.marketId)) continue;
+
+                const polyMid = state.polymarket?.last;
+                const metaProb = state.metaculus?.probability;
+                const oddsProb = state.oddsApi?.probability;
+                const kalshiMid = state.kalshi?.last;
+
+                // Need at least one reference source
+                if (polyMid == null && metaProb == null && oddsProb == null && kalshiMid == null) continue;
+
+                const ensemble = signalDetector.fairValueEngine.ensembleFairValue(
+                    null,
+                    kalshiMid != null ? { model: 'KALSHI_SYNTHETIC', fairValue: kalshiMid } : null,
+                    {
+                        polymarket: polyMid,
+                        metaculus: metaProb,
+                        oddsApi: oddsProb,
+                        category: state.category
+                    }
+                );
+
+                if (!ensemble) continue;
+
+                const fv = ensemble.fairValue;
+                let direction = null;
+                let edge = 0;
+
+                if (fv > state.gemini.ask) {
+                    direction = 'YES';
+                    edge = fv - state.gemini.ask;
+                } else if (fv < state.gemini.bid) {
+                    direction = 'NO';
+                    edge = state.gemini.bid - fv;
+                }
+
+                const fees = (state.gemini.ask || 0.5) * 0.0001 * 2;
+                const netEdge = edge - fees;
+
+                if (direction && netEdge >= 0.03) {
+                    actionable.push({
+                        marketId: state.marketId,
+                        title: state.matchedMarket?.event_title || '',
+                        category: state.category || 'other',
+                        score: Math.min(100, Math.round(netEdge * 1000)),
+                        direction,
+                        referencePrice: fv,
+                        targetPrice: direction === 'YES' ? Math.min(fv, 0.99) : Math.max(fv, 0.01),
+                        gemini_bid: state.gemini.bid,
+                        gemini_ask: state.gemini.ask,
+                        gemini_last: state.gemini.last,
+                        edge,
+                        netEdge,
+                        confidence: netEdge >= 0.08 ? 'high' : 'medium',
+                        models: ensemble,
+                        actionable: true,
+                        timestamp: Date.now()
+                    });
+                    seenIdsForFV.add(state.marketId);
+                }
+            }
+        } catch (fvErr) {
+            logger.debug('Multi-source FV: ' + fvErr.message);
+        }
+
         // Periodic debug logging (every 10 cycles)
         if (botState.cycleCount % 10 === 0) {
             const topScore = latestSignals.length > 0 ? latestSignals[0].score : 0;
             const withPrices = pricesReceived;
             const spotInfo = Object.entries(spotPriceCache).map(([a, p]) => `${a}=$${Math.round(p)}`).join(' ');
+            const refSources = [];
+            if (metaculusClient.questions.size > 0) refSources.push(`Meta:${metaculusClient.questions.size}`);
+            if (oddsClient.matchedOdds.size > 0) refSources.push(`Odds:${oddsClient.matchedOdds.size}`);
+            const refInfo = refSources.length > 0 ? ` | Refs: ${refSources.join(' ')}` : '';
             logger.info(
                 `Cycle ${botState.cycleCount}: ${matchedMarketCache.length} markets, ` +
                 `${withPrices} with prices, ${latestSignals.length} scored, ` +
                 `top=${topScore}, actionable=${actionable.length}` +
-                (spotInfo ? ` | Spot: ${spotInfo}` : '')
+                (spotInfo ? ` | Spot: ${spotInfo}` : '') +
+                refInfo
             );
         }
 
         // Run trading engine tick
         if (botState.running) {
             latestActionable = actionable; // capture for /api/signals
-            const result = tradingEngine.tick(actionable);
+            const result = await tradingEngine.tick(actionable);
+            signalDetector.loadParameters(); // sync minScore from DB after adaptive learning
 
             if (result.entries.length > 0 || result.exits.length > 0) {
                 broadcastToClients({
@@ -1093,11 +1232,51 @@ async function runMatchCycle() {
         const result = await matcher.runMatchCycle(polyClient, kalshiClient, geminiClient);
         matchedMarketCache = db.getMatchedMarkets(0.5);
         botState.lastMatchTime = Date.now();
-        logger.info(`Match cycle complete: ${result.matched_count} markets matched`);
+
+        // Preserve crypto match metadata (synthetic Kalshi prices not stored in DB)
+        cryptoMatchMeta.clear();
+        for (const match of (result.matches || [])) {
+            if (match.crypto_match) {
+                cryptoMatchMeta.set(match.gemini_market_id, {
+                    crypto_match: true,
+                    kalshi_synthetic_bid: match.kalshi_synthetic_bid,
+                    kalshi_synthetic_ask: match.kalshi_synthetic_ask,
+                    kalshi_synthetic_mid: match.kalshi_synthetic_mid,
+                    kalshi_strike: match.kalshi_strike,
+                    gemini_strike: match.gemini_strike,
+                    kalshi_settlement_hour: match.kalshi_settlement_hour
+                });
+            }
+        }
+
+        // Merge crypto metadata into matchedMarketCache
+        for (const m of matchedMarketCache) {
+            const meta = cryptoMatchMeta.get(m.gemini_market_id);
+            if (meta) Object.assign(m, meta);
+        }
+
+        logger.info(`Match cycle complete: ${result.matched_count} markets matched (${cryptoMatchMeta.size} crypto)`);
+
+        // Fetch reference data from additional sources (best-effort, non-blocking)
+        try {
+            if (oddsClient.isConfigured()) {
+                await oddsClient.getConsensusOdds();
+                logger.info(`Odds API: ${oddsClient.matchedOdds.size} sports events cached`);
+            }
+        } catch (e) {
+            logger.debug(`Odds API refresh skipped: ${e.message}`);
+        }
+        try {
+            await metaculusClient.getActiveQuestions({ limit: 50 });
+            logger.info(`Metaculus: ${metaculusClient.questions.size} questions cached`);
+        } catch (e) {
+            logger.debug(`Metaculus refresh skipped: ${e.message}`);
+        }
 
         // Subscribe Kalshi WS to all matched Kalshi market tickers
+        // Skip event tickers (KXBTC-*) — WS subscription is for individual market tickers
         const kalshiTickers = matchedMarketCache
-            .filter(m => m.kalshi_market_id)
+            .filter(m => m.kalshi_market_id && !m.crypto_match)
             .map(m => m.kalshi_market_id);
         if (kalshiTickers.length > 0) {
             kalshiWS.subscribe(kalshiTickers);
@@ -1161,7 +1340,7 @@ function startBot() {
     // Cleanup every hour
     botState.cleanupInterval = setInterval(runCleanup, 3600000);
 
-    logger.info('Prediction Market Bot STARTED (paper mode)');
+    logger.info(`Prediction Market Bot STARTED (${geminiMode} mode)`);
 }
 
 /**
@@ -1172,11 +1351,16 @@ async function validateStartup() {
     const warnings = [];
 
     logger.info('=== STARTUP VALIDATION ===');
+    logger.info(`Gemini mode: ${geminiMode.toUpperCase()} (set GEMINI_MODE in .env to change)`);
 
-    // 1. Env var checks for live mode
+    // 1. Env var checks for live/sandbox mode
     if (geminiClient.mode === 'live') {
         if (!process.env.GEMINI_API_KEY) issues.push('GEMINI_API_KEY not set (required for live mode)');
         if (!process.env.GEMINI_API_SECRET) issues.push('GEMINI_API_SECRET not set (required for live mode)');
+    }
+    if (geminiClient.mode === 'sandbox') {
+        if (!process.env.SANDBOX_GEMINI_API_KEY) issues.push('SANDBOX_GEMINI_API_KEY not set (required for sandbox mode)');
+        if (!process.env.SANDBOX_GEMINI_API_SECRET) issues.push('SANDBOX_GEMINI_API_SECRET not set (required for sandbox mode)');
     }
 
     // 2. Database + wallet check

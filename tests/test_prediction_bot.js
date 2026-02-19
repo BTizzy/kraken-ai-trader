@@ -13,14 +13,26 @@ let total = 0;
 function test(name, fn) {
     total++;
     try {
-        fn();
-        passed++;
-        console.log(`  ✅ ${name}`);
+        const result = fn();
+        if (result && typeof result.then === 'function') {
+            // Async test — queue it
+            asyncTests.push(result.then(() => {
+                passed++;
+                console.log(`  ✅ ${name}`);
+            }).catch(error => {
+                failed++;
+                console.log(`  ❌ ${name}: ${error.message}`);
+            }));
+        } else {
+            passed++;
+            console.log(`  ✅ ${name}`);
+        }
     } catch (error) {
         failed++;
         console.log(`  ❌ ${name}: ${error.message}`);
     }
 }
+const asyncTests = [];
 
 function assert(condition, msg) {
     if (!condition) throw new Error(msg || 'Assertion failed');
@@ -293,7 +305,7 @@ test('Entry position check', () => {
     assert(check.allowed === true, `Should allow entry, got: ${check.reason}`);
 });
 
-test('Enter position', () => {
+test('Enter position', async () => {
     const signal = {
         marketId: 'test_market_1',
         title: 'Test Market',
@@ -303,19 +315,19 @@ test('Enter position', () => {
         gemini_bid: 0.48,
         gemini_ask: 0.52,
         gemini_volume: 5000,
-        referencePrice: 0.53,
-        targetPrice: 0.53
+        referencePrice: 0.60,
+        targetPrice: 0.60
     };
-    const entry = engine.enterPosition(signal);
+    const entry = await engine.enterPosition(signal);
     assert(entry !== null, 'Should enter position');
     assert(entry.tradeId > 0, 'Should have trade ID');
     assert(entry.order.success, 'Paper order should succeed');
 });
 
-test('Monitor positions', () => {
+test('Monitor positions', async () => {
     // Update price to trigger take profit
     gemini.updatePaperMarket('test_market_1', 0.60, { title: 'Test Market' });
-    const exits = engine.monitorPositions();
+    const exits = await engine.monitorPositions();
     // May or may not exit depending on exact paper prices
     assert(Array.isArray(exits), 'Should return array');
 });
@@ -391,16 +403,17 @@ test('Rate limiter stats', () => {
     assert(stats.polymarket.used === 5, `Used should be 5, got ${stats.polymarket.used}`);
 });
 
-// ===== Cleanup =====
-db.close();
-if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
-// Also clean WAL/SHM files
-if (fs.existsSync(testDbPath + '-wal')) fs.unlinkSync(testDbPath + '-wal');
-if (fs.existsSync(testDbPath + '-shm')) fs.unlinkSync(testDbPath + '-shm');
+// ===== Wait for async tests then Summary =====
+Promise.all(asyncTests).then(() => {
+    // Cleanup
+    db.close();
+    if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
+    if (fs.existsSync(testDbPath + '-wal')) fs.unlinkSync(testDbPath + '-wal');
+    if (fs.existsSync(testDbPath + '-shm')) fs.unlinkSync(testDbPath + '-shm');
 
-// ===== Summary =====
-console.log(`\n${'='.repeat(50)}`);
-console.log(`Tests: ${total} total, ${passed} passed, ${failed} failed`);
-console.log(`${'='.repeat(50)}\n`);
+    console.log(`\n${'='.repeat(50)}`);
+    console.log(`Tests: ${total} total, ${passed} passed, ${failed} failed`);
+    console.log(`${'='.repeat(50)}\n`);
 
-process.exit(failed > 0 ? 1 : 0);
+    process.exit(failed > 0 ? 1 : 0);
+});

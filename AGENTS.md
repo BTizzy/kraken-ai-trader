@@ -44,9 +44,8 @@ kraken-ai-trader/
 │   └── matched_markets.json    ← Manual market overrides
 ├── skills/                     ← Agent knowledge base (READ THESE)
 │   ├── gemini_api_skill.md     ← HMAC auth, order placement, ticker API
-│   ├── prediction_bot_architecture.md
-│   ├── prediction_bot_debugging.md
-│   ├── prediction_market_strategies.md
+│   ├── prediction_market_strategies.md ← 5 strategies, fee landscape
+│   ├── backtest_analysis_v18.md       ← V18 backtest results + confidence
 │   ├── BTizzy/                 ← Validation + architecture deep-dives
 │   │   ├── prediction-market-architecture.md  ← Platform comparison, strategy types, fee math
 │   │   └── statistical-validation.md          ← 5-phase validation, anti-patterns, go-live gates
@@ -65,15 +64,14 @@ kraken-ai-trader/
 ## Skills (Read Before Any Task)
 
 1. [skills/gemini_api_skill.md](skills/gemini_api_skill.md) — **HMAC auth**, order placement, ticker batch endpoint, maker-or-cancel strategy
-2. [skills/prediction_bot_architecture.md](skills/prediction_bot_architecture.md) — Full system architecture, state model, data flow
-3. [skills/prediction_bot_debugging.md](skills/prediction_bot_debugging.md) — 10 root causes, emergency procedures, quick status commands
-4. [skills/prediction_market_strategies.md](skills/prediction_market_strategies.md) — 5 strategies, fee landscape, platform structures
-5. [skills/BTizzy/prediction-market-architecture.md](skills/BTizzy/prediction-market-architecture.md) — Platform comparison (Poly/Kalshi/Gemini), 3 strategy types, fee math, common failure modes, deployment checklist
-6. [skills/BTizzy/statistical-validation.md](skills/BTizzy/statistical-validation.md) — 5-phase validation framework, backtesting anti-patterns (incl. artificial convergence), KPI tables, go-live gates (8 checks)
-7. [skills/community/websocket.md](skills/community/websocket.md) — Backoff+jitter formula, ping/pong timing (30s/10s), `readyState` machine, close codes, applied notes for KalshiWS
-8. [skills/community/sqlite.md](skills/community/sqlite.md) — WAL mode, `busy_timeout`, `foreign_keys` per-connection, 64MB cache pragma, batch insert transactions
-9. [skills/community/polymarket-fast-markets.md](skills/community/polymarket-fast-markets.md) — **10% fee on fast/sprint markets** (5× normal), CEX momentum signal formula, USDC.e distinction
-10. [skills/community/prediction-market-arb-types.md](skills/community/prediction-market-arb-types.md) — 5-type arb taxonomy with per-type min edge thresholds, exit rules, position limits
+2. [skills/prediction_market_strategies.md](skills/prediction_market_strategies.md) — 5 strategies, fee landscape, platform structures
+3. [skills/backtest_analysis_v18.md](skills/backtest_analysis_v18.md) — V18 backtest results, parameter sweep, confidence assessment, go-live gates status
+4. [skills/BTizzy/prediction-market-architecture.md](skills/BTizzy/prediction-market-architecture.md) — Platform comparison (Poly/Kalshi/Gemini), 3 strategy types, fee math, common failure modes, deployment checklist
+5. [skills/BTizzy/statistical-validation.md](skills/BTizzy/statistical-validation.md) — 5-phase validation framework, backtesting anti-patterns (incl. artificial convergence), KPI tables, go-live gates (8 checks)
+6. [skills/community/websocket.md](skills/community/websocket.md) — Backoff+jitter formula, ping/pong timing (30s/10s), `readyState` machine, close codes, applied notes for KalshiWS
+7. [skills/community/sqlite.md](skills/community/sqlite.md) — WAL mode, `busy_timeout`, `foreign_keys` per-connection, 64MB cache pragma, batch insert transactions
+8. [skills/community/polymarket-fast-markets.md](skills/community/polymarket-fast-markets.md) — **10% fee on fast/sprint markets** (5x normal), CEX momentum signal formula, USDC.e distinction
+9. [skills/community/prediction-market-arb-types.md](skills/community/prediction-market-arb-types.md) — 5-type arb taxonomy with per-type min edge thresholds, exit rules, position limits
 
 ---
 

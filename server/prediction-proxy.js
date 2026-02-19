@@ -186,11 +186,11 @@ const geminiClient = new GeminiClient({
     categories: ['crypto', 'politics', 'sports', 'other'],
     useRealPrices: true,        // Use real Gemini Predictions API prices instead of simulation
     realisticPaper: true,       // Use actual bid/ask for paper fills (not synthetic mid)
-    realFetchInterval: 10000,   // Full market refresh every 10s (metadata + prices)
-    tickerFetchInterval: 2000,  // Batch ticker every 2s (lightweight price-only, matches cycle)
-    cacheTTL: 2000,             // 2s cache TTL (was 3s)
-    realCacheTTL: 2000,         // 2s real client cache TTL (was 10s)
-    realApiInterval: 1000       // 1s min between Gemini requests (was 2s)
+    realFetchInterval: 30000,   // Full market refresh every 30s (metadata + prices)
+    tickerFetchInterval: 10000, // Batch ticker every 10s (lightweight price-only)
+    cacheTTL: 2000,             // 2s cache TTL
+    realCacheTTL: 5000,         // 5s real client cache TTL
+    realApiInterval: 1000       // 1s min between Gemini requests
 });
 
 const matcher = new MarketMatcher(db);
@@ -762,6 +762,7 @@ async function updatePrices() {
     if (isCircuitOpen()) return;    // Circuit breaker active
     priceUpdateRunning = true;
     let cycleSuccess = true;
+    const cycleStart = Date.now();
     try {
         // Drawdown kill-switch (check every 10 cycles)
         if (botState.cycleCount % 10 === 0 && checkDrawdownKillSwitch()) {
@@ -800,6 +801,11 @@ async function updatePrices() {
 
         // Fetch live spot prices for FairValueEngine (BTC, ETH, SOL)
         await fetchSpotPrices();
+
+        // Refresh Gemini real market data ONCE per cycle (not per-market)
+        if (geminiClient.useRealPrices) {
+            await geminiClient.refreshRealData();
+        }
 
         for (const matched of matchedMarketCache) {
             try {
@@ -925,6 +931,8 @@ async function updatePrices() {
             }
         }
 
+        const loopElapsed = Date.now() - cycleStart;
+
         // Run signal detection — DUAL STRATEGY
         // Strategy 1: Composite score (velocity + spread + consensus)
         latestSignals = signalDetector.processMarkets(marketStates);
@@ -969,6 +977,8 @@ async function updatePrices() {
         } catch (fvErr) {
             logger.debug('FairValue signals: ' + fvErr.message);
         }
+
+        // (Strategy 1+2 complete)
 
         // Strategy 3: Event-Driven Momentum — boost signals when spot moves but contracts lag
         // Strategy 4: Cross-Platform Synthetic Arb — Gemini YES price vs Kalshi implied NO
@@ -1165,7 +1175,7 @@ async function updatePrices() {
             logger.info(
                 `Cycle ${botState.cycleCount}: ${matchedMarketCache.length} markets, ` +
                 `${withPrices} with prices, ${latestSignals.length} scored, ` +
-                `top=${topScore}, actionable=${actionable.length}` +
+                `top=${topScore}, actionable=${actionable.length}, ${loopElapsed}ms` +
                 (spotInfo ? ` | Spot: ${spotInfo}` : '') +
                 refInfo
             );
@@ -1321,8 +1331,8 @@ function startBot() {
     // Initial market match
     runMatchCycle();
 
-    // Price update every 2 seconds
-    botState.priceUpdateInterval = setInterval(updatePrices, 2000);
+    // Price update every 5 seconds
+    botState.priceUpdateInterval = setInterval(updatePrices, 5000);
 
     // Market re-match every 5 minutes
     botState.matchInterval = setInterval(runMatchCycle, 300000);

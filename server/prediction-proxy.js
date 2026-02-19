@@ -138,12 +138,7 @@ function emergencyExitAll() {
             const exitFee = Math.abs(exitValue + trade.position_size) * (tradingEngine.params?.fee_per_side || 0.0001);
             const pnl = exitValue - entryFee - exitFee;
 
-            db.closeTrade(trade.id, {
-                exit_price: exitPrice,
-                pnl: pnl,
-                exit_reason: 'emergency_stop',
-                hold_time: now - trade.timestamp
-            });
+            db.closeTrade(trade.id, exitPrice, pnl, now - trade.timestamp, 'emergency_stop');
 
             totalPnl += pnl;
             exits.push({
@@ -188,7 +183,7 @@ const geminiMode = process.env.GEMINI_MODE || 'paper'; // 'paper' | 'live' | 'sa
 const geminiClient = new GeminiClient({
     mode: geminiMode,
     rateLimiter,
-    categories: ['crypto', 'politics', 'elections', 'finance', 'sports', 'tech', 'culture'],
+    categories: ['crypto', 'politics', 'sports', 'other'],
     useRealPrices: true,        // Use real Gemini Predictions API prices instead of simulation
     realisticPaper: true,       // Use actual bid/ask for paper fills (not synthetic mid)
     realFetchInterval: 10000,   // Full market refresh every 10s (metadata + prices)
@@ -609,12 +604,7 @@ app.post('/api/bot/close-position/:tradeId', (req, res) => {
         const exitFee = Math.abs(exitValue + trade.position_size) * feeSide;
         const pnl = exitValue - entryFee - exitFee;
 
-        db.closeTrade(tradeId, {
-            exit_price: exitPrice,
-            pnl: pnl,
-            exit_reason: 'manual_close',
-            hold_time: now - trade.timestamp
-        });
+        db.closeTrade(tradeId, exitPrice, pnl, now - trade.timestamp, 'manual_close');
 
         // Update wallet
         const wallet = db.getWallet();

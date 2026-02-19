@@ -846,7 +846,7 @@ async function updatePrices() {
                     }
                 }
 
-                if (polyPrices.bid !== null) pricesReceived++;
+                if (polyPrices.bid !== null || kalshiPrices.bid !== null) pricesReceived++;
                 // Update Gemini paper market with reference price
                 const refPrice = [];
                 if (polyPrices.bid && polyPrices.ask) {
@@ -1043,7 +1043,7 @@ async function updatePrices() {
                         const arb = signalDetector.detectCrossPlatformArb(gemini, kalshiAnalysis);
                         if (arb) {
                             logger.info(
-                                `CROSS-PLATFORM ARB: ${marketId} edge=${arb.bestEdge?.toFixed(3)} ` +
+                                `CROSS-PLATFORM ARB: ${marketId} edge=${arb.netEdge?.toFixed(3)} ` +
                                 `dir=${arb.direction} Gemini=${gemini.bid?.toFixed(3)}/${gemini.ask?.toFixed(3)} ` +
                                 `KalshiFV=${kalshiAnalysis.kalshiFairValue?.toFixed(3)}`
                             );
@@ -1052,10 +1052,10 @@ async function updatePrices() {
                                 marketId,
                                 title: state.matchedMarket?.event_title || '',
                                 direction: arb.direction,
-                                netEdge: arb.netProfit || arb.bestEdge,
+                                netEdge: arb.netEdge,
                                 gemini_bid: gemini.bid,
                                 gemini_ask: gemini.ask,
-                                score: Math.min(100, Math.round((arb.bestEdge || 0) * 1500)),
+                                score: Math.min(100, Math.round((arb.netEdge || 0) * 1500)),
                                 arb: { ...arb, kalshiFairValue: kalshiAnalysis.kalshiFairValue },
                                 timestamp: Date.now()
                             };
@@ -1070,14 +1070,14 @@ async function updatePrices() {
                                     marketId,
                                     title: state.matchedMarket?.event_title || '',
                                     category: state.category || 'crypto',
-                                    score: Math.min(100, Math.round((arb.bestEdge || 0) * 1500)),
+                                    score: Math.min(100, Math.round((arb.netEdge || 0) * 1500)),
                                     direction: arbDirection,
                                     referencePrice: kalshiAnalysis.kalshiFairValue,
                                     gemini_bid: gemini.bid,
                                     gemini_ask: gemini.ask,
                                     gemini_ask_depth: gemini.ask_depth || null,
-                                    edge: arb.bestEdge,
-                                    netEdge: arb.netProfit || arb.bestEdge,
+                                    edge: arb.edge,
+                                    netEdge: arb.netEdge,
                                     confidence: 'high',
                                     arb,
                                     actionable: true,

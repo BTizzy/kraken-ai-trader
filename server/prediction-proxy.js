@@ -118,7 +118,7 @@ function checkDrawdownKillSwitch() {
 
 // ===== Emergency Exit All Positions =====
 
-function emergencyExitAll() {
+async function emergencyExitAll() {
     const openTrades = db.getOpenTrades();
     if (openTrades.length === 0) return { closed: 0, totalPnl: 0, exits: [] };
 
@@ -128,7 +128,53 @@ function emergencyExitAll() {
 
     for (const trade of openTrades) {
         try {
-            const exitPrice = geminiClient.getPaperExitPrice(trade.gemini_market_id, trade.direction);
+            const isLive = trade.mode === 'live';
+            let exitPrice;
+
+            if (isLive) {
+                // Live trade: get real price and place actual sell order on Gemini
+                const realPrices = geminiClient.realClient
+                    ? geminiClient.realClient.getBestPrices(trade.gemini_market_id)
+                    : null;
+                exitPrice = realPrices?.bid != null
+                    ? (trade.direction === 'YES' ? realPrices.bid : (1 - realPrices.ask))
+                    : null;
+
+                if (exitPrice != null) {
+                    try {
+                        const contracts = Math.floor(trade.position_size / trade.entry_price);
+                        const exitOrder = await geminiClient.placeOrder({
+                            symbol: trade.gemini_market_id,
+                            side: 'sell',
+                            amount: contracts,
+                            price: exitPrice.toFixed(2),
+                            direction: trade.direction
+                        });
+                        if (exitOrder && exitOrder.fill_price) {
+                            exitPrice = exitOrder.fill_price;
+                        }
+                        logger.warn(
+                            `EMERGENCY LIVE SELL: ${trade.gemini_market_id} ` +
+                            `orderId=${exitOrder?.orderId} status=${exitOrder?.orderStatus}`
+                        );
+                    } catch (sellErr) {
+                        logger.error(
+                            `EMERGENCY SELL FAILED for ${trade.gemini_market_id}: ${sellErr.message} ` +
+                            `— closing in DB only. CHECK GEMINI FOR ORPHANED POSITION.`
+                        );
+                    }
+                } else {
+                    // No real price available — fall back to paper price
+                    exitPrice = geminiClient.getPaperExitPrice(trade.gemini_market_id, trade.direction);
+                    logger.warn(
+                        `EMERGENCY EXIT (no real price): ${trade.gemini_market_id} using paper price. ` +
+                        `CHECK GEMINI FOR ORPHANED POSITION.`
+                    );
+                }
+            } else {
+                exitPrice = geminiClient.getPaperExitPrice(trade.gemini_market_id, trade.direction);
+            }
+
             if (exitPrice === null) continue;
 
             const entryFee = trade.position_size * (tradingEngine.params?.fee_per_side || 0.0001);
@@ -421,7 +467,8 @@ app.get('/api/signals', (req, res) => {
 // Get open trades
 app.get('/api/trades/open', (req, res) => {
     try {
-        const trades = db.getOpenTrades();
+        const mode = req.query.mode || null;
+        const trades = db.getOpenTrades(mode);
         res.json({ trades, count: trades.length });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -432,7 +479,8 @@ app.get('/api/trades/open', (req, res) => {
 app.get('/api/trades/recent', (req, res) => {
     try {
         const limit = parseInt(req.query.limit || 50);
-        const trades = db.getRecentTrades(limit);
+        const mode = req.query.mode || null;
+        const trades = db.getRecentTrades(limit, mode);
         res.json({ trades, count: trades.length });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -480,6 +528,18 @@ app.get('/api/daily-pnl', (req, res) => {
     try {
         const pnl = db.getDailyPnL();
         res.json(pnl);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get daily P&L split by mode (paper vs live)
+app.get('/api/pnl/split', (req, res) => {
+    try {
+        const paperPnl = db.getDailyPnL('paper');
+        const livePnl = db.getDailyPnL('live');
+        const totalPnl = db.getDailyPnL();
+        res.json({ paper: paperPnl, live: livePnl, total: totalPnl });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -558,10 +618,10 @@ app.post('/api/bot/stop', (req, res) => {
 });
 
 // Emergency stop: stops bot AND closes all positions
-app.post('/api/bot/emergency-stop', (req, res) => {
+app.post('/api/bot/emergency-stop', async (req, res) => {
     try {
         stopBot();
-        const result = emergencyExitAll();
+        const result = await emergencyExitAll();
 
         // Broadcast to dashboard WS clients
         wss.clients.forEach(client => {
@@ -580,7 +640,7 @@ app.post('/api/bot/emergency-stop', (req, res) => {
 });
 
 // Close a single position manually
-app.post('/api/bot/close-position/:tradeId', (req, res) => {
+app.post('/api/bot/close-position/:tradeId', async (req, res) => {
     try {
         const tradeId = parseInt(req.params.tradeId);
         const openTrades = db.getOpenTrades();
@@ -590,9 +650,48 @@ app.post('/api/bot/close-position/:tradeId', (req, res) => {
             return res.status(404).json({ error: 'Trade not found or already closed' });
         }
 
-        const exitPrice = geminiClient.getPaperExitPrice(trade.gemini_market_id, trade.direction);
-        if (exitPrice === null) {
-            return res.status(400).json({ error: 'Could not determine exit price' });
+        const isLive = trade.mode === 'live';
+        let exitPrice;
+
+        if (isLive) {
+            // Live trade: get real price and place actual sell order on Gemini
+            const realPrices = geminiClient.realClient
+                ? geminiClient.realClient.getBestPrices(trade.gemini_market_id)
+                : null;
+            exitPrice = realPrices?.bid != null
+                ? (trade.direction === 'YES' ? realPrices.bid : (1 - realPrices.ask))
+                : null;
+
+            if (exitPrice == null) {
+                return res.status(400).json({ error: 'Could not determine real exit price for live trade' });
+            }
+
+            try {
+                const contracts = Math.floor(trade.position_size / trade.entry_price);
+                const exitOrder = await geminiClient.placeOrder({
+                    symbol: trade.gemini_market_id,
+                    side: 'sell',
+                    amount: contracts,
+                    price: exitPrice.toFixed(2),
+                    direction: trade.direction
+                });
+                if (exitOrder && exitOrder.fill_price) {
+                    exitPrice = exitOrder.fill_price;
+                }
+                logger.info(
+                    `MANUAL LIVE SELL: ${trade.gemini_market_id} ` +
+                    `orderId=${exitOrder?.orderId} status=${exitOrder?.orderStatus}`
+                );
+            } catch (sellErr) {
+                return res.status(500).json({
+                    error: `Live sell order failed: ${sellErr.message}. Position NOT closed. Check Gemini directly.`
+                });
+            }
+        } else {
+            exitPrice = geminiClient.getPaperExitPrice(trade.gemini_market_id, trade.direction);
+            if (exitPrice === null) {
+                return res.status(400).json({ error: 'Could not determine exit price' });
+            }
         }
 
         const now = Math.floor(Date.now() / 1000);
@@ -620,7 +719,8 @@ app.post('/api/bot/close-position/:tradeId', (req, res) => {
             direction: trade.direction,
             exitPrice,
             pnl,
-            holdTime: now - trade.timestamp
+            holdTime: now - trade.timestamp,
+            live: isLive
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -686,6 +786,16 @@ app.get('/api/rate-limits', (req, res) => {
     res.json(rateLimiter.getStats());
 });
 
+// Position reconciliation: compare DB vs Gemini exchange
+app.get('/api/reconcile', async (req, res) => {
+    try {
+        const result = await tradingEngine.reconcilePositions();
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Serve dashboard
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../dashboard/index.html'));
@@ -749,6 +859,7 @@ const botState = {
     lastCycleTime: 0,
     lastMatchTime: 0,
     lastPriceRefresh: 0,
+    lastKalshiPriceRefresh: 0,
     priceUpdateInterval: null,
     matchInterval: null,
     cleanupInterval: null
@@ -799,6 +910,20 @@ async function updatePrices() {
             }
         }
 
+        // Refresh Kalshi prices in bulk every 30 seconds (mirrors Polymarket pattern)
+        if (!botState.lastKalshiPriceRefresh || Date.now() - botState.lastKalshiPriceRefresh > 30000) {
+            try {
+                const refreshed = await kalshiClient.refreshPrices();
+                if (refreshed > 0) {
+                    botState.lastKalshiPriceRefresh = Date.now();
+                    logger.debug(`Refreshed ${refreshed} Kalshi prices from REST API`);
+                    recordApiResult('kalshi', true);
+                }
+            } catch (e) {
+                recordApiResult('kalshi', false, e);
+            }
+        }
+
         // Fetch live spot prices for FairValueEngine (BTC, ETH, SOL)
         await fetchSpotPrices();
 
@@ -838,11 +963,31 @@ async function updatePrices() {
                 } else if (isCryptoMatch) {
                     // Crypto match but no synthetic data yet (match cycle pending) — skip
                 } else if (matched.kalshi_market_id) {
-                    try {
-                        kalshiPrices = await kalshiClient.getBestPrices(matched.kalshi_market_id);
-                        recordApiResult('kalshi', true);
-                    } catch (e) {
-                        recordApiResult('kalshi', false, e);
+                    // Use bulk-refreshed price cache (no per-market API call)
+                    const cachedKalshi = kalshiClient.getCachedPrice(matched.kalshi_market_id);
+                    if (cachedKalshi) {
+                        kalshiPrices = {
+                            bid: cachedKalshi.bid,
+                            ask: cachedKalshi.ask,
+                            last: cachedKalshi.last,
+                            spread: cachedKalshi.spread,
+                            volume: cachedKalshi.volume,
+                            source: 'cached'
+                        };
+                    } else {
+                        // Fallback: check WS bracketCache for real-time data
+                        const wsCached = kalshiClient.bracketCache.get(matched.kalshi_market_id);
+                        if (wsCached && wsCached.ts && (Date.now() - wsCached.ts) < 30000) {
+                            kalshiPrices = {
+                                bid: wsCached.yesBid,
+                                ask: wsCached.yesAsk,
+                                last: wsCached.lastPrice,
+                                spread: (wsCached.yesBid != null && wsCached.yesAsk != null)
+                                    ? wsCached.yesAsk - wsCached.yesBid : null,
+                                volume: wsCached.volume || 0,
+                                source: 'ws'
+                            };
+                        }
                     }
                 }
 
@@ -1183,6 +1328,15 @@ async function updatePrices() {
 
         // Run trading engine tick
         if (botState.running) {
+            // Enrich signals with spot prices for deep-ITM/OTM guard
+            for (const sig of actionable) {
+                if (sig.marketId && sig.marketId.startsWith('GEMI-')) {
+                    const assetMatch = sig.marketId.match(/^GEMI-([A-Z]+)/);
+                    if (assetMatch && spotPriceCache[assetMatch[1]]) {
+                        sig._spotPrice = spotPriceCache[assetMatch[1]];
+                    }
+                }
+            }
             latestActionable = actionable; // capture for /api/signals
             const result = await tradingEngine.tick(actionable);
             signalDetector.loadParameters(); // sync minScore from DB after adaptive learning
@@ -1295,12 +1449,20 @@ async function runMatchCycle() {
 /**
  * Cleanup old data
  */
-function runCleanup() {
+async function runCleanup() {
     try {
         const cutoff = Math.floor(Date.now() / 1000) - (7 * 86400); // 7 days
         db.cleanOldPrices(cutoff);
         signalDetector.cleanup();
         signalDetector.updateCategoryWinRates();
+
+        // Position reconciliation (live/sandbox mode only)
+        const recon = await tradingEngine.reconcilePositions();
+        if (!recon.skipped && (recon.orphaned.length > 0 || recon.phantom.length > 0)) {
+            logger.warn(
+                `RECONCILIATION ALERT: ${recon.phantom.length} phantom, ${recon.orphaned.length} orphaned`
+            );
+        }
 
         // Daily P&L alert (fires once per calendar day; Alerts module deduplicates)
         const wallet = db.getWallet();
@@ -1449,24 +1611,32 @@ server.listen(PORT, async () => {
 });
 
 // Graceful shutdown — close positions before exiting
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
     logger.info('Shutting down (SIGINT)...');
     stopBot();
-    const result = emergencyExitAll();
-    if (result.closed > 0) {
-        logger.info(`Shutdown: closed ${result.closed} positions, P&L: $${result.totalPnl.toFixed(2)}`);
+    try {
+        const result = await emergencyExitAll();
+        if (result.closed > 0) {
+            logger.info(`Shutdown: closed ${result.closed} positions, P&L: $${result.totalPnl.toFixed(2)}`);
+        }
+    } catch (e) {
+        logger.error(`Error during shutdown exit: ${e.message}`);
     }
     clearInterval(wsHeartbeatInterval);
     db.close();
     process.exit(0);
 });
 
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
     logger.info('Shutting down (SIGTERM)...');
     stopBot();
-    const result = emergencyExitAll();
-    if (result.closed > 0) {
-        logger.info(`Shutdown: closed ${result.closed} positions, P&L: $${result.totalPnl.toFixed(2)}`);
+    try {
+        const result = await emergencyExitAll();
+        if (result.closed > 0) {
+            logger.info(`Shutdown: closed ${result.closed} positions, P&L: $${result.totalPnl.toFixed(2)}`);
+        }
+    } catch (e) {
+        logger.error(`Error during shutdown exit: ${e.message}`);
     }
     clearInterval(wsHeartbeatInterval);
     db.close();
@@ -1474,12 +1644,12 @@ process.on('SIGTERM', () => {
 });
 
 // Crash handlers — close positions on unhandled errors
-process.on('uncaughtException', (err) => {
+process.on('uncaughtException', async (err) => {
     logger.error(`UNCAUGHT EXCEPTION: ${err.message}`);
     logger.error(err.stack);
     try {
         stopBot();
-        const result = emergencyExitAll();
+        const result = await emergencyExitAll();
         if (result.closed > 0) {
             logger.info(`Crash handler: closed ${result.closed} positions, P&L: $${result.totalPnl.toFixed(2)}`);
         }

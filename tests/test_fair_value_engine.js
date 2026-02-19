@@ -705,8 +705,8 @@ test('Position size uses kellyFraction from signal when available', () => {
     };
     
     const size = trader.calculatePositionSize(signal, wallet);
-    // With kellyFraction 0.10 and balance $500, expect $50
-    assertClose(size, 50, 1, 'Should use kellyFraction × balance');
+    // With kellyFraction 0.10 and balance $500, raw would be $50 but max_position_size=$10 caps it
+    assertClose(size, 10, 1, 'Should be capped by max_position_size');
 });
 
 test('Position size uses netEdge when no kellyFraction', () => {

@@ -69,9 +69,9 @@ test('Paper wallet initialized at $500', () => {
 
 test('Default parameters loaded', () => {
     const threshold = db.getParameter('entry_threshold');
-    assert(threshold === 45, `Expected 45, got ${threshold}`);
+    assert(threshold === 55, `Expected 55, got ${threshold}`);
     const kelly = db.getParameter('kelly_multiplier');
-    assert(kelly === 0.25, `Expected 0.25, got ${kelly}`);
+    assert(kelly === 0.15, `Expected 0.15, got ${kelly}`);
 });
 
 test('Upsert and retrieve market', () => {

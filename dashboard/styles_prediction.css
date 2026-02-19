@@ -627,6 +627,48 @@ tr:hover td {
     border-radius: 3px;
 }
 
+/* Mode badges for trade tables */
+.mode-badge-inline {
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+}
+
+.mode-paper-inline {
+    background: var(--blue-bg);
+    color: var(--blue);
+    border: 1px solid rgba(88, 166, 255, 0.3);
+}
+
+.mode-live-inline {
+    background: rgba(255, 166, 0, 0.15);
+    color: #ffa600;
+    border: 1px solid rgba(255, 166, 0, 0.3);
+}
+
+.trade-paper-row td {
+    opacity: 0.75;
+}
+
+/* Mode filter controls */
+.trade-filter-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.trade-filter-controls select {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+}
+
 ::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted);
 }

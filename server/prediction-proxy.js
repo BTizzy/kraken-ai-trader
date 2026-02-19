@@ -226,6 +226,7 @@ const rateLimiter = new RateLimiter();
 const polyClient = new PolymarketClient({ rateLimiter });
 const kalshiClient = new KalshiClient({ rateLimiter });
 const geminiMode = process.env.GEMINI_MODE || 'paper'; // 'paper' | 'live' | 'sandbox'
+const dataOnlyMode = process.env.DATA_ONLY === 'true'; // Collect price data without trading
 const geminiClient = new GeminiClient({
     mode: geminiMode,
     rateLimiter,
@@ -1326,8 +1327,8 @@ async function updatePrices() {
             );
         }
 
-        // Run trading engine tick
-        if (botState.running) {
+        // Run trading engine tick (skipped in DATA_ONLY mode)
+        if (botState.running && !dataOnlyMode) {
             // Enrich signals with spot prices for deep-ITM/OTM guard
             for (const sig of actionable) {
                 if (sig.marketId && sig.marketId.startsWith('GEMI-')) {
@@ -1502,7 +1503,7 @@ function startBot() {
     // Cleanup every hour
     botState.cleanupInterval = setInterval(runCleanup, 3600000);
 
-    logger.info(`Prediction Market Bot STARTED (${geminiMode} mode)`);
+    logger.info(`Prediction Market Bot STARTED (${geminiMode} mode${dataOnlyMode ? ', DATA ONLY — no trades' : ''})`);
 }
 
 /**
@@ -1514,6 +1515,7 @@ async function validateStartup() {
 
     logger.info('=== STARTUP VALIDATION ===');
     logger.info(`Gemini mode: ${geminiMode.toUpperCase()} (set GEMINI_MODE in .env to change)`);
+    if (dataOnlyMode) logger.info('DATA_ONLY mode: collecting price data, NO trades will be placed');
 
     // 1. Env var checks for live/sandbox mode
     if (geminiClient.mode === 'live') {

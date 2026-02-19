@@ -18,7 +18,6 @@ vs Polymarket:  ~4%
 vs Kalshi:      ~2.4%
 vs PredictIt:   10%
 ```
-**Consequence: Always post LIMIT orders with `"maker-or-cancel"` when possible. Market orders only for urgent exits.**
 
 ---
 
@@ -27,11 +26,16 @@ vs PredictIt:   10%
 ### Three required headers for ALL private calls
 ```javascript
 const crypto = require('crypto');
-const nonce = Date.now().toString();  // must be strictly increasing
+// CRITICAL: nonce must be in SECONDS (not ms!) and strictly increasing
+const nowSec = Math.floor(Date.now() / 1000);
+if (nowSec > this._lastNonce) this._lastNonce = nowSec;
+else this._lastNonce++;
+const nonce = String(this._lastNonce);
 
 const payloadJson = JSON.stringify({
-  request: '/v1/order/new',  // endpoint path
+  request: '/v1/prediction-markets/order',  // endpoint path
   nonce,
+  account: 'primary',  // REQUIRED on all private endpoints
   // ...additional order fields
 });
 const payloadB64 = Buffer.from(payloadJson).toString('base64');
@@ -45,265 +49,221 @@ headers['X-GEMINI-PAYLOAD']   = payloadB64;
 headers['X-GEMINI-SIGNATURE'] = signature;
 ```
 
-### Nonce rules
+### Nonce rules (V14 CORRECTED)
+- Must be **in SECONDS** (NOT milliseconds!) — server rejects nonces > ±30s from server time
 - Must be **strictly increasing** per API key
-- `Date.now()` (ms epoch) is standard
-- Two simultaneous requests → one will be rejected, add 1ms sleep between calls
-- For high-frequency: append a counter `Date.now() * 1000 + counter`
+- Track `_lastNonce` and increment when multiple requests in same second
+- `Date.now()` returns ms → use `Math.floor(Date.now() / 1000)`
+- NEVER use `Date.now() * 1000 + counter` — that makes nonce 56 years in the future
 
 ### HTTP method
 - All private calls: `POST`
-- Content-Type: `application/json`
-- **Body is empty or duplicate of payload** — the actual data goes in `X-GEMINI-PAYLOAD`
+- Content-Type: `text/plain`
+- `account: 'primary'` MUST be included in the payload JSON
 
 ---
 
-## Prediction Market REST API
+## Instrument Symbol Format (CORRECTED)
 
-### Base URLs
+Real Gemini prediction market symbols:
 ```
-Public data:  https://www.gemini.com/prediction-markets
-Trading API:  https://api.gemini.com/v1/...
-Order book:   https://api.gemini.com/v1/book/{instrumentSymbol}
+GEMI-{ASSET}{YYMMDDHHNN}-HI{STRIKE}
 ```
-
-### Batch Tickers Endpoint (saves API calls!)
+Examples:
 ```
-GET https://api.gemini.com/v1/pricefeed
-```
-Returns all available tickers. For prediction market tickers specifically:
-```
-GET https://www.gemini.com/prediction-markets/tickers/crypto
-```
-Response contains: `instrumentSymbol`, `bestBid`, `bestAsk`, `lastTradePrice`, `volume`, `openInterest`
-
-### Fetch All Active Markets (no auth)
-```
-GET https://www.gemini.com/prediction-markets?status=active&category=crypto&limit=60
-```
-**Response envelope:**
-```json
-{
-  "data": [
-    {
-      "id": "...",
-      "title": "BTC Price on February 18",
-      "ticker": "BTC-FEB18-12PM",
-      "category": "crypto",
-      "status": "active",
-      "contracts": [
-        {
-          "id": "...",
-          "label": "BTC > $67,500",
-          "instrumentSymbol": "btcusd-pred-above-67500-20260218-12",
-          "expiryDate": "2026-02-18T17:00:00Z",
-          "marketState": "open",
-          "prices": {
-            "bestBid": "0.59",
-            "bestAsk": "0.63",
-            "lastTradePrice": "0.61",
-            "buy": { "yes": "0.63", "no": "0.37" },
-            "sell": { "yes": "0.59", "no": "0.41" }
-          }
-        }
-      ]
-    }
-  ],
-  "pagination": { "limit": 60, "offset": 0, "total": 221 }
-}
+GEMI-BTC2602190200-HI66500    (BTC > $66,500, Feb 19 02:00 UTC = 9pm EST)
+GEMI-ETH2602190800-HI1800     (ETH > $1,800, Feb 19 08:00 UTC = 3am EST)
+GEMI-SOL2602190800-HI80       (SOL > $80, Feb 19 08:00 UTC)
+GEMI-XRP2602190800-HI1D3      (XRP > $1.3 — D=decimal point)
 ```
 
-**IMPORTANT: Only use `bestBid`/`bestAsk` for trading decisions — NEVER `buy.yes`/`sell.yes` (indicative only)**
-
-### Order Book Depth
-```
-GET https://api.gemini.com/v1/book/{instrumentSymbol}?limit_bids=5&limit_asks=5
-```
-- `instrumentSymbol` must be **lowercase**
-- Response: `{ "bids": [{"price": "0.59", "amount": "500"}, ...], "asks": [...] }`
-- Field names: `price` and `amount` (not `size`)
+**NOT** `btcusd-pred-above-67500-20260218-12` — that format does not exist.
 
 ---
 
-## Order Placement
+## Prediction Market Trading API (CORRECTED)
 
-### Endpoint + Payload Structure
+**CRITICAL: Prediction markets use SEPARATE endpoints from the standard exchange.**
+`/v1/order/new` does NOT work for `GEMI-*` symbols (returns `InvalidSymbol`).
+
+### Base URL
 ```
-POST https://api.gemini.com/v1/order/new
+Production: https://api.gemini.com
+Sandbox:    https://api.sandbox.gemini.com  (NO prediction market symbols!)
 ```
 
+### Place Order
+```
+POST /v1/prediction-markets/order
+```
 ```javascript
 {
-  request: '/v1/order/new',
-  nonce: Date.now().toString(),
-  client_order_id: `bot-${Date.now()}`,  // your own tracking ID
-  symbol: 'btcusd-pred-above-67500-20260218-12',  // instrumentSymbol (lowercase)
-  amount: '10',     // number of contracts as STRING
-  price: '0.59',    // limit price as STRING
-  side: 'buy',      // 'buy' or 'sell'
-  type: 'exchange limit',   // always use limit orders
-  options: ['maker-or-cancel']  // ALWAYS include for maker fee (0.01% vs 0.05%)
+  request: '/v1/prediction-markets/order',
+  nonce: String(Math.floor(Date.now() / 1000)),
+  account: 'primary',
+  symbol: 'GEMI-BTC2602190200-HI66500',
+  orderType: 'limit',
+  side: 'buy',           // 'buy' or 'sell'
+  quantity: '5',          // number of contracts as STRING
+  price: '0.59',          // limit price as STRING
+  outcome: 'yes',         // 'yes' or 'no'
+  timeInForce: 'good-til-cancel'
 }
 ```
 
-**Market orders:** `type: 'exchange market'` — use sparingly (takes 5x more fees)
-
-### Response Fields
+### Response (201 Created)
 ```json
 {
-  "order_id": "...",
-  "client_order_id": "bot-1708123456789",
-  "symbol": "btcusd-pred-above-67500-20260218-12",
-  "price": "0.59",
-  "avg_execution_price": "0.59",
+  "orderId": 145828831565994216,
+  "status": "filled",     // "open", "filled", "cancelled"
+  "symbol": "GEMI-BTC2602190200-HI66500",
   "side": "buy",
-  "type": "exchange limit",
-  "is_live": true,
-  "is_cancelled": false,
-  "executed_amount": "0",
-  "remaining_amount": "10",
-  "original_amount": "10",
-  "timestamp": "1708123456",
-  "timestampms": 1708123456789
+  "outcome": "no",
+  "orderType": "limit",
+  "quantity": "5",
+  "filledQuantity": "5",
+  "remainingQuantity": "0",
+  "price": "0.99",
+  "avgExecutionPrice": "0.99"
 }
 ```
 
 ### Cancel Order
 ```
-POST https://api.gemini.com/v1/order/cancel
-{
-  request: '/v1/order/cancel',
-  nonce: Date.now().toString(),
-  order_id: '...'   // or client_order_id
-}
+POST /v1/prediction-markets/order/cancel
+{ request: '...', nonce: '...', account: 'primary', orderId: '145828831565994216' }
+```
+Returns: `{ "result": "ok", "message": "Order ... cancelled successfully" }`
+
+### List Active Orders
+```
+POST /v1/prediction-markets/orders/active
+{ request: '...', nonce: '...', account: 'primary' }
+```
+Returns: `{ "orders": [...], "pagination": { limit, offset, count } }`
+
+### Order History
+```
+POST /v1/prediction-markets/orders/history
+{ request: '...', nonce: '...', account: 'primary' }
 ```
 
-### Active Orders
+### Positions
 ```
-POST https://api.gemini.com/v1/orders   (private — requires HMAC)
-{ request: '/v1/orders', nonce: Date.now().toString() }
+POST /v1/prediction-markets/positions
+{ request: '...', nonce: '...', account: 'primary' }
+```
+Returns positions with full `contractMetadata` and current `prices`.
+
+### Balances (standard exchange endpoint)
+```
+POST /v1/balances
+{ request: '/v1/balances', nonce: '...', account: 'primary' }
 ```
 
 ---
 
-## PAPER vs LIVE Mode Guard
+## Public Data Endpoints (No Auth)
 
-**Critical safety pattern — must be in gemini_client.js:**
+### Fetch All Active Markets
+```
+GET https://www.gemini.com/prediction-markets?status=active&category=crypto&limit=60
+```
+Response: `{ data: [Event], pagination: { limit, offset, total } }`
+
+### Batch Tickers (fast price refresh)
+```
+GET https://www.gemini.com/prediction-markets/tickers/crypto
+```
+Returns: `[{ instrumentSymbol, bestBid, bestAsk, lastTradePrice, volume, openInterest }]`
+
+**IMPORTANT: Only use `bestBid`/`bestAsk` for trading decisions — NEVER `buy.yes`/`sell.yes` (indicative only)**
+
+---
+
+## LIVE TRADING SAFETY GUARDS (V14)
+
 ```javascript
-// In GeminiClient constructor
-this.mode = options.mode || 'paper';
-// NEVER flip to 'live' without:
-//   1. API key set in .env
-//   2. At least 500 paper trades with positive Sharpe
-//   3. Explicit confirmation in config
+// In paper_trading_engine.js enterPosition():
 
-placeOrder(params) {
-  if (this.mode !== 'live') {
-    return this.executePaperTrade(params);  // safe fallback always
-  }
-  return this._signedPost('/v1/order/new', params);
-}
+// 1. Only GEMI-* instruments route to live API
+const isRealInstrument = signal.marketId.startsWith('GEMI-');
+
+// 2. Minimum score 45 for live crypto
+if (signal.score < 45) return null;
+
+// 3. Reject if no Gemini orderbook data
+if (signal.gemini_bid == null && signal.gemini_ask == null) return null;
+
+// 4. Reject if edge < 1 cent vs reference
+if (edgeVsRef < 0.01) return null;
+
+// 5. Reject NO orders > $0.85 (deep ITM, too expensive)
+if (signal.direction === 'NO' && entryPrice > 0.85) return null;
+
+// 6. Paper exit must NOT run on live trades
+if (trade.mode === 'live') continue; // in monitorPositions()
+
+// 7. Mode detection: only GEMI-* get mode='live'
+mode: (this.gemini.mode === 'live' && isRealInstrument) ? 'live' : 'paper'
 ```
 
 ---
 
-## Instrument Symbol Format
+## Crypto Structural Matching (V14)
 
-Pattern observed in live data:
+Gemini crypto prediction contracts have NO Polymarket equivalents.
+They match Kalshi KXBTC/KXETH/KXSOL bracket series by asset + strike:
+
 ```
-{asset}usd-pred-{direction}-{strike}-{date}-{hour}
+Gemini:  GEMI-BTC2602190200-HI66500  →  "BTC > $66,500"
+Kalshi:  KXBTC-26FEB1921 brackets    →  P(BTC > $66,500) via computeSyntheticAbove()
+
+Matching logic:
+1. Parse asset from GEMI-{ASSET}... → BTC, ETH, SOL
+2. Parse strike from HI{STRIKE} → 66500 (or HI1D3 → 1.3 with D=decimal)
+3. Fetch Kalshi brackets via getBracketsByEvent(asset)
+4. Compute synthetic "above" probabilities via computeSyntheticAbove()
+5. Find nearest Kalshi strike via findSyntheticPrice(aboveProbs, strike)
+6. Clamp synthetic probabilities to [0, 1] (bracket sums can exceed 1.0!)
 ```
-Examples:
-```
-btcusd-pred-above-67500-20260218-12    (BTC > $67,500, Feb 18 12pm)
-ethusd-pred-above-3500-20260218-08     (ETH > $3,500, Feb 18 8am)
-solusd-pred-below-200-20260217-17      (SOL < $200, Feb 17 5pm)
-```
 
----
-
-## Rate Limits
-
-| Endpoint | Limit |
-|----------|-------|
-| Public market data | ~60 req/min (unconfirmed) |
-| Private (trading) | 600 req/min per API key |
-| WebSocket | No per-message limit |
-
-HTTP 429 response → back off 3s, then retry.
+**Known issues with synthetic prices:**
+- Deep-ITM brackets often have no liquidity → synthetic sums are unreliable
+- Brackets with zero bid/ask use lastPrice as mid → stale data inflates probability
+- Bracket sums for "above $62,500" when BTC = $67,000 often exceed 1.0
 
 ---
 
 ## Kalshi WebSocket (Real-Time Bracket Data)
 
-**Endpoint:** `wss://trading-api.kalshi.com/trade-api/ws/v2`
+**Endpoint:** `wss://api.elections.kalshi.com/trade-api/ws/v2`
+(NOT `trading-api.kalshi.com` — that returns 401 + redirect)
 
-**Auth:** `Authorization: Bearer <KALSHI_API_KEY>` header on WS upgrade
-
-**Subscribe to bracket markets:**
-```javascript
-ws.send(JSON.stringify({
-  id: 1,                    // incrementing request ID
-  cmd: 'subscribe',
-  params: {
-    channels: ['ticker_v2'],
-    market_tickers: ['KXBTC-26FEB1712-B67000', 'KXBTC-26FEB1712-B67500']
-  }
-}));
-```
-
-**Incoming ticker_v2 message:**
-```json
-{
-  "type": "ticker",
-  "market_ticker": "KXBTC-26FEB1712-B67500",
-  "yes_bid": 59,      // in CENTS (divide by 100)
-  "yes_ask": 63,
-  "last_price": 61,
-  "volume": 1250,
-  "open_interest": 3400
-}
-```
-**Remember: Kalshi prices are in CENTS (0-100), divide by 100.**
+**Auth:** RSA-PSS SHA256 signing (same as REST)
 
 **Crypto series tickers:**
 - BTC: `KXBTC`
 - ETH: `KXETH`
 - SOL: `KXSOL`
 
-**Event ticker format:** `KXBTC-26FEB1712` (series-YYMMDDHR)
+**Event ticker format:** `KXBTC-26FEB1917` (series-DDMMMYYHH)
+**Individual bracket:** `KXBTC-26FEB1917-B67500` (B = between bracket, floor = 67500)
 
-**Individual bracket:** `KXBTC-26FEB1712-B67500` (B = between bracket, floor = 67500)
-
----
-
-## Strategy Reminder: Gemini as Liquidity Provider
-
-Since Gemini is thin, our ideal execution pattern is:
-
-1. **Detect mispricing**: FairValue (from Kalshi/Poly) says contract is worth 0.62
-2. **Gemini ask**: 0.65 (too expensive to buy)
-3. **Post bid**: Place limit order at 0.61 (`maker-or-cancel`)
-   → Our bid is the new best bid on Gemini, providing liquidity
-4. **If Kalshi/Poly price drops to 0.59**: Tighten or cancel
-5. **If filled at 0.61**: We own a 0.62-fair-value contract for 0.61 — instant 1¢ edge
-
-**This is market-making + statistical arb**, not pure price-taking. The key metric is:
-```
-edge = fairValue - limit_price - fee_per_side
-Profitable when edge > fee_per_side (0.01% maker)
-```
+**Prices in CENTS (0-100), divide by 100.**
 
 ---
 
-## DEPLOYMENT CHECKLIST (before going live)
+## DEPLOYMENT STATUS
 
-- [ ] 500+ paper trades completed with positive Sharpe (>2.0)
-- [ ] Max drawdown < 10% in paper mode over 30 days
-- [ ] GEMINI_API_KEY set in `.env` (never commit!)
-- [ ] GEMINI_API_SECRET set in `.env`
-- [ ] Rate limiting confirmed working (logs show < 600 req/min)
-- [ ] Discord alerts configured and tested
-- [ ] Starting capital ≤ $500 (as per bot design)
-- [ ] mode manually flipped to 'live' in instantiation
-- [ ] Kill switch tested (POST /api/bot/stop works)
+**Real balance:** ~$1.10 USD (after two bad trades)
+**Paper balance:** $549.75 (17W/0L)
+**Two live trades executed:**
+1. GEMI-BTC2602190200-HI66500 NO @ $0.99 → sold at $0.05 = -$4.70 (bad: deep ITM NO)
+2. GEMI-BTC2602230800-HI67500 NO @ $0.59 → open (sell order pending at $0.46)
+
+**Lesson:** The first real money trade lost $4.70 because:
+- Kalshi synthetic said 71% probability, Gemini showed 95%
+- Bot bought NO at $0.99 (= 1 - 0.01 bestBid)
+- Paper exit immediately simulated sale at $0.01, creating $489 phantom profit
+- Real position was stuck at $0.99 with NO worth only $0.05

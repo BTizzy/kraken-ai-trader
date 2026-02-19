@@ -25,9 +25,11 @@ kraken-ai-trader/
 │   ├── kalshi_client.js        ← Kalshi REST + WebSocket bracket data
 │   ├── kalshi_ws.js            ← Kalshi real-time WebSocket subscriber
 │   ├── polymarket_client.js    ← Polymarket Gamma REST + CLOB
-│   ├── signal_detector.js      ← 5-component scoring + FV + momentum + arb
+│   ├── signal_detector.js      ← 6-component scoring + FV + momentum + arb
 │   ├── fair_value_engine.js    ← Black-Scholes + Kalshi IV + ensemble FV
 │   ├── market_matcher.js       ← Cross-platform market matching
+│   ├── odds_api_client.js      ← The Odds API: sportsbook consensus odds (V15)
+│   ├── metaculus_client.js     ← Metaculus: calibrated crowd predictions (V15)
 │   ├── paper_trading_engine.js ← Kelly sizing + TP/SL/time-decay exits
 │   ├── prediction_db.js        ← SQLite schema + queries (WAL, FK enforced)
 │   ├── alerts.js               ← Discord webhook alerts
@@ -78,22 +80,79 @@ kraken-ai-trader/
 ## State Model (Memorize This)
 
 ```
-EXTERNAL DATA (read-only)          SIGNAL PIPELINE (2s cycle)
-─────────────────────────          ───────────────────────────────────────
-Kraken REST → spotPriceCache        Strategy 1: CompositeScore
-Polymarket  → priceIndex            Strategy 2: FairValue BS + Kalshi IV
-Kalshi WS   → bracketCache          Strategy 3: Event-Driven Momentum
-Gemini REAL → contracts.Map         Strategy 4: Cross-Platform Synthetic Arb
-              + OrderbookDepth                   ↓
-                                    PaperTradingEngine.tick()
-                                      ├── canEnterPosition (Kelly + depth cap)
-                                      └── monitorPositions
-                                            └── time-decay stop (final 20%)
-                                               ↓
-                                    SQLite (FK ON, WAL)
-                                    WebSocket → Dashboard
-                                    Discord → Alerts
+EXTERNAL DATA (read-only)              SIGNAL PIPELINE (2s cycle)
+──────────────────────────             ────────────────────────────────
+Kraken REST → spotPriceCache           per matched market {poly, kalshi, gemini}:
+  BTC/ETH/SOL spot (every 15s)           │
+                                         ├─ Strategy 1: CompositeScore (5-component)
+Polymarket Gamma REST → priceIndex       │    velocity + spread + consensus + staleness + winRate
+  refreshPrices() every 30s              │    → score 0-100, direction = Gemini vs Ref spread
+  getCachedPrice() per market/cycle      │
+                                         ├─ Strategy 2: FairValue (BS + Kalshi IV + Ensemble)
+Kalshi WS → bracketCache (live ticks)    │    → netEdge, kellyFraction, confidence
+Kalshi REST → orderbook + brackets       │
+  RSA-PSS auth (same as WS)             ├─ Strategy 3: Event-Driven Momentum
+  getBestPrices() checks bracketCache    │    spot moves fast, contract hasn't repriced
+  first, falls back to REST              │    → direction + contractLag
+                                         ├─ Strategy 4: Cross-Platform Synthetic Arb
+Gemini Predictions → contracts.Map       │    Gemini YES vs Kalshi bracket implied prob
+  fetchMarkets() every 10s               │    → BUY_YES / BUY_NO + edge
+  fetchBatchTickers() every 2s           │
+  getOrderbookDepth() per market         ↓
+                                      Merge: FV > Composite, Momentum boosts, Arb adds
+                                         ↓
+              ┌──────────────────────────────────────────────┐
+              │  PaperTradingEngine.tick(actionable)          │
+              │    ├─ canEnterPosition()                      │
+              │    │    ├─ max 5 concurrent, max 2/category   │
+              │    │    ├─ daily loss limit check              │
+              │    │    ├─ 80% initial balance drawdown kill   │
+              │    │    └─ no duplicate market                 │
+              │    ├─ calculatePositionSize()                  │
+              │    │    ├─ Kelly with edge + score              │
+              │    │    ├─ max $100, depth cap 10% ask_depth   │
+              │    │    └─ kellyFraction from FV if available   │
+              │    ├─ enterPosition()                          │
+              │    │    ├─ GEMI-* → placeOrder() (live API)       │
+              │    │    ├─ gemini_sim_* → executePaperTrade       │
+              │    │    ├─ TP = max(target, entry + 1.5¢)      │
+              │    │    └─ SL = mid - 3¢ (from mid, not fill)  │
+              │    ├─ monitorPositions()                       │
+              │    │    ├─ getPaperMidPrice → stop-loss check   │
+              │    │    ├─ getPaperExitPrice → TP check + PnL  │
+              │    │    ├─ time-decay stop (final 20% hold)   │
+              │    │    └─ time_exit at max_hold_time (600s)   │
+              │    └─ runLearningCycle() (every 30s)           │
+              │         ├─ sliding window: last 20 trades      │
+              │         ├─ win>65% → loosen threshold 5%       │
+              │         ├─ win<50% → tighten threshold 5%      │
+              │         ├─ starvation: 5x tight → reset to 45  │
+              │         └─ cap: threshold ∈ [30, 65]           │
+              └──────────────────────────────────────────────┘
+                                         ↓
+              SQLite (FK ON, WAL, better-sqlite3)
+              WebSocket → Dashboard (port 3003)
+              Discord → Alerts (optional)
 ```
+
+**Execution model (paper):**
+- Entry: fill at `market.last + 0.001` (maker-or-cancel with 0.01% fee)
+- Exit: fill at `market.last - 0.001` (same model, symmetric)
+- Round-trip cost: ~0.2¢ + any convergence overhead
+- Direction: `YES` when Gemini is below reference, `NO` when above (edge > 1.5¢)
+
+**Execution model (live):**
+- Only `GEMI-*` instrument symbols route to Gemini API; `gemini_sim_*` IDs stay paper
+- Entry: `POST /v1/prediction-markets/order` with `orderType: 'limit'`, `timeInForce: 'good-til-cancel'`
+- Exit: same endpoint with `side: 'sell'` (NOT YET IMPLEMENTED — exits still use paper simulation)
+- Auth: HMAC-SHA384 with seconds-based nonce, `account: 'primary'`
+- Order response normalized to match `executePaperTrade` format for engine compatibility
+
+**Data flow summary:**
+1. Match cycle finds cross-platform pairs (Gemini ↔ Polymarket ↔ Kalshi)
+2. Every 2s: fetch prices from all platforms → feed signal detector
+3. Signal detector scores and determines direction → actionable signals
+4. Paper trading engine enters/exits positions → SQLite + dashboard
 
 ---
 
@@ -120,11 +179,27 @@ Gemini REAL → contracts.Map         Strategy 4: Cross-Platform Synthetic Arb
 # Start (paper mode default)
 node server/prediction-proxy.js
 
+# Start in live mode (requires GEMINI_API_KEY + GEMINI_API_SECRET)
+GEMINI_MODE=live node server/prediction-proxy.js
+
+# Start in sandbox mode (requires SANDBOX_GEMINI_API_KEY + SANDBOX_GEMINI_API_SECRET)
+# NOTE: Sandbox has no prediction market symbols — only useful for spot auth testing
+GEMINI_MODE=sandbox node server/prediction-proxy.js
+
 # Dashboard
 open http://localhost:3003
 
 # Health check
 curl http://localhost:3003/api/health
+
+# Bot status (includes mode, Sharpe, circuit breaker)
+curl http://localhost:3003/api/bot/status
+
+# Emergency stop (closes all positions)
+curl -X POST http://localhost:3003/api/bot/emergency-stop
+
+# Close single position
+curl -X POST http://localhost:3003/api/bot/close-position/123
 
 # Run tests
 node tests/test_fair_value_engine.js
@@ -139,10 +214,15 @@ curl -X POST http://localhost:3003/api/markets/rematch
 ## .env Required Variables
 
 ```
-KALSHI_API_KEY=         # For Kalshi auth (public endpoints work without)
-GEMINI_API_KEY=         # For live trading (leave blank for paper)
-GEMINI_API_SECRET=      # For HMAC signing (leave blank for paper)
-DISCORD_WEBHOOK_URL=    # For alerts (optional but recommended)
+GEMINI_MODE=paper              # 'paper' | 'live' | 'sandbox'
+GEMINI_API_KEY=                # For live trading (HMAC auth)
+GEMINI_API_SECRET=             # For HMAC signing
+SANDBOX_GEMINI_API_KEY=        # For sandbox mode (api.sandbox.gemini.com)
+SANDBOX_GEMINI_API_SECRET=     # Sandbox HMAC signing
+KALSHI_API_KEY=                # Kalshi member ID (for WS + REST auth)
+KALSHI_PRIVATE_KEY_PATH=       # Path to RSA private key PEM (for RSA-PSS signing)
+DISCORD_WEBHOOK_URL=           # For alerts (optional)
+PREDICTION_PORT=3003           # Dashboard/API port (default 3003)
 ```
 
 ---
@@ -157,36 +237,179 @@ DISCORD_WEBHOOK_URL=    # For alerts (optional but recommended)
 
 ---
 
-## Current Version: V12
+## Current Version: V16
 
-**Merged in V12:**
-- `lib/kalshi_ws.js`: **Complete rewrite** — RSA-PSS SHA256 signing (Kalshi requires `KALSHI-ACCESS-KEY` + `KALSHI-ACCESS-TIMESTAMP` + `KALSHI-ACCESS-SIGNATURE` headers, NOT Bearer tokens). Loads private key from PEM file (`KALSHI_PRIVATE_KEY_PATH`) or inline env var (`KALSHI_PRIVATE_KEY`). WS URL corrected to `wss://api.elections.kalshi.com/trade-api/ws/v2`. Fixed `stopped` flag bug: `connect()` now resets `this.stopped = false` so bot stop→start cycle reconnects properly.
-- `server/prediction-proxy.js`: Gemini polling sped up (`realFetchInterval` 15s→10s, `tickerFetchInterval` 5s→2s, `cacheTTL` 3s→2s, `realCacheTTL` 10s→2s, `realApiInterval` 2s→1s). Added `recordApiResult()` calls for Kraken (in `fetchSpotPrices`), Kalshi (in market loop), and Gemini (after `getMarketState`) so all 4 API health dots work. Added `ws_clients: wss.clients.size` to `/api/health` response. Added `emergencyExitAll`, `validateStartup`, mode+Sharpe API endpoints.
-- `dashboard/index.html`: V12 dashboard HTML — API health dots (Polymarket/Kalshi/Kraken/Gemini), mode badge (PAPER/LIVE), emergency kill switch button, Sharpe ratio metric, 8-column metrics row.
-- `dashboard/prediction_charts.js`: WSS protocol auto-detection (`wss://` when page is HTTPS, `ws://` when HTTP) to fix Mixed Content blocking on GitHub Codespaces. Added try/catch fallback for WS construction. Added `ws_clients` display in health panel.
-- `dashboard/styles_prediction.css`: All V12 styles — emergency button pulse animation, mode badge, API health dots, health panel, close position button, circuit breaker, trade reason badges. `metrics-row` grid expanded from 6→8 columns.
-- `lib/gemini_client.js`: Updated comments to reflect new polling intervals.
-- `.gitignore`: Added `*.pem` and `*private_key*` to protect RSA key files from accidental commit.
+**Merged in V16:**
+- **Reference sources wired into signal pipeline**: OddsAPI and Metaculus probabilities are now looked up per-market during every 2-second price update cycle and fed into both the composite scoring and fair value ensemble. Previously these were fetched/cached but never consumed by signals.
+- `server/prediction-proxy.js`: Per-market lookups of `metaculusClient.getProbability()` and `oddsClient.findMatchingOdds()` in `updatePrices()`. Results passed via `marketStates` to signal detector. New **Strategy 5: Multi-source ensemble FV for non-crypto markets** — computes ensemble fair value from Polymarket + Kalshi + Metaculus + OddsAPI for politics/sports/finance/tech/culture markets and generates actionable signals when Gemini deviates by > 3c. Bot status endpoint now includes `odds_api` and `metaculus` stats. Periodic logging shows reference source counts.
+- `lib/signal_detector.js`: `determineDirection()` now accepts `additionalRefs` parameter — enhances reference price with Metaculus + OddsAPI probabilities for more accurate direction determination. `processMarkets()` extracts additional refs from state and computes enhanced reference price. `generateFairValueSignals()` accepts `extrasLookup` callback for per-contract reference data.
+- `lib/fair_value_engine.js`: `generateSignal()` now accepts `extras` parameter and passes to `ensembleFairValue()`. `analyzeAll()` accepts `extrasLookup` callback that provides per-contract polymarket/metaculus/oddsApi/category data. `ensembleFairValue()` uses category-specific weights only when category is explicitly provided (falls back to instance `modelWeights` otherwise, fixing test regression).
+- `lib/fair_value_engine.js`: `getActionableSignals()` passes through `extrasLookup`.
 
-**V12 Key Lessons:**
-- **Kalshi auth**: Bearer tokens don't work. Must RSA-PSS sign `timestamp + 'GET' + '/trade-api/ws/v2'` and send 3 headers. Private key must be a full PKCS#8 PEM file (1679 bytes), NOT truncated.
-- **WSS on HTTPS**: Always detect protocol: `window.location.protocol === 'https:' ? 'wss:' : 'ws:'` — hardcoded `ws://` is blocked by browsers when page is served over HTTPS.
-- **KalshiWS lifecycle**: `disconnect()` sets `stopped = true`. Always reset it at the start of `connect()` or bot restart won't reconnect.
-- **API health dots**: `recordApiResult(source, success)` must be called after every platform fetch, not just Polymarket.
-
-**V12 .env additions:**
+**V16 Data Flow (reference sources):**
 ```
-KALSHI_PRIVATE_KEY_PATH=./kalshi_private_key.pem   # Path to RSA private key PEM file
-# OR
-KALSHI_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----
+Match cycle (every 5 min):
+  oddsClient.getConsensusOdds() → matchedOdds cache (40+ sportsbooks)
+  metaculusClient.getActiveQuestions() → questions cache (50 questions)
+
+Price update cycle (every 2s):
+  per matched market:
+    metaculusClient.getProbability(title) → metaculusProb (in-memory lookup)
+    oddsClient.findMatchingOdds(title) → oddsApiProb (in-memory lookup)
+    → marketState { ...polymarket, kalshi, metaculus, oddsApi }
+
+  Strategy 1 (Composite): uses enhanced referencePrice (poly+kalshi+metaculus+oddsApi average)
+  Strategy 2 (BS+Kalshi FV): now receives extras { polymarket, oddsApi, metaculus, category }
+  Strategy 5 (Multi-source FV): for non-crypto — ensembleFairValue with category weights
 ```
 
-**V13 candidates:**
-- Live mode E2E test harness (test HMAC auth against Gemini sandbox/testnet if available)
+**V16 Key Lessons:**
+- **Data fetched but not consumed is zero value**: V15 added OddsAPI and Metaculus but only cached the data during the match cycle. It was never looked up per-market during the 2s price cycle, so it had zero impact on trading decisions. V16 wires it through.
+- **Category-aware ensemble weights transform signal quality for non-crypto**: Politics markets now weight Polymarket 45% + Kalshi 30% + Metaculus 25% instead of ignoring all non-BS/Kalshi sources. Sports markets use OddsAPI 40% + Polymarket 35% + Kalshi 25%.
+- **Non-crypto markets need their own FV strategy**: Strategy 2 (Black-Scholes) only applies to crypto (requires spot/strike/expiry). Strategy 5 fills this gap by computing ensemble FV from available reference sources for politics/sports/finance markets.
+- **ensembleFairValue default behavior matters**: Defaulting to 'crypto' category weights when no category was specified broke existing tests expecting instance-level modelWeights. Fix: use category weights only when explicitly provided.
+
+**V17 candidates:**
+- Walk-forward backtest on 500+ paper trades across all categories
+- Implement market making mode (post both sides, capture spread)
+- Add live order status polling (check if fill/cancel occurred between cycles)
+- Semantic similarity matching for Metaculus questions (beyond keyword overlap)
+- Add Polymarket CLOB for real-time order book depth (currently uses Gamma API indicative prices only)
+
+---
+
+## Previous Version: V15
+
+**Merged in V15:**
+- **Category Expansion**: Bot now fetches ALL 8 Gemini Prediction categories (crypto, sports, politics, elections, culture, tech, finance, other) instead of just crypto. This was the single biggest fix — 7/8 categories were being ignored while having much better cross-platform matching potential with Polymarket/Kalshi.
+- `lib/gemini_client.js`: `refreshRealData()` loops over all configured categories for both `fetchMarkets()` and `fetchBatchTickers()` (was hardcoded to 'crypto' only).
+- `lib/paper_trading_engine.js`: **Live exit orders** — `monitorPositions()` now routes live trade exits through `POST /v1/prediction-markets/order` with `side: 'sell'` instead of skipping them. Retries failed exits on next cycle. **Spread-aware entry** — rejects trades where edge < max(stopLoss, geminiSpread * 1.2). **Balance check** — rejects live orders if wallet < $7. **Rate limiting** — max 3 live orders per cycle. **Portfolio risk** — max 3 positions per category, max 2 in same direction per category. **Learning window** increased from 20 to 50 trades.
+- `lib/signal_detector.js`: **6-component scoring** (was 5). Added Liquidity Score (15 pts): two-sided book (5pts), tight spread <5c (5pts), adequate depth >$100 (5pts). Redistributed from velocity (20→15), spread (20→15), win_rate (20→15).
+- `lib/fair_value_engine.js`: **Category-specific ensemble weights** — crypto uses 30% BS + 70% Kalshi; politics uses 45% Polymarket + 30% Kalshi + 25% Metaculus; sports uses 40% OddsAPI + 35% Polymarket + 25% Kalshi. `ensembleFairValue()` accepts `extras: { polymarket, oddsApi, metaculus, category }`.
+- `lib/odds_api_client.js`: NEW — The Odds API client. Fetches real-time odds from 40+ sportsbooks, converts American/decimal odds to implied probabilities, provides consensus reference prices for sports prediction markets. Free tier: 500 requests/month.
+- `lib/metaculus_client.js`: NEW — Metaculus API client. Fetches calibrated community predictions for politics, economics, science, tech events. Free API, no auth needed. Question matching via keyword overlap.
+- `lib/kalshi_client.js`: `computeSyntheticAbove()` now filters illiquid brackets (spread > 0.50 or volume = 0) before summing, and clamps results to [0, 1]. This prevents garbage synthetic probabilities from thinly-traded brackets.
+- `server/prediction-proxy.js`: Requires and instantiates OddsApiClient + MetaculusClient. Fetches reference data (sports odds, Metaculus questions) during match cycle (every 5 min). All 7 non-crypto Gemini categories passed to GeminiClient.
+- `tests/test_prediction_bot.js`: `monitorPositions` test updated to async. Entry test edge widened to pass spread-aware threshold.
+
+**V15 .env additions:**
+```
+ODDS_API_KEY=               # Optional: The Odds API key for sports reference prices (free tier: 500 req/mo)
+```
+
+**V15 Key Lessons:**
+- **Category blindness was the root cause of poor matching**: Gemini has 8 categories but code only fetched 'crypto'. Political/economic events have standardized titles that fuzzy-match well across platforms with deep Poly/Kalshi liquidity.
+- **Spread-aware entry prevents underwater trades**: Actual Gemini spreads are 4-6c. With 3c min edge, most entries were immediately unprofitable. Edge must exceed the actual spread.
+- **Sportsbook odds are the deepest reference pool**: For sports prediction markets, 40+ sportsbooks provide consensus probabilities far more liquid than any prediction platform.
+- **Metaculus calibration is free alpha**: Community predictions have excellent track records on political/economic/science events. Even though Metaculus is not a trading venue, the probability estimates are a strong fair value signal.
+- **Illiquid Kalshi brackets corrupt syntheticprobabilities**: Brackets with 0 volume or 50c+ spreads were being summed, producing probabilities >1.0. Filtering before summing is essential.
+- **Live exits require real API calls**: V14 blocked paper exits for live trades but didn't implement real exits. V15 routes live exits through `placeOrder({side: 'sell'})` with retry on failure.
+- **Portfolio correlation risk**: 5 concurrent BTC positions all going YES is functionally one huge bet. Category + direction limits prevent correlated concentration.
+
+---
+
+## Previous Version: V14
+
+**Merged in V14:**
+- `lib/gemini_client.js`: **Live trading via Prediction Markets API** — `placeOrder()` routes to `POST /v1/prediction-markets/order` (NOT `/v1/order/new`). Added `cancelOrder()`, `getOpenOrders()`, `getPositions()`, `getOrderHistory()`, `getBalances()`. HMAC-SHA384 nonce fixed to seconds-based with strict increment tracking. `account: 'primary'` required on all private endpoints. Sandbox mode: `api.sandbox.gemini.com` with separate `SANDBOX_GEMINI_API_KEY`/`SANDBOX_GEMINI_API_SECRET`.
+- `lib/paper_trading_engine.js`: `enterPosition()` and `tick()` made async. Live order routing: `GEMI-*` instruments → `placeOrder()` (real API), `gemini_sim_*` → `executePaperTrade()` (paper). Trade mode recorded as `'live'` or `'paper'` in DB. Paper exit `monitorPositions()` skips live trades (mode='live'). Live entry safety guards: minimum score 45, reject NO > $0.85, reject edge < 1¢, reject if Gemini bid/ask undefined. Mode detection: only `GEMI-*` instruments get `mode='live'`, all `gemini_sim_*` trades are `mode='paper'` even when bot is in live mode.
+- `lib/market_matcher.js`: Added `matchCryptoContracts()` — structural matching of GEMI-* crypto contracts to Kalshi KXBTC/KXETH/KXSOL bracket series by asset + strike price. Parses `HI66500` → $66,500, matches to nearest Kalshi strike via `findSyntheticPrice()`. Synthetic probabilities clamped to [0, 1].
+- `server/prediction-proxy.js`: `GEMINI_MODE` env var (`paper`|`live`|`sandbox`). `tradingEngine.tick()` awaited. Crypto match metadata preserved in `cryptoMatchMeta` Map (not stored in DB). Kalshi price fetch handles crypto matches via synthetic probabilities. Startup validation checks mode-specific env vars. Mode + Sharpe displayed in bot status.
+- `tests/test_prediction_bot.js`: Async test framework — `test()` detects promises and queues them. `Promise.all()` at end. `enterPosition` test uses `async/await`.
+
+**V14 Gemini Prediction Markets API Reference:**
+```
+Base URL: https://api.gemini.com (prod), https://api.sandbox.gemini.com (sandbox — no prediction symbols)
+
+Instrument symbols: GEMI-BTC2602190200-HI66250 (NOT btcusd-pred-*)
+
+POST /v1/prediction-markets/order          — Place limit order
+  Fields: symbol, orderType ("limit"), side, quantity, price, outcome ("yes"/"no"), timeInForce
+  Returns: { orderId, status, avgExecutionPrice, filledQuantity, remainingQuantity }
+
+POST /v1/prediction-markets/order/cancel   — Cancel order
+  Fields: orderId
+  Returns: { result: "ok" }
+
+POST /v1/prediction-markets/orders/active  — List open orders
+  Returns: { orders: [...] }
+
+POST /v1/prediction-markets/orders/history — Filled/cancelled history
+  Returns: { orders: [...] }
+
+POST /v1/prediction-markets/positions      — Current positions
+  Returns: { positions: [...] }
+
+Auth (all private endpoints):
+  payload = base64(JSON({ request, nonce, account: 'primary', ...fields }))
+  signature = HMAC-SHA384(payload, API_SECRET)
+  Headers: X-GEMINI-APIKEY, X-GEMINI-PAYLOAD, X-GEMINI-SIGNATURE
+  Nonce: seconds since epoch (NOT milliseconds), must be within ±30s of server time
+```
+
+**V14 Key Lessons:**
+- **Prediction markets use separate API endpoints** — `/v1/prediction-markets/*`, NOT `/v1/order/new`. Standard exchange endpoints reject `GEMI-*` symbols with `InvalidSymbol`.
+- **Nonce must be in seconds** — `Date.now()` returns ms, Gemini expects seconds. Use `Math.floor(Date.now() / 1000)`.
+- **Nonce must be strictly increasing** — Track `_lastNonce` and increment when multiple requests in same second.
+- **`account: 'primary'`** — Required in all signed POST payloads or you get auth failures.
+- **Sandbox has no prediction symbols** — Cannot test prediction orders on sandbox.
+- **Market ID routing** — Only `GEMI-*` IDs are real instruments. `gemini_sim_*` MUST stay paper.
+- **Paper exits on live trades cause phantom profit** — monitorPositions() must skip `mode='live'` trades. A live order at $0.99 NO followed by a paper exit at $0.01 generated a phantom $489 profit that corrupted the wallet. Fixed by checking `trade.mode === 'live'` in monitorPositions().
+- **NO direction entry at $0.99 is catastrophic** — For deep-ITM contracts, `1 - bestBid` ≈ $0.99. Safety guards: reject NO > $0.85, reject edge < 1¢, require score ≥ 45, require Gemini bid/ask defined.
+- **Kalshi synthetic probabilities can exceed 1.0** — `computeSyntheticAbove()` sums bracket mid prices from thinly-traded brackets. Must clamp to [0, 1].
+- **Crypto markets need structural matching** — Gemini "BTC > $66,500" has no Polymarket equivalent. Must match by asset + strike to Kalshi KXBTC brackets using `computeSyntheticAbove()`. Title-based fuzzy matching doesn't work.
+- **InsufficientFunds cascade** — With only $5.99 real balance and 30+ crypto signals, the bot sends dozens of orders that all fail. Need minimum live balance check.
+- **Live exits not yet implemented** — Entry orders go to the real API, but exits still use paper simulation (which are now blocked for live trades). V15 must add real sell orders.
+
+**V14 Findings — Crypto Signal Quality:**
+- 153+ GEMI-* ↔ Kalshi pairs are now matched per cycle (BTC, ETH, SOL, XRP, ZEC)
+- Many signals have `Gemini=undefined` because the contract has no bestAsk (one-sided book). These are filtered out by the "Gemini bid/ask undefined" guard.
+- Kalshi synthetic bid sums for deep-ITM contracts often sum > 1.0 → clamped to 1.0
+- Real tradeable opportunities are rare: most GEMI-* crypto contracts have wide spreads (0.10-0.40) making arb entry expensive
+- Paper trading on simulated markets continues to work well (17W/0L) alongside live crypto matching
+
+**V14 .env additions:**
+```
+GEMINI_MODE=live               # NEW: controls paper/live/sandbox mode
+SANDBOX_GEMINI_API_KEY=        # NEW: sandbox auth
+SANDBOX_GEMINI_API_SECRET=     # NEW: sandbox auth
+```
+
+**V15 candidates:**
+- Implement live exit orders (sell via `/v1/prediction-markets/order`) for `mode='live'` positions
+- Add minimum live USD balance check before sending orders ($5 minimum)
+- Improve Kalshi synthetic accuracy: filter out illiquid brackets (spread > 0.5 or volume = 0) before summing
+- Use Gemini `buy.no`/`sell.no` prices directly instead of computing `1 - bestBid` for NO entries
+- Rate-limit live order attempts (max 3 per cycle, avoid InsufficientFunds spam)
 - Walk-forward backtest on paper trade log once 500+ trades accumulated
-- Gemini order book WebSocket (if Gemini opens WS for prediction markets)
 - Auto-flip to live mode when paper Sharpe > 2.0 and 500+ trades
-- Telegram alerts (replacing Discord)
+
+---
+
+## Previous Version: V13
+
+**Merged in V13:**
+- `lib/kalshi_client.js`: **RSA-PSS auth for REST** — replaced broken `Bearer` token header with proper RSA-PSS SHA256 signing (same scheme as KalshiWS). Loads private key from `KALSHI_PRIVATE_KEY_PATH` or `KALSHI_PRIVATE_KEY` env var. Signed message = `timestamp_ms + METHOD + /trade-api/v2/path` (query string stripped, per Kalshi Python SDK). `getBestPrices()` now checks `bracketCache` (WS live ticks, < 30s old) first, falls back to REST orderbook.
+- `lib/kalshi_ws.js`: WS hostname: `wss://api.elections.kalshi.com/trade-api/ws/v2`.
+- `lib/signal_detector.js`: Direction logic rewritten — PRIMARY signal is Gemini-vs-reference spread (arb direction), not price level. Old fallback `refPrice < 0.45 → NO` removed (caused 100% loss rate). Edge threshold: 1.5¢. Default `feePerSide` corrected `0.0006` → `0.0001`.
+- `lib/fair_value_engine.js`: Default `feePerSide` corrected `0.0006` → `0.0001`.
+- `lib/gemini_client.js`: Execution model changed from market-taker (ask + slippage) to maker-or-cancel (mid + 0.1¢ fee). `executePaperTrade` and `getPaperExitPrice` both use `market.last` as fill base. Round-trip cost: ~0.2¢ (was ~5¢). HTTP 429 retry with exponential backoff (max 3 retries, was infinite recursion). `updatePaperMarket` spread persisted across cycles (was re-randomized each call, causing phantom signals).
+- `lib/paper_trading_engine.js`: Adaptive learning uses sliding window (`getRecentTradeStats(20)`) instead of daily PnL. Cap lowered 90→65, tightening slowed 10%→5%, starvation detection after 5 consecutive tightenings resets to 45. Min profit target: 1.5¢.
+- `lib/prediction_db.js`: Added `getRecentTradeStats(n)` — last-N trades sliding window for adaptive learning.
+- `server/prediction-proxy.js`: `signalDetector.loadParameters()` called after each `tradingEngine.tick()` to sync adaptive threshold. Cross-platform arb direction normalized: `BUY_GEMINI_YES`/`SYNTHETIC_ARB` → `YES`, `SELL_GEMINI_YES` → `NO` (paper trading engine expects YES/NO).
+- `AGENTS.md`: Complete state model rewrite with execution details.
+
+**V13 Key Lessons:**
+- **Direction logic**: The arb direction is `Gemini vs reference (Poly/Kalshi) spread`. When Gemini < reference → YES (buy underpriced). When Gemini > reference → NO (sell overpriced). NEVER use absolute price level for direction.
+- **Execution model**: Maker-or-cancel fills at mid, not at ask/bid. Paper model must match this or systematic losses result.
+- **Adaptive threshold starvation**: If threshold tightens to 65 and max score is ~50, no trades enter and the window never refreshes. Need starvation detection + auto-reset.
+- **Kalshi REST auth**: Was broken since V1. Now uses same RSA-PSS scheme as KalshiWS. Hostname: `api.elections.kalshi.com` (NOT `trading-api.kalshi.com` — that returns 401 + redirect). Signed message: `timestamp_ms + METHOD + full_path` (full path includes `/trade-api/v2` prefix, query string EXCLUDED per official Kalshi Python SDK).
+- **bracketCache**: KalshiWS live ticks were being collected but never consumed. Now `getBestPrices()` in `kalshi_client.js` checks bracketCache first.
+- **Arb direction mapping**: `detectCrossPlatformArb` returns `BUY_GEMINI_YES`/`SELL_GEMINI_YES`/`SYNTHETIC_ARB` but PaperTradingEngine requires `YES`/`NO`. Must normalize before injecting into actionable signals.
+- **HTTP 429**: Gemini `_fetch` and `_signedPost` had unbounded recursion on 429. Fixed with retry counter + exponential backoff (3s, 6s, 12s, then throw).
+- **feePerSide defaults**: Both `signal_detector.js` and `fair_value_engine.js` defaulted to `0.0006` (6× too high). Fixed to `0.0001` to match maker-or-cancel fee model.
+
+**V13 .env** (no changes from V12)
 
 ---
 

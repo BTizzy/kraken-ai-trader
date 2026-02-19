@@ -312,11 +312,11 @@ test('Enter position', async () => {
         category: 'crypto',
         score: 75,
         direction: 'YES',
-        gemini_bid: 0.48,
-        gemini_ask: 0.52,
+        gemini_bid: 0.49,
+        gemini_ask: 0.51,
         gemini_volume: 5000,
-        referencePrice: 0.60,
-        targetPrice: 0.60
+        referencePrice: 0.65,
+        targetPrice: 0.65
     };
     const entry = await engine.enterPosition(signal);
     assert(entry !== null, 'Should enter position');

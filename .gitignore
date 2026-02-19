@@ -32,4 +32,7 @@ localStorage.json
 # Node modules (use package-lock.json to restore)
 node_modules/
 
-# SQLite database (too large, regenerate with migrate script)
+# SQLite databases (too large, regenerate on startup via migrateSchema)
+data/prediction_markets.db
+data/prediction_markets.db-wal
+data/prediction_markets.db-shm

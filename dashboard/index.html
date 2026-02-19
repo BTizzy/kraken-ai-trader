@@ -107,6 +107,7 @@
                         <thead>
                             <tr>
                                 <th>Market</th>
+                                <th>Mode</th>
                                 <th>Dir</th>
                                 <th>Entry</th>
                                 <th>Current</th>
@@ -118,7 +119,7 @@
                             </tr>
                         </thead>
                         <tbody id="positions-body">
-                            <tr><td colspan="9" class="empty-state">No open positions</td></tr>
+                            <tr><td colspan="10" class="empty-state">No open positions</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -225,13 +226,21 @@
             <div class="panel log-panel">
                 <div class="panel-header">
                     <h2>Trade Log</h2>
-                    <button class="btn btn-small" onclick="loadRecentTrades()">Refresh</button>
+                    <div class="trade-filter-controls">
+                        <select id="mode-filter" onchange="loadRecentTrades()">
+                            <option value="">All Trades</option>
+                            <option value="paper">Paper Only</option>
+                            <option value="live">Live Only</option>
+                        </select>
+                        <button class="btn btn-small" onclick="loadRecentTrades()">Refresh</button>
+                    </div>
                 </div>
                 <div class="table-container">
                     <table id="trades-table">
                         <thead>
                             <tr>
                                 <th>Time</th>
+                                <th>Mode</th>
                                 <th>Market</th>
                                 <th>Dir</th>
                                 <th>Entry</th>
@@ -243,7 +252,7 @@
                             </tr>
                         </thead>
                         <tbody id="trades-body">
-                            <tr><td colspan="9" class="empty-state">No trades yet</td></tr>
+                            <tr><td colspan="10" class="empty-state">No trades yet</td></tr>
                         </tbody>
                     </table>
                 </div>

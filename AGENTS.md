@@ -104,30 +104,38 @@ Gemini Predictions → contracts.Map       │    Gemini YES vs Kalshi bracket i
               ┌──────────────────────────────────────────────┐
               │  PaperTradingEngine.tick(actionable)          │
               │    ├─ canEnterPosition()                      │
-              │    │    ├─ max 5 concurrent, max 2/category   │
-              │    │    ├─ daily loss limit check              │
+              │    │    ├─ max 3 concurrent, max 2/category   │
+              │    │    ├─ daily loss limit ($10)              │
               │    │    ├─ 80% initial balance drawdown kill   │
               │    │    └─ no duplicate market                 │
               │    ├─ calculatePositionSize()                  │
               │    │    ├─ Kelly with edge + score              │
-              │    │    ├─ max $100, depth cap 10% ask_depth   │
+              │    │    ├─ max $10, depth cap 10% ask_depth    │
+              │    │    ├─ live: min(max_pos, balance×10%)     │
               │    │    └─ kellyFraction from FV if available   │
               │    ├─ enterPosition()                          │
-              │    │    ├─ GEMI-* → placeOrder() (live API)       │
-              │    │    ├─ gemini_sim_* → executePaperTrade       │
+              │    │    ├─ GEMI-* → placeOrder() (live API)    │
+              │    │    ├─ gemini_sim_* → executePaperTrade    │
+              │    │    ├─ Deep-ITM/OTM guard (spot vs strike) │
+              │    │    ├─ NO leverage guard (reject <$0.05)   │
+              │    │    ├─ Liquidity gate (2-sided, <15¢ sprd) │
+              │    │    ├─ Min edge live (8¢ default)          │
+              │    │    ├─ Spread filter (2×spread + 1¢)       │
               │    │    ├─ TP = max(target, entry + 1.5¢)      │
-              │    │    └─ SL = mid - 3¢ (from mid, not fill)  │
+              │    │    └─ SL = mid - 5¢ (from mid, not fill)  │
               │    ├─ monitorPositions()                       │
               │    │    ├─ getPaperMidPrice → stop-loss check   │
               │    │    ├─ getPaperExitPrice → TP check + PnL  │
               │    │    ├─ time-decay stop (final 20% hold)   │
-              │    │    └─ time_exit at max_hold_time (600s)   │
+              │    │    ├─ expiry-aware hold (80% of TTX)      │
+              │    │    └─ time_exit at max_hold_time (2h+)    │
               │    └─ runLearningCycle() (every 30s)           │
-              │         ├─ sliding window: last 20 trades      │
+              │         ├─ sliding window: last 50 trades      │
               │         ├─ win>65% → loosen threshold 5%       │
               │         ├─ win<50% → tighten threshold 5%      │
               │         ├─ starvation: 5x tight → reset to 45  │
-              │         └─ cap: threshold ∈ [30, 65]           │
+              │         ├─ live: threshold ∈ [45, 65]          │
+              │         └─ live: kelly ≤ 0.20                  │
               └──────────────────────────────────────────────┘
                                          ↓
               SQLite (FK ON, WAL, better-sqlite3)
@@ -161,15 +169,20 @@ Gemini Predictions → contracts.Map       │    Gemini YES vs Kalshi bracket i
 | Parameter | Value | Why |
 |-----------|-------|-----|
 | Scan interval | 2s | Balances freshness vs rate limits |
-| Entry threshold | 45 (adaptive) | Score 0-100; adaptive learning tightens/loosens |
-| Min edge | 3¢ | After fees, must be positive |
-| Kelly multiplier | 0.25 | Fractional Kelly for safety |
-| Max position | $100 | Thin Gemini books, don't move market |
-| Max concurrent | 5 | Capital concentration risk |
-| Stop loss | 3¢ | Tight — we have high turnover strategy |
-| Max hold | 600s | Force exit before contract decay |
+| Entry threshold | 55 (adaptive, live floor=45) | Score 0-100; adaptive learning with live guardrails |
+| Min edge (paper) | 3¢ | After fees, must be positive |
+| Min edge (live) | 8¢ | Higher bar for real money trades |
+| Kelly multiplier | 0.15 (live ceiling=0.20) | Conservative fractional Kelly |
+| Max position | $10 | 10% of $100 live budget per trade |
+| Max concurrent | 3 | Concentration risk with small budget |
+| Stop loss | 10¢ | V18: backtest showed 10c = 5c performance, prevents noise exits |
+| Max hold | 14400s (4h, expiry-aware) | V18: hold to 80% of TTX; longer = better convergence |
+| Daily loss limit | $10 | Protects $100 live budget |
+| Max capital at risk | 20% | Max total exposure |
 | Drawdown kill | 20% | Auto-stop the bot |
 | Gemini fee | 0.01% maker / 0.05% taker | Use maker-or-cancel always |
+| Spread filter | 2× spread + 1¢ | Round-trip cost + profit margin |
+| Liquidity gate | Two-sided book, spread < $0.15 | Ensures exit liquidity (live only) |
 
 ---
 
@@ -237,7 +250,80 @@ PREDICTION_PORT=3003           # Dashboard/API port (default 3003)
 
 ---
 
-## Current Version: V16
+## Current Version: V18
+
+**Status: DATA COLLECTION — Preparing for $100 Live Test**
+
+**V18: Backtest-Validated Parameter Optimization**
+
+**What we did:** Built comprehensive backtester (`scripts/backtest_v17.js`) using 573K real price snapshots across 97 GEMI-* crypto contracts and 32 simulated markets. Ran 40+ parameter sweep configurations (edge thresholds, stop loss, hold times, volatility, settlement strategies).
+
+**Key findings:**
+1. **BS fair value on crypto binaries is profitable** — 3 trades in 19h, 100% WR, $3.94-$6.01 PnL depending on config. All NO direction on ETH $2000 contracts. The model correctly identified that ETH was unlikely to reach $2,000 (a ~7% OTM strike).
+2. **Hold-to-settlement is the biggest single improvement** — PnL jumps 44% ($3.94→$5.67) by holding to 80% of time-to-expiry instead of fixed 2h max.
+3. **Wider stop loss (10c) matches narrow (5c) performance** — Prediction markets are noisy; tight stops cause premature exits.
+4. **Cross-platform arb on sim markets shows ZERO edge** — Gemini sim prices track Polymarket within 1-2c (less than the 3.6c spread). Paper trading wins on sim markets are from simulation noise, not real arbitrage.
+5. **Default 50% vol works best** — Higher vol (80%) generates garbage signals (-$24.65 PnL). Implied vol from lattice is too noisy.
+
+**NOT CONFIDENT for live deployment yet.** Need 100+ trades (14+ days of paper data) for statistical significance. Current evidence is directional (correct signal type) but insufficient for go-live.
+
+**Changes:**
+1. **Backtester** (`scripts/backtest_v17.js`): Full simulation engine — loads GEMI price histories, reconstructs spot from contract lattice interpolation, computes BS fair values, applies all V17 entry guards, tracks PnL with realistic fills (entry at ask, exit at bid). 40+ parameter sweep configurations.
+2. **Cross-Platform Backtester** (`scripts/backtest_crossplatform.js`): Tests Gemini-vs-Polymarket arbitrage on 32 simulated markets. Confirms zero edge after spread costs.
+3. **Parameter Updates** (`lib/prediction_db.js`): V18 migration widens stop_loss from 5c→10c, increases max_hold_time from 2h→4h, adds `hold_to_settlement` flag (default: ON).
+4. **Analysis Document** (`skills/backtest_analysis_v18.md`): Comprehensive backtest results, parameter sweep table, confidence assessment, go-live gates checklist.
+
+**V18 Parameter Changes:**
+
+| Parameter | V17 | V18 | Backtest Evidence |
+|-----------|-----|-----|-------------------|
+| stop_loss_width | 0.05 | **0.10** | 10c SL = 5c SL performance (100% WR both) |
+| max_hold_time | 7200 (2h) | **14400 (4h)** | Longer holds capture settlement convergence |
+| hold_to_settlement | (new) | **1 (ON)** | +44% PnL improvement on same trades |
+
+---
+
+## Previous Version: V17
+
+**Merged in V17: $100 Live Trading Safety & Signal Quality Overhaul**
+
+**Problem:** Live trading lost money because (1) position sizes were too large ($100/trade on $200 balance), (2) spread costs exceeded edge on most trades, (3) learning cycle drifted parameters to dangerous extremes, (4) stale Kalshi data from wrong settlement dates created phantom 30c+ edges, (5) bot would short near-certain outcomes (e.g., BTC > $67K when BTC at $67K).
+
+**Changes:**
+1. **DB Cleanup & Parameter Reset** (`lib/prediction_db.js`): V17 migration reclassifies 4 phantom `gemini_sim_*` live trades as paper. Resets all parameters to conservative values. Adds `min_edge_live` parameter (default 0.08).
+
+2. **Position Sizing** (`lib/paper_trading_engine.js`): Live mode uses real Gemini balance via `getAvailableBalance()` with 30s cache. Per-trade cap = `min(max_position_size, realBalance × 0.10)`. Minimum $1 per trade (was $5).
+
+3. **NO Trade Leverage Guard** (`lib/paper_trading_engine.js`): Rejects NO trades with entry price < $0.05 (prevents 20x+ leverage). Clamps PnL to `[-position_size, position_size × 10]`.
+
+4. **Deep-ITM/OTM Guard** (`lib/paper_trading_engine.js`): For GEMI-* crypto contracts, parses strike from market ID. Rejects NO when spot > strike × 1.20, rejects YES when spot < strike × 0.80. Spot price enriched onto signal objects in `prediction-proxy.js`.
+
+5. **Hard Liquidity Gate** (`lib/paper_trading_engine.js`): Live trades require two-sided orderbook and spread < $0.15. Minimum edge for live = 8c (configurable via `min_edge_live` parameter).
+
+6. **Round-Trip Spread Edge Filter** (`lib/paper_trading_engine.js`, `lib/fair_value_engine.js`): Entry requires `edge > max(stop_loss, geminiSpread × 2 + 0.01)`. Fair value engine subtracts estimated spread from netEdge.
+
+7. **Expiry-Aware Hold Times** (`lib/paper_trading_engine.js`): Parses settlement date from GEMI instrument symbol. Sets `maxHold = max(params.max_hold_time, timeToExpiry × 0.80)`. High-edge trades get 4h minimum hold.
+
+8. **Learning Cycle Guardrails** (`lib/paper_trading_engine.js`): Live mode clamps `entry_threshold ∈ [45, 65]` and `kelly_multiplier ≤ 0.20`. Prevents parameter drift to aggressive values.
+
+9. **Ensemble Sanity Check** (`lib/fair_value_engine.js`): Spot-price reality gate for crypto — if moneyness > 1.30, requires P(above) > 0.45 from each model or zeroes weight. Model disagreement check: if max-min > 0.40, downweights outliers 90%. Prevents stale Kalshi data from corrupting fair value.
+
+10. **Kalshi Date Matching** (`lib/market_matcher.js`): `matchCryptoContracts()` now parses settlement dates from both Gemini instrument symbols (GEMI-BTC**2602240800**) and Kalshi event tickers (KXBTC-**26FEB19**16). Rejects matches with >48h date difference. Reduces confidence for 12-48h gaps. Deduplicates to keep best-confidence match per Gemini contract.
+
+11. **Position Reconciliation** (`lib/paper_trading_engine.js`, `server/prediction-proxy.js`): New `reconcilePositions()` method compares DB vs Gemini exchange positions. Detects orphaned and phantom positions. Wired into hourly cleanup cycle. `/api/reconcile` endpoint added.
+
+12. **Real Gemini Balance** (`lib/gemini_client.js`): `getAvailableBalance()` with 30s TTL cache. Queries actual USD balance before live trades instead of using paper wallet.
+
+**V17 Key Lessons:**
+- **Stale cross-platform data creates phantom edges**: A Feb 19 Kalshi event matched to a Feb 24 Gemini contract shows P(BTC>67.5K)=6% when the real probability is ~50%. The 44c "edge" is entirely from using the wrong date's data.
+- **Ensemble weights amplify bad data**: With crypto weights at 70% Kalshi / 30% BS, a garbage Kalshi input dominates even when Black-Scholes has the correct answer.
+- **Position sizing relative to budget matters more than edge quality**: $100/trade on $200 balance means 2 bad trades wipe you out regardless of edge accuracy.
+- **Paper and live performance diverge dramatically**: Paper fills at synthetic mid-price with instant execution. Real Gemini fills cross bid/ask spreads on thin books. Paper win rate was 72-89%, live was 0-36%.
+- **Prediction markets reward patience**: Short hold times (10 min) catch noise, not signal. Contracts converge toward fair value near expiry — hold up to 80% of time-to-expiry.
+
+---
+
+## Previous Version: V16
 
 **Merged in V16:**
 - **Reference sources wired into signal pipeline**: OddsAPI and Metaculus probabilities are now looked up per-market during every 2-second price update cycle and fed into both the composite scoring and fair value ensemble. Previously these were fetched/cached but never consumed by signals.
@@ -269,12 +355,14 @@ Price update cycle (every 2s):
 - **Non-crypto markets need their own FV strategy**: Strategy 2 (Black-Scholes) only applies to crypto (requires spot/strike/expiry). Strategy 5 fills this gap by computing ensemble FV from available reference sources for politics/sports/finance markets.
 - **ensembleFairValue default behavior matters**: Defaulting to 'crypto' category weights when no category was specified broke existing tests expecting instance-level modelWeights. Fix: use category weights only when explicitly provided.
 
-**V17 candidates:**
-- Walk-forward backtest on 500+ paper trades across all categories
-- Implement market making mode (post both sides, capture spread)
+**V19 candidates:**
+- Accumulate 100+ paper trades with V18 params → re-run backtest for go-live confidence
+- Wire real orderbook depth (replace hard-coded `ask_depth: 500` with `getOrderbookDepth()` API results)
+- Warm-up period on startup (observe for N cycles before placing live trades)
 - Add live order status polling (check if fill/cancel occurred between cycles)
-- Semantic similarity matching for Metaculus questions (beyond keyword overlap)
-- Add Polymarket CLOB for real-time order book depth (currently uses Gamma API indicative prices only)
+- Pre-expiry forced exit (sell 30 min before settlement to avoid binary outcome risk)
+- Implement market making mode (post both sides, capture spread)
+- Walk-forward validation once 500+ paper trades accumulated
 
 ---
 

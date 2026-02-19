@@ -268,7 +268,7 @@ function updatePositionsTable(trades) {
     document.getElementById('position-count').textContent = trades.length;
 
     if (!trades || trades.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No open positions</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No open positions</td></tr>';
         return;
     }
 
@@ -277,9 +277,14 @@ function updatePositionsTable(trades) {
         const holdStr = holdTime < 60 ? `${holdTime}s` : `${Math.floor(holdTime / 60)}m`;
         const dirClass = t.direction === 'YES' ? 'dir-yes' : 'dir-no';
         const title = (t.market_title || 'Unknown').substring(0, 35);
+        const isLive = t.mode === 'live';
+        const modeBadge = isLive
+            ? '<span class="mode-badge-inline mode-live-inline">LIVE</span>'
+            : '<span class="mode-badge-inline mode-paper-inline">PAPER</span>';
 
         return `<tr>
             <td title="${t.market_title}">${title}</td>
+            <td>${modeBadge}</td>
             <td class="${dirClass}">${t.direction}</td>
             <td>${t.entry_price?.toFixed(3) || '--'}</td>
             <td>--</td>
@@ -312,12 +317,14 @@ function updateParameters(params) {
 }
 
 async function loadRecentTrades() {
-    const data = await apiFetch('/api/trades/recent?limit=30');
+    const modeFilter = document.getElementById('mode-filter')?.value || '';
+    const modeParam = modeFilter ? `&mode=${modeFilter}` : '';
+    const data = await apiFetch(`/api/trades/recent?limit=30${modeParam}`);
     if (!data || !data.trades) return;
 
     const tbody = document.getElementById('trades-body');
     if (data.trades.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No trades yet</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No trades yet</td></tr>';
         return;
     }
 
@@ -330,9 +337,15 @@ async function loadRecentTrades() {
         const title = (t.market_title || 'Unknown').substring(0, 30);
         const reasonClass = t.exit_reason === 'emergency_stop' ? 'reason-emergency' :
                            t.exit_reason === 'manual_close' ? 'reason-manual' : '';
+        const isLive = t.mode === 'live';
+        const modeBadge = isLive
+            ? '<span class="mode-badge-inline mode-live-inline">LIVE</span>'
+            : '<span class="mode-badge-inline mode-paper-inline">PAPER</span>';
+        const rowClass = isLive ? '' : 'trade-paper-row';
 
-        return `<tr>
+        return `<tr class="${rowClass}">
             <td>${time}</td>
+            <td>${modeBadge}</td>
             <td title="${t.market_title}">${title}</td>
             <td class="${dirClass}">${t.direction}</td>
             <td>${t.entry_price?.toFixed(3) || '--'}</td>

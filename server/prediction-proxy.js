@@ -747,6 +747,48 @@ app.get('/api/bot/status', (req, res) => {
         }
     } catch (e) { /* sharpe stays null */ }
 
+    // Realistic PnL stats (paper-vs-live fill gap)
+    let realisticStats = null;
+    try {
+        realisticStats = db.getRealisticTradeStats(50);
+    } catch (e) { /* stays null */ }
+
+    // Signal frequency stats (last 24h)
+    let signalStats = null;
+    try {
+        signalStats = db.getSignalFrequencyStats(1);
+    } catch (e) { /* stays null */ }
+
+    // Paper vs Live split stats
+    let paperLiveSplit = null;
+    try {
+        const paperPnl = db.getDailyPnL('paper');
+        const livePnl = db.getDailyPnL('live');
+        const paperOpen = db.getOpenTrades('paper');
+        const liveOpen = db.getOpenTrades('live');
+        const paperRecent = db.getRecentTrades(50, 'paper');
+        const liveRecent = db.getRecentTrades(50, 'live');
+        const liveWins = liveRecent ? liveRecent.filter(t => t.pnl > 0).length : 0;
+        const liveLosses = liveRecent ? liveRecent.filter(t => t.pnl < 0).length : 0;
+        paperLiveSplit = {
+            paper: {
+                open_positions: paperOpen ? paperOpen.length : 0,
+                today: paperPnl || { daily_pnl: 0, trade_count: 0 },
+                recent_count: paperRecent ? paperRecent.length : 0
+            },
+            live: {
+                open_positions: liveOpen ? liveOpen.length : 0,
+                today: livePnl || { daily_pnl: 0, trade_count: 0 },
+                recent_count: liveRecent ? liveRecent.length : 0,
+                recent_wins: liveWins,
+                recent_losses: liveLosses,
+                win_rate: (liveWins + liveLosses) > 0
+                    ? (liveWins / (liveWins + liveLosses) * 100).toFixed(1) + '%'
+                    : 'N/A'
+            }
+        };
+    } catch (e) { /* stays null */ }
+
     res.json({
         running: botState.running,
         mode: geminiClient.mode,
@@ -754,7 +796,11 @@ app.get('/api/bot/status', (req, res) => {
         cycle_count: botState.cycleCount,
         last_cycle_time: botState.lastCycleTime,
         last_match_time: botState.lastMatchTime,
+        warmup_remaining: warmupCyclesRemaining,
         sharpe,
+        realistic_stats: realisticStats,
+        signal_frequency: signalStats,
+        paper_live_split: paperLiveSplit,
         circuit_breaker: {
             open: health.circuitOpen,
             consecutive_errors: health.consecutiveErrors,
@@ -1339,6 +1385,19 @@ async function updatePrices() {
                 }
             }
             latestActionable = actionable; // capture for /api/signals
+
+            // Warm-up period: observe but don't trade for first N cycles
+            if (warmupCyclesRemaining > 0) {
+                warmupCyclesRemaining--;
+                if (warmupCyclesRemaining === 0) {
+                    logger.info(`Warm-up complete — trading enabled after ${WARMUP_CYCLES} observation cycles`);
+                } else if (warmupCyclesRemaining % 10 === 0) {
+                    logger.info(`Warm-up: ${warmupCyclesRemaining} cycles remaining, ${actionable.length} signals observed`);
+                }
+                // Still run tick with empty signals to process exits on existing positions
+                const result = await tradingEngine.tick([]);
+                signalDetector.loadParameters();
+            } else {
             const result = await tradingEngine.tick(actionable);
             signalDetector.loadParameters(); // sync minScore from DB after adaptive learning
 
@@ -1352,6 +1411,7 @@ async function updatePrices() {
                     }
                 });
             }
+            } // end else (warm-up complete)
         }
 
         // Broadcast price updates
@@ -1477,12 +1537,17 @@ async function runCleanup() {
 /**
  * Start the trading bot
  */
+// Warm-up: observe N cycles before allowing trades (prevents blind entries on startup)
+const WARMUP_CYCLES = 30;  // 30 cycles × 5s = 2.5 min observation period
+let warmupCyclesRemaining = WARMUP_CYCLES;
+
 function startBot() {
     if (botState.running) return;
 
     botState.running = true;
     botState.startTime = Date.now();
     tradingEngine.isRunning = true;
+    warmupCyclesRemaining = WARMUP_CYCLES;
 
     // Load adaptive parameters
     signalDetector.loadParameters();
@@ -1503,7 +1568,18 @@ function startBot() {
     // Cleanup every hour
     botState.cleanupInterval = setInterval(runCleanup, 3600000);
 
-    logger.info(`Prediction Market Bot STARTED (${geminiMode} mode${dataOnlyMode ? ', DATA ONLY — no trades' : ''})`);
+    // Live order status polling every 30 seconds (live/sandbox mode only)
+    if (geminiMode === 'live' || geminiMode === 'sandbox') {
+        botState.orderPollInterval = setInterval(async () => {
+            try {
+                await tradingEngine.pollLiveOrderStatus();
+            } catch (e) {
+                logger.debug('Order poll error: ' + e.message);
+            }
+        }, 30000);
+    }
+
+    logger.info(`Prediction Market Bot STARTED (${geminiMode} mode${dataOnlyMode ? ', DATA ONLY — no trades' : ''}, warmup=${WARMUP_CYCLES} cycles)`);
 }
 
 /**
@@ -1585,6 +1661,7 @@ function stopBot() {
     if (botState.priceUpdateInterval) clearInterval(botState.priceUpdateInterval);
     if (botState.matchInterval) clearInterval(botState.matchInterval);
     if (botState.cleanupInterval) clearInterval(botState.cleanupInterval);
+    if (botState.orderPollInterval) clearInterval(botState.orderPollInterval);
 
     kalshiWS.disconnect();
 

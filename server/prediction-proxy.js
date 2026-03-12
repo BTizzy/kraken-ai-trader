@@ -1537,6 +1537,7 @@ async function updatePrices() {
                             marketId,
                             title: state.matchedMarket?.event_title || '',
                             category: state.category || 'crypto',
+                            signalType: 'momentum',
                             score: Math.min(100, Math.round(momentum.urgency * 75)),
                             direction: momentum.direction,
                             referencePrice: gemini?.last,
@@ -1595,6 +1596,7 @@ async function updatePrices() {
                                     marketId,
                                     title: state.matchedMarket?.event_title || '',
                                     category: state.category || 'crypto',
+                                    signalType: 'cross_platform_arb',
                                     score: Math.min(100, Math.round((arb.netEdge || 0) * 1500)),
                                     direction: arbDirection,
                                     referencePrice: kalshiAnalysis.kalshiFairValue,
@@ -1667,6 +1669,7 @@ async function updatePrices() {
                         marketId: state.marketId,
                         title: state.matchedMarket?.event_title || '',
                         category: state.category || 'other',
+                        signalType: 'multi_source_fv',
                         score: Math.min(100, Math.round(netEdge * 1000)),
                         direction,
                         referencePrice: fv,
@@ -1685,6 +1688,13 @@ async function updatePrices() {
                 }
             }
         } catch (fvErr) {
+
+            if (autonomous15mSession) {
+                actionable = actionable.filter(signal => {
+                    if (!signal.marketId || !signal.marketId.startsWith('GEMI-')) return false;
+                    return signal.signalType === 'fair_value';
+                });
+            }
             logger.debug('Multi-source FV: ' + fvErr.message);
         }
 

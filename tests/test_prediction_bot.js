@@ -289,6 +289,16 @@ db.db.prepare('UPDATE paper_wallet SET balance = 500, total_trades = 0, winning_
 const engine = new PaperTradingEngine(db, gemini);
 const shortRunEngine = new PaperTradingEngine(db, gemini, { tradingProfile: 'short-run' });
 
+function makeFutureGemiSymbol(asset = 'BTC', strike = '50000', minutesAhead = 20) {
+    const expiry = new Date(Date.now() + minutesAhead * 60 * 1000);
+    const yy = String(expiry.getUTCFullYear()).slice(2);
+    const mm = String(expiry.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(expiry.getUTCDate()).padStart(2, '0');
+    const hh = String(expiry.getUTCHours()).padStart(2, '0');
+    const mn = String(expiry.getUTCMinutes()).padStart(2, '0');
+    return `GEMI-${asset}${yy}${mm}${dd}${hh}${mn}-HI${strike}`;
+}
+
 test('Calculate position size', () => {
     const wallet = db.getWallet();
     const size = engine.calculatePositionSize({
@@ -348,6 +358,38 @@ test('Engine status exposes trading profile and effective parameters', () => {
     assert(status.profile_overrides.max_hold_time === 1800, 'Expected profile override to include short-run max_hold_time');
     assert(status.parameters.hold_to_settlement === 0, 'Expected effective params to reflect short-run override');
     assert(status.db_parameters.hold_to_settlement === 1, 'Expected db params to preserve long-run default');
+});
+
+test('Autonomous 15m session rejects non fair-value signals', async () => {
+    const sessionMarketId = makeFutureGemiSymbol('BTC', '51000', 20);
+    gemini.updatePaperMarket(sessionMarketId, 0.50, { title: 'Session Test Market', volume: 5000 });
+
+    const autonomousEngine = new PaperTradingEngine(db, gemini, {
+        autonomous15mSession: true,
+        sessionMinTtxSeconds: 600,
+        sessionMaxTtxSeconds: 3600
+    });
+
+    const entry = await autonomousEngine.enterPosition({
+        marketId: sessionMarketId,
+        title: 'Session Test Market',
+        category: 'crypto',
+        signalType: 'composite',
+        score: 80,
+        direction: 'YES',
+        gemini_bid: 0.49,
+        gemini_ask: 0.51,
+        gemini_volume: 5000,
+        referencePrice: 0.70,
+        targetPrice: 0.70,
+        netEdge: 0.10,
+        kellyFraction: 0.10,
+        models: {
+            blackScholes: { fairValue: 0.70 }
+        }
+    });
+
+    assert(entry === null, 'Autonomous 15m mode should reject non fair-value signals');
 });
 
 test('Enter position', async () => {

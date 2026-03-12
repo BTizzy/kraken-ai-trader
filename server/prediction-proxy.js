@@ -260,6 +260,11 @@ const kalshiClient = new KalshiClient({ rateLimiter });
 const geminiMode = process.env.GEMINI_MODE || 'paper'; // 'paper' | 'live' | 'sandbox'
 const tradingProfile = process.env.TRADING_PROFILE || 'standard';
 const dataOnlyMode = process.env.DATA_ONLY === 'true'; // Collect price data without trading
+const autonomous15mSession = process.env.AUTONOMOUS_15M_SESSION === 'true';
+const sessionLossLimitUsd = Math.abs(Number(process.env.SESSION_DAILY_LOSS_LIMIT_USD || 3));
+const sessionMinTtxSeconds = Math.max(60, Number(process.env.SESSION_MIN_TTX_SECONDS || 600));
+const sessionMaxTtxSeconds = Math.max(sessionMinTtxSeconds, Number(process.env.SESSION_MAX_TTX_SECONDS || 3600));
+const sessionMaxConcurrentLive = Math.max(1, Number(process.env.SESSION_MAX_CONCURRENT_LIVE || 1));
 const geminiClient = new GeminiClient({
     mode: geminiMode,
     rateLimiter,
@@ -282,7 +287,14 @@ const signalDetector = new SignalDetector(db, {
     highConfidenceEdge: 0.08,
     kalshiClient: kalshiClient
 });
-const tradingEngine = new PaperTradingEngine(db, geminiClient, { tradingProfile });
+const tradingEngine = new PaperTradingEngine(db, geminiClient, {
+    tradingProfile,
+    autonomous15mSession,
+    sessionLossLimitUsd,
+    sessionMinTtxSeconds,
+    sessionMaxTtxSeconds,
+    sessionMaxConcurrentLive
+});
 const alerts = new Alerts({ webhookUrl: process.env.DISCORD_WEBHOOK_URL });
 const kalshiWS = new KalshiWS({ apiKey: process.env.KALSHI_API_KEY });
 
@@ -1049,11 +1061,18 @@ app.post('/api/reconcile/fix', async (req, res) => {
                     ? Math.max(0.01, Math.min(0.99, realPrices.bid))
                     : 0.50; // fallback mid if no book
 
-                const qty = Math.max(1, Math.floor(orphan.quantity - orphan.quantityOnHold));
-                if (qty <= 0) {
-                    actions.push({ step: 'skip_orphan', symbol: orphan.symbol, reason: 'qty_on_hold' });
+                const availableQty = Math.floor((orphan.quantity || 0) - (orphan.quantityOnHold || 0));
+                if (availableQty <= 0) {
+                    actions.push({
+                        step: 'skip_orphan',
+                        symbol: orphan.symbol,
+                        reason: 'qty_on_hold',
+                        quantity: orphan.quantity,
+                        quantityOnHold: orphan.quantityOnHold
+                    });
                     continue;
                 }
+                const qty = availableQty;
                 const exitOrder = await geminiClient.placeOrder({
                     symbol: orphan.symbol,
                     side: 'sell',
@@ -1061,19 +1080,41 @@ app.post('/api/reconcile/fix', async (req, res) => {
                     price: exitPrice.toFixed(2),
                     direction: (orphan.outcome || 'yes').toUpperCase()
                 });
+
+                const filled = Number(exitOrder?.filledQuantity || 0);
+                let status = 'unfilled';
+                if (exitOrder?.success && filled > 0) {
+                    status = 'filled';
+                } else if (exitOrder?.success) {
+                    // Accepted but unfilled: cancel immediately so subsequent
+                    // reconcile/fix attempts are deterministic.
+                    try {
+                        if (exitOrder?.orderId) {
+                            await geminiClient.cancelOrder(exitOrder.orderId);
+                        }
+                    } catch (cancelErr) {
+                        errors.push({
+                            step: 'close_orphan_cancel',
+                            symbol: orphan.symbol,
+                            orderId: exitOrder?.orderId,
+                            error: cancelErr.message
+                        });
+                    }
+                }
+
                 actions.push({
                     step: 'close_orphan',
                     symbol: orphan.symbol,
                     qty,
                     exitPrice,
                     orderId: exitOrder?.orderId,
-                    filled: exitOrder?.filledQuantity || 0,
-                    status: exitOrder?.success ? 'ok' : 'unfilled',
+                    filled,
+                    status,
                     reason: orphan.reason
                 });
                 logger.warn(
                     `RECONCILE FIX: closed orphan ${orphan.symbol} qty=${qty} @ ${exitPrice.toFixed(2)} ` +
-                    `orderId=${exitOrder?.orderId} filled=${exitOrder?.filledQuantity}`
+                    `orderId=${exitOrder?.orderId} filled=${filled} status=${status}`
                 );
             } catch (e) {
                 errors.push({ step: 'close_orphan', symbol: orphan.symbol, error: e.message });
@@ -1689,6 +1730,17 @@ async function updatePrices() {
                 // Still run tick with empty signals to process exits on existing positions
                 const result = await tradingEngine.tick([]);
                 signalDetector.loadParameters();
+
+                // Autonomous 15m session hard-stop: if daily/session loss cap is breached,
+                // fully stop bot (not just block new entries).
+                const gate = tradingEngine.getStatus().pre_trade_gate;
+                if (tradingEngine.autonomous15mSession && gate && !gate.allowed && gate.reason === 'session_loss_limit_hit') {
+                    logger.error(
+                        `AUTONOMOUS SESSION STOP: ${gate.reason} ` +
+                        `(session_pnl=${gate.details?.session_pnl}, limit=-${gate.details?.loss_limit_usd})`
+                    );
+                    stopBot();
+                }
             } else {
             // Sort signals: near-expiry first so short-term contracts get priority
             // (15M and hourly contracts should fill before multi-day holds)
@@ -1705,6 +1757,17 @@ async function updatePrices() {
             });
             const result = await tradingEngine.tick(actionable);
             signalDetector.loadParameters(); // sync minScore from DB after adaptive learning
+
+            // Autonomous 15m session hard-stop: if daily/session loss cap is breached,
+            // fully stop bot (not just block new entries).
+            const gate = tradingEngine.getStatus().pre_trade_gate;
+            if (tradingEngine.autonomous15mSession && gate && !gate.allowed && gate.reason === 'session_loss_limit_hit') {
+                logger.error(
+                    `AUTONOMOUS SESSION STOP: ${gate.reason} ` +
+                    `(session_pnl=${gate.details?.session_pnl}, limit=-${gate.details?.loss_limit_usd})`
+                );
+                stopBot();
+            }
 
             if (result.entries.length > 0 || result.exits.length > 0) {
                 broadcastToClients({
@@ -1825,9 +1888,15 @@ async function runCleanup() {
 
         // Position reconciliation (live/sandbox mode only)
         const recon = await tradingEngine.reconcilePositions();
-        if (!recon.skipped && (recon.orphaned.length > 0 || recon.phantom.length > 0)) {
+        const nonPendingPhantom = (recon.phantom || []).filter(p => !p.pendingExit);
+        if (!recon.skipped && (
+            (recon.orphaned || []).length > 0 ||
+            nonPendingPhantom.length > 0 ||
+            (recon.quantityMismatch || []).length > 0
+        )) {
             logger.warn(
-                `RECONCILIATION ALERT: ${recon.phantom.length} phantom, ${recon.orphaned.length} orphaned`
+                `RECONCILIATION ALERT: ${nonPendingPhantom.length} phantom, ` +
+                `${recon.orphaned.length} orphaned, ${(recon.quantityMismatch || []).length} qty_mismatch`
             );
         }
 
@@ -1852,6 +1921,8 @@ let warmupCyclesRemaining = WARMUP_CYCLES;
 function startBot() {
     if (botState.running) return;
 
+    const liveDailyAtStart = db.getDailyPnL('live');
+    tradingEngine.markSessionStart(liveDailyAtStart?.daily_pnl || 0);
     botState.running = true;
     botState.startTime = Date.now();
     tradingEngine.isRunning = true;
@@ -1896,7 +1967,9 @@ function startBot() {
 
     logger.info(
         `Prediction Market Bot STARTED (${geminiMode} mode, profile=${tradingEngine.tradingProfile}` +
-        `${dataOnlyMode ? ', DATA ONLY — no trades' : ''}, warmup=${WARMUP_CYCLES} cycles)`
+        `${dataOnlyMode ? ', DATA ONLY — no trades' : ''}, warmup=${WARMUP_CYCLES} cycles, ` +
+        `autonomous15m=${autonomous15mSession ? 'ON' : 'OFF'}, ` +
+        `sessionStartLivePnl=${tradingEngine.sessionStartLiveDailyPnl ?? 0})`
     );
 }
 

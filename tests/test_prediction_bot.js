@@ -281,12 +281,13 @@ const GeminiClient = require('../lib/gemini_client');
 const PaperTradingEngine = require('../lib/paper_trading_engine');
 
 const gemini = new GeminiClient({ mode: 'paper' });
-gemini.updatePaperMarket('test_market_1', 0.50, { title: 'Test Market', volume: 5000 });
+gemini.updatePaperMarket('GEMI-TEST2602190200-HI50000', 0.50, { title: 'Test Market', volume: 5000 });
 
 // Reset wallet for clean test
 db.db.prepare('UPDATE paper_wallet SET balance = 500, total_trades = 0, winning_trades = 0, losing_trades = 0, total_pnl = 0').run();
 
 const engine = new PaperTradingEngine(db, gemini);
+const shortRunEngine = new PaperTradingEngine(db, gemini, { tradingProfile: 'short-run' });
 
 test('Calculate position size', () => {
     const wallet = db.getWallet();
@@ -305,9 +306,53 @@ test('Entry position check', () => {
     assert(check.allowed === true, `Should allow entry, got: ${check.reason}`);
 });
 
+test('Standard profile keeps hold-to-settlement enabled', () => {
+    assert(engine.tradingProfile === 'standard', `Expected standard profile, got ${engine.tradingProfile}`);
+    assert(engine.params.hold_to_settlement === 1, `Expected hold_to_settlement=1, got ${engine.params.hold_to_settlement}`);
+});
+
+test('Short-run profile overrides exit timing parameters', () => {
+    assert(shortRunEngine.tradingProfile === 'short-run', `Expected short-run profile, got ${shortRunEngine.tradingProfile}`);
+    assert(shortRunEngine.params.hold_to_settlement === 0, 'Short-run profile should disable hold_to_settlement');
+    assert(shortRunEngine.params.max_hold_time === 1800, `Expected max_hold_time=1800, got ${shortRunEngine.params.max_hold_time}`);
+    assert(shortRunEngine.params.pre_expiry_exit_seconds === 1800, `Expected pre_expiry_exit_seconds=1800, got ${shortRunEngine.params.pre_expiry_exit_seconds}`);
+});
+
+test('Trade timing config respects hold-to-settlement by profile', () => {
+    const expiry = new Date(Date.now() + 24 * 3600 * 1000);
+    const yy = String(expiry.getUTCFullYear()).slice(2);
+    const mm = String(expiry.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(expiry.getUTCDate()).padStart(2, '0');
+    const hh = String(expiry.getUTCHours()).padStart(2, '0');
+    const mn = String(expiry.getUTCMinutes()).padStart(2, '0');
+    const trade = {
+        gemini_market_id: `GEMI-BTC${yy}${mm}${dd}${hh}${mn}-HI70000`,
+        timestamp: Math.floor(Date.now() / 1000),
+        stop_loss_price: 0.40,
+        opportunity_score: 80,
+        direction: 'YES'
+    };
+
+    const standardTiming = engine.getTradeTimingConfig(trade, 0.50, Date.now());
+    const shortTiming = shortRunEngine.getTradeTimingConfig(trade, 0.50, Date.now());
+
+    assert(standardTiming.timeToExpiry > 0, 'Expected positive timeToExpiry');
+    assert(standardTiming.maxHold > shortTiming.maxHold,
+        `Expected standard maxHold > short-run maxHold, got ${standardTiming.maxHold} vs ${shortTiming.maxHold}`);
+    assert(shortTiming.maxHold === 1800, `Expected short-run maxHold=1800, got ${shortTiming.maxHold}`);
+});
+
+test('Engine status exposes trading profile and effective parameters', () => {
+    const status = shortRunEngine.getStatus();
+    assert(status.trading_profile === 'short-run', `Expected short-run status profile, got ${status.trading_profile}`);
+    assert(status.profile_overrides.max_hold_time === 1800, 'Expected profile override to include short-run max_hold_time');
+    assert(status.parameters.hold_to_settlement === 0, 'Expected effective params to reflect short-run override');
+    assert(status.db_parameters.hold_to_settlement === 1, 'Expected db params to preserve long-run default');
+});
+
 test('Enter position', async () => {
     const signal = {
-        marketId: 'test_market_1',
+        marketId: 'GEMI-TEST2602190200-HI50000',
         title: 'Test Market',
         category: 'crypto',
         score: 75,
@@ -316,7 +361,9 @@ test('Enter position', async () => {
         gemini_ask: 0.51,
         gemini_volume: 5000,
         referencePrice: 0.65,
-        targetPrice: 0.65
+        targetPrice: 0.65,
+        netEdge: 0.05,
+        kellyFraction: 0.10
     };
     const entry = await engine.enterPosition(signal);
     assert(entry !== null, 'Should enter position');
@@ -326,7 +373,7 @@ test('Enter position', async () => {
 
 test('Monitor positions', async () => {
     // Update price to trigger take profit
-    gemini.updatePaperMarket('test_market_1', 0.60, { title: 'Test Market' });
+    gemini.updatePaperMarket('GEMI-TEST2602190200-HI50000', 0.60, { title: 'Test Market' });
     const exits = await engine.monitorPositions();
     // May or may not exit depending on exact paper prices
     assert(Array.isArray(exits), 'Should return array');

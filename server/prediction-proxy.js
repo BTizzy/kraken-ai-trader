@@ -480,6 +480,7 @@ app.get('/api/signals', (req, res) => {
     try {
         const minScore = parseFloat(req.query.min_score || 0);
         const signals = latestSignals.filter(s => s.score >= minScore);
+        const actionableSignals = (latestActionable || []).filter(s => (s.score || 0) >= minScore);
 
         // Extract arb and momentum events from the latest actionable signals
         const allActionable = latestActionable || [];
@@ -510,7 +511,14 @@ app.get('/api/signals', (req, res) => {
                 timestamp:   s.timestamp
             }));
 
-        res.json({ signals, count: signals.length, arbEvents, momentumAlerts });
+        res.json({
+            signals,
+            actionableSignals,
+            count: signals.length,
+            actionableCount: actionableSignals.length,
+            arbEvents,
+            momentumAlerts
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -650,6 +658,104 @@ app.post('/api/trade/paper', (req, res) => {
         }
     } catch (error) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+// Execute manual live trade (constrained single-entry path)
+app.post('/api/trade/live', async (req, res) => {
+    try {
+        if (geminiMode !== 'live' && geminiMode !== 'sandbox') {
+            return res.status(400).json({ success: false, error: 'Live trade endpoint requires GEMINI_MODE=live|sandbox' });
+        }
+
+        const { market_id, direction, contracts } = req.body;
+        const dir = String(direction || '').toUpperCase();
+        const qty = Math.max(1, Math.floor(Number(contracts || 1)));
+
+        if (!market_id || !String(market_id).startsWith('GEMI-')) {
+            return res.status(400).json({ success: false, error: 'market_id must be a GEMI-* instrument' });
+        }
+        if (dir !== 'YES' && dir !== 'NO') {
+            return res.status(400).json({ success: false, error: 'direction must be YES or NO' });
+        }
+
+        // Keep manual live entries behind the same safety gate used by autonomous mode.
+        const gate = await tradingEngine.evaluatePreTradeSafetyGate(true);
+        if (!gate.allowed) {
+            return res.status(409).json({ success: false, error: `pre_trade_gate_blocked:${gate.reason}`, gate });
+        }
+
+        const market = await geminiClient.getMarketState(market_id);
+        if (!market || market.bid == null || market.ask == null) {
+            return res.status(400).json({ success: false, error: 'No two-sided book available for this market' });
+        }
+
+        const entryPrice = dir === 'YES'
+            ? Number(market.ask)
+            : Number(1 - market.bid);
+        if (!Number.isFinite(entryPrice) || entryPrice <= 0 || entryPrice >= 1) {
+            return res.status(400).json({ success: false, error: 'Could not compute executable entry price' });
+        }
+
+        const order = await geminiClient.placeOrder({
+            symbol: market_id,
+            side: 'buy',
+            amount: qty,
+            price: entryPrice.toFixed(2),
+            direction: dir
+        });
+
+        const filledContracts = Number(order?.filledQuantity || 0);
+        if (!order?.success || filledContracts <= 0) {
+            // Accepted but unfilled orders should be cancelled immediately so retries are deterministic.
+            if (order?.orderId) {
+                try {
+                    await geminiClient.cancelOrder(order.orderId);
+                } catch (cancelErr) {
+                    logger.debug(`Manual live entry cancel failed: ${cancelErr.message}`);
+                }
+            }
+            return res.status(409).json({
+                success: false,
+                error: 'manual_live_entry_unfilled',
+                orderId: order?.orderId || null,
+                requestedContracts: qty,
+                filledContracts
+            });
+        }
+
+        const positionSize = parseFloat((filledContracts * order.fill_price).toFixed(6));
+        const tradeId = db.insertTrade({
+            timestamp: Math.floor(Date.now() / 1000),
+            gemini_market_id: market_id,
+            market_title: market.title || market_id,
+            category: 'crypto',
+            trade_state: 'ENTERED',
+            direction: dir,
+            entry_price: Number(order.fill_price),
+            position_size: positionSize,
+            opportunity_score: 0,
+            gemini_entry_bid: market.bid,
+            gemini_entry_ask: market.ask,
+            gemini_volume: market.volume || 0,
+            slippage: 0,
+            mode: 'live'
+        });
+
+        logger.info(
+            `MANUAL LIVE ENTRY: ${dir} ${market_id} contracts=${filledContracts} ` +
+            `entry=${Number(order.fill_price).toFixed(3)} orderId=${order.orderId}`
+        );
+
+        res.json({
+            success: true,
+            trade_id: tradeId,
+            mode: 'live',
+            contracts: filledContracts,
+            order
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
@@ -1688,14 +1794,14 @@ async function updatePrices() {
                 }
             }
         } catch (fvErr) {
-
-            if (autonomous15mSession) {
-                actionable = actionable.filter(signal => {
-                    if (!signal.marketId || !signal.marketId.startsWith('GEMI-')) return false;
-                    return signal.signalType === 'fair_value';
-                });
-            }
             logger.debug('Multi-source FV: ' + fvErr.message);
+        }
+
+        if (autonomous15mSession) {
+            actionable = actionable.filter(signal => {
+                if (!signal.marketId || !signal.marketId.startsWith('GEMI-')) return false;
+                return signal.signalType === 'fair_value';
+            });
         }
 
         // Periodic debug logging (every 10 cycles)

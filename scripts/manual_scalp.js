@@ -44,6 +44,15 @@ let consecutiveLosses = 0;
 let cooldownUntil = 0;
 let sessionTrades = [];
 
+async function getServerMode() {
+    try {
+        const status = await apiGet('/api/bot/status');
+        return status?.mode || 'paper';
+    } catch {
+        return 'paper';
+    }
+}
+
 async function apiGet(path) {
     const res = await fetch(`${BASE_URL}${path}`);
     if (!res.ok) throw new Error(`${path} HTTP ${res.status}`);
@@ -211,11 +220,22 @@ async function enterTrade(marketId, direction) {
         const entryTime = Date.now();
         console.log(`\n  Entering ${dirNorm} on ${marketId}...`);
 
-        const result = await apiPost('/api/trade/paper', {
-            market_id: marketId,
-            direction: dirNorm,
-            position_size: MAX_CONTRACTS
-        });
+        const mode = await getServerMode();
+        const isLive = mode === 'live' || mode === 'sandbox';
+        const endpoint = isLive ? '/api/trade/live' : '/api/trade/paper';
+        const payload = isLive
+            ? {
+                market_id: marketId,
+                direction: dirNorm,
+                contracts: MAX_CONTRACTS
+            }
+            : {
+                market_id: marketId,
+                direction: dirNorm,
+                position_size: MAX_CONTRACTS
+            };
+
+        const result = await apiPost(endpoint, payload);
 
         if (!result.success) {
             console.error(`\n✗ Entry failed: ${result.error}\n`);
@@ -224,7 +244,7 @@ async function enterTrade(marketId, direction) {
 
         const fillMs = Date.now() - entryTime;
         const entry_price = result.order?.fill_price ?? 0;
-        console.log(`\n✓ ENTERED trade ${result.trade_id}`);
+        console.log(`\n✓ ENTERED trade ${result.trade_id} (${isLive ? 'live' : 'paper'})`);
         console.log(`  Direction: ${dirNorm}  Entry: ${fmt(entry_price)}  Fill latency: ${fillMs}ms`);
         console.log(`  Hard stop at PnL = -$${HARD_STOP_USD}`);
         console.log(`  Monitor with: node scripts/manual_scalp.js status`);

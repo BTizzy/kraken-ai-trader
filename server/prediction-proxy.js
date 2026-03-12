@@ -97,9 +97,18 @@ let peakBalance = null;
 
 function checkDrawdownKillSwitch() {
     try {
-        const wallet = db.getWallet();
-        if (!wallet) return false;
-        const balance = wallet.balance || wallet.total || 500;
+        let balance;
+        if (geminiMode === 'live') {
+            // Always use real Gemini balance — paper wallet is irrelevant for live risk
+            balance = (tradingEngine && tradingEngine._liveBalance)
+                || (geminiClient && geminiClient._cachedBalance)
+                || null;
+            if (balance === null) return false; // not fetched yet, skip check
+        } else {
+            const wallet = db.getWallet();
+            if (!wallet) return false;
+            balance = wallet.balance || wallet.total || 500;
+        }
 
         if (peakBalance === null) peakBalance = balance;
         if (balance > peakBalance) peakBalance = balance;
@@ -114,6 +123,29 @@ function checkDrawdownKillSwitch() {
     } catch (e) {
         return false;
     }
+}
+
+// ===== Live Wallet Helper =====
+async function getDisplayWallet() {
+    if (geminiMode === 'live') {
+        let balance = (tradingEngine && tradingEngine._liveBalance)
+            || (geminiClient && geminiClient._cachedBalance)
+            || null;
+        // If no cached balance yet, fetch it now
+        if (balance === null && geminiClient) {
+            balance = await geminiClient.getAvailableBalance();
+        }
+        if (balance !== null) {
+            const paperWallet = db.getWallet();
+            const initialBalance = paperWallet ? paperWallet.initial_balance : 140;
+            return {
+                balance,
+                initial_balance: initialBalance,
+                total_pnl: balance - initialBalance
+            };
+        }
+    }
+    return db.getWallet();
 }
 
 // ===== Emergency Exit All Positions =====
@@ -180,7 +212,7 @@ async function emergencyExitAll() {
             const entryFee = trade.position_size * (tradingEngine.params?.fee_per_side || 0.0001);
             const exitValue = trade.direction === 'YES'
                 ? (exitPrice - trade.entry_price) * trade.position_size / trade.entry_price
-                : (trade.entry_price - exitPrice) * trade.position_size / (1 - trade.entry_price);
+                : (exitPrice - trade.entry_price) * trade.position_size / trade.entry_price;
             const exitFee = Math.abs(exitValue + trade.position_size) * (tradingEngine.params?.fee_per_side || 0.0001);
             const pnl = exitValue - entryFee - exitFee;
 
@@ -226,6 +258,7 @@ const rateLimiter = new RateLimiter();
 const polyClient = new PolymarketClient({ rateLimiter });
 const kalshiClient = new KalshiClient({ rateLimiter });
 const geminiMode = process.env.GEMINI_MODE || 'paper'; // 'paper' | 'live' | 'sandbox'
+const tradingProfile = process.env.TRADING_PROFILE || 'standard';
 const dataOnlyMode = process.env.DATA_ONLY === 'true'; // Collect price data without trading
 const geminiClient = new GeminiClient({
     mode: geminiMode,
@@ -249,7 +282,7 @@ const signalDetector = new SignalDetector(db, {
     highConfidenceEdge: 0.08,
     kalshiClient: kalshiClient
 });
-const tradingEngine = new PaperTradingEngine(db, geminiClient);
+const tradingEngine = new PaperTradingEngine(db, geminiClient, { tradingProfile });
 const alerts = new Alerts({ webhookUrl: process.env.DISCORD_WEBHOOK_URL });
 const kalshiWS = new KalshiWS({ apiKey: process.env.KALSHI_API_KEY });
 
@@ -281,7 +314,7 @@ async function fetchSpotPrices() {
     if (Date.now() - lastSpotFetch < SPOT_REFRESH_INTERVAL) return spotPriceCache;
     try {
         const resp = await fetch(
-            'https://api.kraken.com/0/public/Ticker?pair=XXBTZUSD,XETHZUSD,SOLUSD',
+            'https://api.kraken.com/0/public/Ticker?pair=XXBTZUSD,XETHZUSD,SOLUSD,XXRPZUSD,XZECZUSD',
             { signal: AbortSignal.timeout(5000) }
         );
         if (!resp.ok) return spotPriceCache;
@@ -298,6 +331,12 @@ async function fetchSpotPrices() {
                 } else if (key.includes('SOL')) {
                     spotPriceCache.SOL = price;
                     signalDetector.recordSpotPrice('SOL', price);
+                } else if (key.includes('XRP')) {
+                    spotPriceCache.XRP = price;
+                    signalDetector.recordSpotPrice('XRP', price);
+                } else if (key.includes('ZEC')) {
+                    spotPriceCache.ZEC = price;
+                    signalDetector.recordSpotPrice('ZEC', price);
                 }
             }
             lastSpotFetch = Date.now();
@@ -488,11 +527,10 @@ app.get('/api/trades/recent', (req, res) => {
     }
 });
 
-// Get paper wallet status
-app.get('/api/wallet', (req, res) => {
+// Get wallet status (real Gemini balance in live mode)
+app.get('/api/wallet', async (req, res) => {
     try {
-        const wallet = db.getWallet();
-        res.json(wallet);
+        res.json(await getDisplayWallet());
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -655,20 +693,53 @@ app.post('/api/bot/close-position/:tradeId', async (req, res) => {
         let exitPrice;
 
         if (isLive) {
-            // Live trade: get real price and place actual sell order on Gemini
-            const realPrices = geminiClient.realClient
-                ? geminiClient.realClient.getBestPrices(trade.gemini_market_id)
-                : null;
-            exitPrice = realPrices?.bid != null
-                ? (trade.direction === 'YES' ? realPrices.bid : (1 - realPrices.ask))
-                : null;
-
-            if (exitPrice == null) {
-                return res.status(400).json({ error: 'Could not determine real exit price for live trade' });
-            }
-
             try {
-                const contracts = Math.floor(trade.position_size / trade.entry_price);
+                // Use exchange-reported contracts (minus held quantity), never DB-derived quantity.
+                const positions = await geminiClient.getPositions();
+                const desiredOutcome = String(trade.direction || '').toLowerCase();
+
+                let exchangePos = (positions || []).find(p =>
+                    p.symbol === trade.gemini_market_id && String(p.outcome || '').toLowerCase() === desiredOutcome
+                );
+                if (!exchangePos) {
+                    exchangePos = (positions || []).find(p => p.symbol === trade.gemini_market_id);
+                }
+
+                if (!exchangePos) {
+                    const now = Math.floor(Date.now() / 1000);
+                    db.closeTrade(tradeId, trade.entry_price, 0, now - trade.timestamp, 'manual_reconcile_no_exchange');
+                    return res.json({
+                        success: true,
+                        tradeId,
+                        market: trade.market_title,
+                        direction: trade.direction,
+                        exitPrice: trade.entry_price,
+                        pnl: 0,
+                        holdTime: now - trade.timestamp,
+                        live: true,
+                        reconciled: true
+                    });
+                }
+
+                const totalQty = Number(exchangePos.totalQuantity || 0);
+                const heldQty = Number(exchangePos.quantityOnHold || 0);
+                const contracts = Math.max(0, Math.floor(totalQty - heldQty));
+
+                if (contracts <= 0) {
+                    return res.status(409).json({
+                        error: 'No available contracts to close (position quantity is on hold or unavailable).'
+                    });
+                }
+
+                // For live exits, use outcome-specific executable price from exchange position payload.
+                const priceFromBook = trade.direction === 'YES'
+                    ? Number(exchangePos?.prices?.sell?.yes)
+                    : Number(exchangePos?.prices?.sell?.no);
+                if (!Number.isFinite(priceFromBook) || priceFromBook <= 0) {
+                    return res.status(400).json({ error: 'Could not determine executable exit price for live trade' });
+                }
+                exitPrice = Math.max(0.01, Math.min(0.99, priceFromBook));
+
                 const exitOrder = await geminiClient.placeOrder({
                     symbol: trade.gemini_market_id,
                     side: 'sell',
@@ -676,12 +747,28 @@ app.post('/api/bot/close-position/:tradeId', async (req, res) => {
                     price: exitPrice.toFixed(2),
                     direction: trade.direction
                 });
-                if (exitOrder && exitOrder.fill_price) {
+
+                const filled = Number(exitOrder?.filledQuantity || 0);
+                if (!exitOrder || !exitOrder.success || filled <= 0) {
+                    try {
+                        if (exitOrder?.orderId) {
+                            await geminiClient.cancelOrder(exitOrder.orderId);
+                        }
+                    } catch (cancelErr) {
+                        logger.debug(`Manual close cancel failed: ${cancelErr.message}`);
+                    }
+                    return res.status(409).json({
+                        error: `Live exit order not filled (status=${exitOrder?.orderStatus || 'unknown'}, filled=${filled}). Position NOT closed.`
+                    });
+                }
+
+                if (exitOrder.fill_price) {
                     exitPrice = exitOrder.fill_price;
                 }
+
                 logger.info(
                     `MANUAL LIVE SELL: ${trade.gemini_market_id} ` +
-                    `orderId=${exitOrder?.orderId} status=${exitOrder?.orderStatus}`
+                    `orderId=${exitOrder?.orderId} status=${exitOrder?.orderStatus} filled=${exitOrder?.filledQuantity}`
                 );
             } catch (sellErr) {
                 return res.status(500).json({
@@ -700,16 +787,18 @@ app.post('/api/bot/close-position/:tradeId', async (req, res) => {
         const entryFee = trade.position_size * feeSide;
         const exitValue = trade.direction === 'YES'
             ? (exitPrice - trade.entry_price) * trade.position_size / trade.entry_price
-            : (trade.entry_price - exitPrice) * trade.position_size / (1 - trade.entry_price);
+            : (exitPrice - trade.entry_price) * trade.position_size / trade.entry_price;
         const exitFee = Math.abs(exitValue + trade.position_size) * feeSide;
         const pnl = exitValue - entryFee - exitFee;
 
         db.closeTrade(tradeId, exitPrice, pnl, now - trade.timestamp, 'manual_close');
 
-        // Update wallet
-        const wallet = db.getWallet();
-        if (wallet) {
-            db.updateWallet(wallet.balance + pnl);
+        // Update wallet only for paper trades. Live balance comes from Gemini.
+        if (!isLive) {
+            const wallet = db.getWallet();
+            if (wallet) {
+                db.updateWallet(wallet.balance + pnl);
+            }
         }
 
         logger.info(`MANUAL CLOSE: ${trade.direction} "${trade.market_title}" @ ${exitPrice.toFixed(3)} P&L: $${pnl.toFixed(2)}`);
@@ -729,7 +818,7 @@ app.post('/api/bot/close-position/:tradeId', async (req, res) => {
 });
 
 // Bot status
-app.get('/api/bot/status', (req, res) => {
+app.get('/api/bot/status', async (req, res) => {
     // Calculate Sharpe ratio from trade history
     let sharpe = null;
     try {
@@ -807,6 +896,7 @@ app.get('/api/bot/status', (req, res) => {
             total_errors: health.totalErrors
         },
         ...tradingEngine.getStatus(),
+        wallet: await getDisplayWallet(),
         rate_limiter: rateLimiter.getStats(),
         signal_detector: signalDetector.getStats(),
         gemini: geminiClient.getStats(),
@@ -840,6 +930,208 @@ app.get('/api/reconcile', async (req, res) => {
         res.json(result);
     } catch (error) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * Ground-truth snapshot (Phase 1): returns a single consistent view of
+ *   exchange positions, open orders, DB open trades, and wallet balance.
+ * Use this as the baseline before any reconciliation work.
+ * Bot MUST be stopped before calling this to avoid concurrent mutations.
+ */
+app.get('/api/bot/ground-truth', async (req, res) => {
+    try {
+        const ts = new Date().toISOString();
+        const isLive = geminiMode === 'live' || geminiMode === 'sandbox';
+
+        const dbOpenTrades = db.getOpenTrades();
+        const dbLiveOpen = db.getOpenTrades('live');
+        const dbPaperOpen = db.getOpenTrades('paper');
+        const wallet = await getDisplayWallet();
+
+        let exchangePositions = [];
+        let exchangeOpenOrders = [];
+        let exchangeError = null;
+
+        if (isLive) {
+            try {
+                [exchangePositions, exchangeOpenOrders] = await Promise.all([
+                    geminiClient.getPositions(),
+                    geminiClient.getOpenOrders()
+                ]);
+            } catch (e) {
+                exchangeError = e.message;
+                logger.warn('Ground-truth: exchange fetch error: ' + e.message);
+            }
+        }
+
+        // Summary flags for fast inspection
+        const isFlat =
+            exchangePositions.length === 0 &&
+            exchangeOpenOrders.length === 0 &&
+            dbLiveOpen.length === 0;
+
+        res.json({
+            snapshot_at: ts,
+            mode: geminiMode,
+            bot_running: botState.running,
+            is_flat: isFlat,
+            exchange: {
+                positions: exchangePositions,
+                open_orders: exchangeOpenOrders,
+                error: exchangeError
+            },
+            db: {
+                open_total: dbOpenTrades.length,
+                open_live: dbLiveOpen.length,
+                open_paper: dbPaperOpen.length,
+                live_trades: dbLiveOpen,
+                paper_trades: dbPaperOpen
+            },
+            wallet
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * Reconcile/fix endpoint (Phase 2): deterministic cleanup of orphaned and phantom positions.
+ * Processes in this order:
+ *   1. Cancel all open exchange orders (cleanup stale limit orders)
+ *   2. For each orphaned exchange position: place sell order at best bid
+ *   3. For each phantom DB trade: close in DB (entry_price, pnl=0)
+ * Returns a full audit trail of every action taken.
+ * Safe to call when bot is stopped. Bot must remain stopped during fix.
+ */
+app.post('/api/reconcile/fix', async (req, res) => {
+    const isLive = geminiMode === 'live' || geminiMode === 'sandbox';
+    if (!isLive) {
+        return res.json({ skipped: true, reason: 'paper_mode_no_exchange' });
+    }
+    if (botState.running) {
+        return res.status(409).json({ error: 'Stop the bot before running reconcile/fix' });
+    }
+
+    const actions = [];
+    const errors = [];
+    const now = Math.floor(Date.now() / 1000);
+
+    try {
+        // Step 1: cancel all open exchange orders
+        let activeOrders = [];
+        try {
+            activeOrders = await geminiClient.getOpenOrders();
+        } catch (e) {
+            errors.push({ step: 'fetch_open_orders', error: e.message });
+        }
+        for (const order of activeOrders) {
+            const orderId = order.orderId || order.order_id;
+            try {
+                await geminiClient.cancelOrder(orderId);
+                actions.push({ step: 'cancel_order', orderId, symbol: order.symbol, status: 'ok' });
+                logger.info(`RECONCILE FIX: cancelled open order ${orderId} (${order.symbol})`);
+            } catch (e) {
+                errors.push({ step: 'cancel_order', orderId, error: e.message });
+            }
+        }
+
+        // Step 2: get current state post-cancel
+        const reconcile = await tradingEngine.reconcilePositions();
+
+        // Step 3: close orphaned exchange positions (exchange-only)
+        for (const orphan of reconcile.orphaned) {
+            try {
+                const realPrices = geminiClient.realClient
+                    ? geminiClient.realClient.getBestPrices(orphan.symbol)
+                    : null;
+                const exitPrice = realPrices?.bid != null
+                    ? Math.max(0.01, Math.min(0.99, realPrices.bid))
+                    : 0.50; // fallback mid if no book
+
+                const qty = Math.max(1, Math.floor(orphan.quantity - orphan.quantityOnHold));
+                if (qty <= 0) {
+                    actions.push({ step: 'skip_orphan', symbol: orphan.symbol, reason: 'qty_on_hold' });
+                    continue;
+                }
+                const exitOrder = await geminiClient.placeOrder({
+                    symbol: orphan.symbol,
+                    side: 'sell',
+                    amount: qty,
+                    price: exitPrice.toFixed(2),
+                    direction: (orphan.outcome || 'yes').toUpperCase()
+                });
+                actions.push({
+                    step: 'close_orphan',
+                    symbol: orphan.symbol,
+                    qty,
+                    exitPrice,
+                    orderId: exitOrder?.orderId,
+                    filled: exitOrder?.filledQuantity || 0,
+                    status: exitOrder?.success ? 'ok' : 'unfilled',
+                    reason: orphan.reason
+                });
+                logger.warn(
+                    `RECONCILE FIX: closed orphan ${orphan.symbol} qty=${qty} @ ${exitPrice.toFixed(2)} ` +
+                    `orderId=${exitOrder?.orderId} filled=${exitOrder?.filledQuantity}`
+                );
+            } catch (e) {
+                errors.push({ step: 'close_orphan', symbol: orphan.symbol, error: e.message });
+            }
+        }
+
+        // Step 4: close phantom DB trades (DB-only, not pending exit)
+        for (const phantom of reconcile.phantom) {
+            if (phantom.pendingExit) {
+                actions.push({ step: 'skip_phantom', tradeId: phantom.tradeId, reason: 'exit_in_flight' });
+                continue;
+            }
+            try {
+                const holdTime = now - (phantom.age ? now - phantom.age : now);
+                db.closeTrade(phantom.tradeId, phantom.entryPrice, 0, phantom.age, 'reconcile_no_exchange');
+                actions.push({
+                    step: 'close_phantom_db',
+                    tradeId: phantom.tradeId,
+                    symbol: phantom.symbol,
+                    pnl: 0,
+                    reason: phantom.reason
+                });
+                logger.warn(
+                    `RECONCILE FIX: closed phantom DB trade ${phantom.tradeId} ${phantom.symbol} ` +
+                    `(${phantom.reason})`
+                );
+            } catch (e) {
+                errors.push({ step: 'close_phantom_db', tradeId: phantom.tradeId, error: e.message });
+            }
+        }
+
+        // Step 5: final state check
+        const finalReconcile = await tradingEngine.reconcilePositions();
+        const finalFlat =
+            finalReconcile.orphaned.length === 0 &&
+            finalReconcile.phantom.length === 0 &&
+            finalReconcile.quantityMismatch.length === 0;
+
+        res.json({
+            actions,
+            errors,
+            is_flat: finalFlat,
+            pre_fix: {
+                orphaned: reconcile.orphaned.length,
+                phantom: reconcile.phantom.length,
+                qty_mismatch: reconcile.quantityMismatch.length,
+                matched: reconcile.matched.length
+            },
+            post_fix: {
+                orphaned: finalReconcile.orphaned.length,
+                phantom: finalReconcile.phantom.filter(p => !p.pendingExit).length,
+                qty_mismatch: finalReconcile.quantityMismatch.length,
+                matched: finalReconcile.matched.length
+            },
+            quantity_mismatches: finalReconcile.quantityMismatch
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message, actions, errors });
     }
 });
 
@@ -1398,6 +1690,19 @@ async function updatePrices() {
                 const result = await tradingEngine.tick([]);
                 signalDetector.loadParameters();
             } else {
+            // Sort signals: near-expiry first so short-term contracts get priority
+            // (15M and hourly contracts should fill before multi-day holds)
+            actionable.sort((a, b) => {
+                const getTTX = (sig) => {
+                    if (!sig.marketId) return Infinity;
+                    const m = sig.marketId.match(/GEMI-\w+?(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})-/);
+                    if (!m) return Infinity;
+                    const [, yy, mm, dd, hh, mn] = m;
+                    const expiry = new Date(`20${yy}-${mm}-${dd}T${hh}:${mn}:00Z`);
+                    return (expiry.getTime() - Date.now()) / 1000;
+                };
+                return getTTX(a) - getTTX(b);
+            });
             const result = await tradingEngine.tick(actionable);
             signalDetector.loadParameters(); // sync minScore from DB after adaptive learning
 
@@ -1415,11 +1720,12 @@ async function updatePrices() {
         }
 
         // Broadcast price updates
+        const displayWallet = await getDisplayWallet();
         broadcastToClients({
             type: 'price_update',
             data: {
                 signals: latestSignals.slice(0, 20),
-                wallet: db.getWallet(),
+                wallet: displayWallet,
                 open_trades: db.getOpenTrades().length,
                 spot_prices: spotPriceCache,
                 timestamp: Date.now()
@@ -1538,7 +1844,9 @@ async function runCleanup() {
  * Start the trading bot
  */
 // Warm-up: observe N cycles before allowing trades (prevents blind entries on startup)
+// Reduced warmup when the bot already has open positions (restart scenario)
 const WARMUP_CYCLES = 30;  // 30 cycles × 5s = 2.5 min observation period
+const WARMUP_FAST = 5;     // 5 cycles when restarting with existing positions
 let warmupCyclesRemaining = WARMUP_CYCLES;
 
 function startBot() {
@@ -1548,6 +1856,13 @@ function startBot() {
     botState.startTime = Date.now();
     tradingEngine.isRunning = true;
     warmupCyclesRemaining = WARMUP_CYCLES;
+    peakBalance = null; // reset so kill-switch seeds from current real balance on first check
+    // If we already have open positions, use shorter warmup (restart scenario)
+    const openTrades = tradingEngine.db.getOpenTrades();
+    if (openTrades.length > 0) {
+        warmupCyclesRemaining = WARMUP_FAST;
+        logger.info(`Fast warmup: ${openTrades.length} existing positions detected, ${WARMUP_FAST} cycles`);
+    }
 
     // Load adaptive parameters
     signalDetector.loadParameters();
@@ -1562,8 +1877,8 @@ function startBot() {
     // Price update every 5 seconds
     botState.priceUpdateInterval = setInterval(updatePrices, 5000);
 
-    // Market re-match every 5 minutes
-    botState.matchInterval = setInterval(runMatchCycle, 300000);
+    // Market re-match every 60 seconds (fast cycle for 15-min contracts)
+    botState.matchInterval = setInterval(runMatchCycle, 60000);
 
     // Cleanup every hour
     botState.cleanupInterval = setInterval(runCleanup, 3600000);
@@ -1579,7 +1894,10 @@ function startBot() {
         }, 30000);
     }
 
-    logger.info(`Prediction Market Bot STARTED (${geminiMode} mode${dataOnlyMode ? ', DATA ONLY — no trades' : ''}, warmup=${WARMUP_CYCLES} cycles)`);
+    logger.info(
+        `Prediction Market Bot STARTED (${geminiMode} mode, profile=${tradingEngine.tradingProfile}` +
+        `${dataOnlyMode ? ', DATA ONLY — no trades' : ''}, warmup=${WARMUP_CYCLES} cycles)`
+    );
 }
 
 /**
@@ -1685,21 +2003,27 @@ server.listen(PORT, async () => {
         return; // Server stays up (dashboard accessible) but bot doesn't start
     }
 
-    // Auto-start bot
-    startBot();
+    // Auto-start bot unless explicitly disabled.
+    const autoStart = String(process.env.BOT_AUTOSTART || 'true').toLowerCase() !== 'false';
+    if (autoStart) {
+        startBot();
+    } else {
+        logger.warn('BOT_AUTOSTART=false — bot NOT started automatically');
+    }
 });
 
-// Graceful shutdown — close positions before exiting
+// Graceful shutdown — preserve positions for next session
 process.on('SIGINT', async () => {
-    logger.info('Shutting down (SIGINT)...');
+    logger.info('Shutting down (SIGINT) — preserving open positions for next session...');
     stopBot();
     try {
-        const result = await emergencyExitAll();
-        if (result.closed > 0) {
-            logger.info(`Shutdown: closed ${result.closed} positions, P&L: $${result.totalPnl.toFixed(2)}`);
+        const openTrades = db.getOpenTrades();
+        if (openTrades.length > 0) {
+            logger.info(`Shutdown: ${openTrades.length} positions remain open (will resume on next start)`);
+            openTrades.forEach(t => logger.info(`  #${t.id} ${t.direction} ${t.gemini_market_id} entry=$${t.entry_price}`));
         }
     } catch (e) {
-        logger.error(`Error during shutdown exit: ${e.message}`);
+        logger.error(`Error during shutdown: ${e.message}`);
     }
     clearInterval(wsHeartbeatInterval);
     db.close();
@@ -1707,15 +2031,16 @@ process.on('SIGINT', async () => {
 });
 
 process.on('SIGTERM', async () => {
-    logger.info('Shutting down (SIGTERM)...');
+    logger.info('Shutting down (SIGTERM) — preserving open positions for next session...');
     stopBot();
     try {
-        const result = await emergencyExitAll();
-        if (result.closed > 0) {
-            logger.info(`Shutdown: closed ${result.closed} positions, P&L: $${result.totalPnl.toFixed(2)}`);
+        const openTrades = db.getOpenTrades();
+        if (openTrades.length > 0) {
+            logger.info(`Shutdown: ${openTrades.length} positions remain open (will resume on next start)`);
+            openTrades.forEach(t => logger.info(`  #${t.id} ${t.direction} ${t.gemini_market_id} entry=$${t.entry_price}`));
         }
     } catch (e) {
-        logger.error(`Error during shutdown exit: ${e.message}`);
+        logger.error(`Error during shutdown: ${e.message}`);
     }
     clearInterval(wsHeartbeatInterval);
     db.close();

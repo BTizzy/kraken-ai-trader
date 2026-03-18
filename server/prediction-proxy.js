@@ -685,8 +685,10 @@ const SPOT_HARD_STALE_THRESHOLD_MS = Math.round(SPOT_STALE_THRESHOLD_MS * SPOT_H
 const SPOT_STALE_SCORE_PENALTY_MAX = Math.max(0, Math.min(40, Number(process.env.SPOT_STALE_SCORE_PENALTY_MAX || 15)));
 const SPOT_STALE_EDGE_PENALTY_MAX = Math.max(0, Math.min(0.05, Number(process.env.SPOT_STALE_EDGE_PENALTY_MAX || 0.01)));
 const sessionMaxConcurrentLive = Math.max(1, Number(process.env.SESSION_MAX_CONCURRENT_LIVE || 1));
-const LIVE_USD_RESERVE = Math.max(0, Number(process.env.LIVE_USD_RESERVE || 5));
-const LIVE_MIN_TRADABLE_BALANCE = Math.max(0.5, Number(process.env.LIVE_MIN_TRADABLE_BALANCE || 2));
+const DEFAULT_LIVE_USD_RESERVE = autonomous15mSession ? 4 : 5;
+const LIVE_USD_RESERVE = Math.max(0, Number(process.env.LIVE_USD_RESERVE || DEFAULT_LIVE_USD_RESERVE));
+const DEFAULT_LIVE_MIN_TRADABLE_BALANCE = autonomous15mSession ? 1.5 : 2;
+const LIVE_MIN_TRADABLE_BALANCE = Math.max(0.5, Number(process.env.LIVE_MIN_TRADABLE_BALANCE || DEFAULT_LIVE_MIN_TRADABLE_BALANCE));
 const LIVE_PREFLIGHT_TTL_MS = Math.max(1000, Number(process.env.LIVE_PREFLIGHT_TTL_MS || 300000));
 const AUTONOMOUS_SOURCE_TTX_FILTER = autonomous15mSession && process.env.AUTONOMOUS_SOURCE_TTX_FILTER !== 'false';
 const GEMINI_REAL_FETCH_INTERVAL_MS = Math.max(

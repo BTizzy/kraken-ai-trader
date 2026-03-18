@@ -79,9 +79,41 @@ function summarizeTradeSnapshot(trades = []) {
     };
 }
 
+function summarizeDiagnosticsWindow({ signalTypes, rejectionSummary, funnel, filters, allowlistShadow }) {
+    return {
+        signal_types: {
+            total_scored: signalTypes?.total_scored || 0,
+            total_actionable: signalTypes?.total_actionable || 0,
+            actionable_by_type: signalTypes?.actionable_by_type || {},
+            scored_by_type: signalTypes?.scored_by_type || {}
+        },
+        funnel: {
+            stages: funnel?.funnel?.stages || {},
+            dropped: funnel?.funnel?.dropped || {},
+            session_universe: funnel?.session_universe || null
+        },
+        filters: {
+            dropped: filters?.dropped || {},
+            stages: filters?.stages || {}
+        },
+        rejection_summary: {
+            total_rejections: rejectionSummary?.total_rejections || 0,
+            by_stage: rejectionSummary?.by_stage || {},
+            by_reason: rejectionSummary?.by_reason || {}
+        },
+        allowlist_shadow: {
+            latest_blocked_total: allowlistShadow?.latest?.blocked_total || 0,
+            cumulative_blocked_total: allowlistShadow?.cumulative?.blocked_total || 0,
+            session_blocked_total: allowlistShadow?.current_session?.blocked_total || 0,
+            latest_blocked_by_type: allowlistShadow?.latest?.blocked_by_type || {},
+            latest_blocked_by_reason: allowlistShadow?.latest?.blocked_by_reason || {}
+        }
+    };
+}
+
 async function ensureBaseline() {
     const baselineSinceMs = Date.now() - 15 * 60 * 1000;
-    const [health, preflightInitial, readiness, groundTruth, reconcile, status, signalTypes, rejectionSummary, funnel, recentTrades, openTrades] = await Promise.all([
+    const [health, preflightInitial, readiness, groundTruth, reconcile, status, signalTypes, rejectionSummary, funnel, filters, allowlistShadow, recentTrades, openTrades] = await Promise.all([
         api('/api/health'),
         api('/api/bot/preflight', { method: 'POST', body: {} }),
         api('/api/session/readiness?force_preflight=true&force_gate=true'),
@@ -91,6 +123,8 @@ async function ensureBaseline() {
         api('/api/signals/types'),
         api(`/api/rejections/summary?since_ms=${baselineSinceMs}&limit=25`),
         api('/api/signals/funnel'),
+        api('/api/signals/filters'),
+        api('/api/signals/allowlist-shadow?limit=25'),
         api('/api/trades/recent?limit=500&mode=live'),
         api('/api/trades/open?mode=live')
     ]);
@@ -126,6 +160,8 @@ async function ensureBaseline() {
     assert(signalTypes.ok, 'signals/types endpoint unavailable');
     assert(rejectionSummary.ok, 'rejections/summary endpoint unavailable');
     assert(funnel.ok, 'signals/funnel endpoint unavailable');
+    assert(filters.ok, 'signals/filters endpoint unavailable');
+    assert(allowlistShadow.ok, 'signals/allowlist-shadow endpoint unavailable');
     assert(recentTrades.ok, 'trades/recent endpoint unavailable');
     assert(openTrades.ok, 'trades/open endpoint unavailable');
 
@@ -146,9 +182,14 @@ async function ensureBaseline() {
             open_count: Number(openTrades.data?.count || 0)
         },
         diagnostics: {
-            signal_types: signalTypes.data,
-            rejection_summary: rejectionSummary.data,
-            funnel: funnel.data
+            window_start_ms: baselineSinceMs,
+            ...summarizeDiagnosticsWindow({
+                signalTypes: signalTypes.data,
+                rejectionSummary: rejectionSummary.data,
+                funnel: funnel.data,
+                filters: filters.data,
+                allowlistShadow: allowlistShadow.data
+            })
         }
     };
 }
@@ -415,18 +456,12 @@ async function main() {
     });
 
     log('Baseline diagnostics', {
-        signal_types: {
-            total_scored: baseline.diagnostics?.signal_types?.total_scored || 0,
-            total_actionable: baseline.diagnostics?.signal_types?.total_actionable || 0,
-            actionable_by_type: baseline.diagnostics?.signal_types?.actionable_by_type || {}
-        },
-        funnel: baseline.diagnostics?.funnel?.funnel?.stages || {},
+        signal_types: baseline.diagnostics?.signal_types || {},
+        funnel: baseline.diagnostics?.funnel?.stages || {},
+        filter_dropped: baseline.diagnostics?.filters?.dropped || {},
         session_universe: baseline.diagnostics?.funnel?.session_universe || null,
-        rejection_summary: {
-            total_rejections: baseline.diagnostics?.rejection_summary?.total_rejections || 0,
-            by_stage: baseline.diagnostics?.rejection_summary?.by_stage || {},
-            by_reason: baseline.diagnostics?.rejection_summary?.by_reason || {}
-        },
+        rejection_summary: baseline.diagnostics?.rejection_summary || {},
+        allowlist_shadow: baseline.diagnostics?.allowlist_shadow || {},
         session_sanity: baseline.status?.session_sanity || null
     });
 
@@ -472,6 +507,41 @@ async function main() {
             orphaned: unresolvedOrphaned,
             phantom: unresolvedPhantom,
             qtyMismatch: unresolvedQtyMismatch
+        }
+    };
+
+    const diagnosticsSinceMs = Number(baseline.startTimestampSec || Math.floor(Date.now() / 1000)) * 1000;
+    const [postSignalTypesRes, postRejectionSummaryRes, postFunnelRes, postFiltersRes, postAllowlistShadowRes] = await Promise.all([
+        api('/api/signals/types'),
+        api(`/api/rejections/summary?since_ms=${diagnosticsSinceMs}&limit=100`),
+        api('/api/signals/funnel'),
+        api('/api/signals/filters'),
+        api('/api/signals/allowlist-shadow?limit=50')
+    ]);
+
+    assert(postSignalTypesRes.ok, 'post-session signals/types endpoint unavailable');
+    assert(postRejectionSummaryRes.ok, 'post-session rejections/summary endpoint unavailable');
+    assert(postFunnelRes.ok, 'post-session signals/funnel endpoint unavailable');
+    assert(postFiltersRes.ok, 'post-session signals/filters endpoint unavailable');
+    assert(postAllowlistShadowRes.ok, 'post-session signals/allowlist-shadow endpoint unavailable');
+
+    const postDiagnostics = summarizeDiagnosticsWindow({
+        signalTypes: postSignalTypesRes.data,
+        rejectionSummary: postRejectionSummaryRes.data,
+        funnel: postFunnelRes.data,
+        filters: postFiltersRes.data,
+        allowlistShadow: postAllowlistShadowRes.data
+    });
+
+    outcome.diagnostics = {
+        window_start_ms: diagnosticsSinceMs,
+        baseline: baseline.diagnostics,
+        post: postDiagnostics,
+        delta: {
+            scored: (postDiagnostics.signal_types.total_scored || 0) - (baseline.diagnostics?.signal_types?.total_scored || 0),
+            actionable: (postDiagnostics.signal_types.total_actionable || 0) - (baseline.diagnostics?.signal_types?.total_actionable || 0),
+            rejections: (postDiagnostics.rejection_summary.total_rejections || 0) - (baseline.diagnostics?.rejection_summary?.total_rejections || 0),
+            allowlist_blocked: (postDiagnostics.allowlist_shadow.latest_blocked_total || 0) - (baseline.diagnostics?.allowlist_shadow?.latest_blocked_total || 0)
         }
     };
 

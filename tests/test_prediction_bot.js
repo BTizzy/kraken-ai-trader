@@ -307,6 +307,16 @@ const sessionEngine = new PaperTradingEngine(db, liveModeGemini, {
     sessionEntryBufferSeconds: 120,
     sessionForceExitBufferSeconds: 60
 });
+const relaxedSessionEngine = new PaperTradingEngine(db, liveModeGemini, {
+    tradingProfile: 'short-run',
+    autonomous15mSession: true,
+    sessionTimeoutMs: 900000,
+    sessionMinTtxSeconds: 600,
+    sessionMaxTtxSeconds: 3600,
+    sessionEntryBufferSeconds: 120,
+    sessionForceExitBufferSeconds: 60,
+    sessionRequiredRemainingCapSeconds: 180
+});
 
 function makeFutureGemiSymbol(asset = 'BTC', strike = '50000', minutesAhead = 20) {
     const expiry = new Date(Date.now() + minutesAhead * 60 * 1000);
@@ -384,6 +394,34 @@ test('Session policy exposes coherent short-session entry timing', () => {
     assert(policy.timeout_ms === 900000, `Expected timeout_ms=900000, got ${policy.timeout_ms}`);
     assert(policy.entry_buffer_seconds === 120, `Expected entry_buffer_seconds=120, got ${policy.entry_buffer_seconds}`);
     assert(policy.min_entry_ttx_seconds === 300, `Expected min_entry_ttx_seconds=300, got ${policy.min_entry_ttx_seconds}`);
+    assert(policy.required_session_remaining_seconds === 240,
+        `Expected required_session_remaining_seconds=240, got ${policy.required_session_remaining_seconds}`);
+});
+
+test('Session remaining-time cap can be relaxed for short runs', () => {
+    const defaultGate = sessionEngine.getRequiredSessionRemainingSeconds();
+    const relaxedGate = relaxedSessionEngine.getRequiredSessionRemainingSeconds();
+
+    assert(defaultGate === 240, `Expected default required remaining gate 240, got ${defaultGate}`);
+    assert(relaxedGate === 180, `Expected relaxed required remaining gate 180, got ${relaxedGate}`);
+
+    sessionEngine.markSessionStart(0, 100);
+    relaxedSessionEngine.markSessionStart(0, 100);
+
+    sessionEngine.sessionStartTimeMs = Date.now() - (sessionEngine.sessionTimeoutMs - 200000);
+    relaxedSessionEngine.sessionStartTimeMs = Date.now() - (relaxedSessionEngine.sessionTimeoutMs - 200000);
+
+    const signal = {
+        category: 'crypto',
+        marketId: makeFutureGemiSymbol('BTC', '50000', 20),
+        direction: 'YES'
+    };
+
+    const defaultCheck = sessionEngine.canEnterPosition(signal);
+    const relaxedCheck = relaxedSessionEngine.canEnterPosition(signal);
+
+    assert(defaultCheck.allowed === false, `Expected default gate to block, got ${defaultCheck.reason}`);
+    assert(relaxedCheck.allowed === true, `Expected relaxed gate to allow, got ${relaxedCheck.reason}`);
 });
 
 test('Signal entry policy applies short medium and long TTX buckets', () => {

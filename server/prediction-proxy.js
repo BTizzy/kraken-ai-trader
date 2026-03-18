@@ -1646,6 +1646,23 @@ app.get('/api/signals/funnel', (req, res) => {
             autonomous_allowed_signal_types: Array.from(autonomousAllowedSignalTypes),
             session_universe: geminiClient.getSessionUniverseStats(),
             funnel: latestSignalFunnel,
+            allowlist_shadow: {
+                latest: latestAllowlistShadow,
+                cumulative: {
+                    snapshot_at: cumulativeAllowlistShadow.snapshot_at,
+                    cycle_count: cumulativeAllowlistShadow.cycle_count,
+                    blocked_total: cumulativeAllowlistShadow.blocked_total,
+                    blocked_by_type: cumulativeAllowlistShadow.blocked_by_type,
+                    blocked_by_reason: cumulativeAllowlistShadow.blocked_by_reason
+                },
+                current_session: {
+                    snapshot_at: sessionAllowlistShadow.snapshot_at,
+                    cycle_count: sessionAllowlistShadow.cycle_count,
+                    blocked_total: sessionAllowlistShadow.blocked_total,
+                    blocked_by_type: sessionAllowlistShadow.blocked_by_type,
+                    blocked_by_reason: sessionAllowlistShadow.blocked_by_reason
+                }
+            },
             counters: {
                 cumulative: cumulativeSignalFunnel,
                 current_session: sessionSignalFunnel
@@ -1664,10 +1681,54 @@ app.get('/api/signals/filters', (req, res) => {
             cycle_count: latestSignalFunnel?.cycle_count || 0,
             dropped: latestSignalFunnel?.dropped || {},
             stages: latestSignalFunnel?.stages || {},
+            allowlist_shadow: {
+                latest: latestAllowlistShadow,
+                cumulative: {
+                    snapshot_at: cumulativeAllowlistShadow.snapshot_at,
+                    cycle_count: cumulativeAllowlistShadow.cycle_count,
+                    blocked_total: cumulativeAllowlistShadow.blocked_total,
+                    blocked_by_type: cumulativeAllowlistShadow.blocked_by_type,
+                    blocked_by_reason: cumulativeAllowlistShadow.blocked_by_reason
+                },
+                current_session: {
+                    snapshot_at: sessionAllowlistShadow.snapshot_at,
+                    cycle_count: sessionAllowlistShadow.cycle_count,
+                    blocked_total: sessionAllowlistShadow.blocked_total,
+                    blocked_by_type: sessionAllowlistShadow.blocked_by_type,
+                    blocked_by_reason: sessionAllowlistShadow.blocked_by_reason
+                }
+            },
             counters: {
                 cumulative: cumulativeSignalFunnel,
                 current_session: sessionSignalFunnel
             }
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/signals/allowlist-shadow', (req, res) => {
+    try {
+        const limitRaw = Number(req.query.limit || 25);
+        const limit = Math.max(1, Math.min(ALLOWLIST_SHADOW_SAMPLE_LIMIT, limitRaw));
+
+        const withLimitedSamples = (shadow) => ({
+            snapshot_at: shadow?.snapshot_at || null,
+            cycle_count: shadow?.cycle_count || 0,
+            blocked_total: shadow?.blocked_total || 0,
+            blocked_by_type: shadow?.blocked_by_type || {},
+            blocked_by_reason: shadow?.blocked_by_reason || {},
+            samples: (shadow?.samples || []).slice(-limit)
+        });
+
+        res.json({
+            snapshot_at: new Date().toISOString(),
+            sample_limit: limit,
+            autonomous_allowed_signal_types: Array.from(autonomousAllowedSignalTypes),
+            latest: withLimitedSamples(latestAllowlistShadow),
+            cumulative: withLimitedSamples(cumulativeAllowlistShadow),
+            current_session: withLimitedSamples(sessionAllowlistShadow)
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -3069,6 +3130,29 @@ app.get('/api/bot/status', async (req, res) => {
                 is_flat: botState.cleanupResult.is_flat
             } : null
         },
+        allowlist_shadow: {
+            latest: {
+                snapshot_at: latestAllowlistShadow.snapshot_at,
+                cycle_count: latestAllowlistShadow.cycle_count,
+                blocked_total: latestAllowlistShadow.blocked_total,
+                blocked_by_type: latestAllowlistShadow.blocked_by_type,
+                blocked_by_reason: latestAllowlistShadow.blocked_by_reason
+            },
+            cumulative: {
+                snapshot_at: cumulativeAllowlistShadow.snapshot_at,
+                cycle_count: cumulativeAllowlistShadow.cycle_count,
+                blocked_total: cumulativeAllowlistShadow.blocked_total,
+                blocked_by_type: cumulativeAllowlistShadow.blocked_by_type,
+                blocked_by_reason: cumulativeAllowlistShadow.blocked_by_reason
+            },
+            current_session: {
+                snapshot_at: sessionAllowlistShadow.snapshot_at,
+                cycle_count: sessionAllowlistShadow.cycle_count,
+                blocked_total: sessionAllowlistShadow.blocked_total,
+                blocked_by_type: sessionAllowlistShadow.blocked_by_type,
+                blocked_by_reason: sessionAllowlistShadow.blocked_by_reason
+            }
+        },
         rate_limiter: rateLimiter.getStats(),
         signal_detector: signalDetector.getStats(),
         runtime_cadence: {
@@ -3588,6 +3672,58 @@ let latestSignalFunnel = {
     dropped: {},
     spot_status: {}
 };
+const ALLOWLIST_SHADOW_SAMPLE_LIMIT = Math.max(20, Number(process.env.ALLOWLIST_SHADOW_SAMPLE_LIMIT || 100));
+
+function createEmptyAllowlistShadow() {
+    return {
+        snapshot_at: null,
+        cycle_count: 0,
+        blocked_total: 0,
+        blocked_by_type: {},
+        blocked_by_reason: {},
+        samples: []
+    };
+}
+
+function cloneAllowlistShadow(shadow) {
+    return {
+        snapshot_at: shadow.snapshot_at,
+        cycle_count: shadow.cycle_count,
+        blocked_total: shadow.blocked_total,
+        blocked_by_type: { ...(shadow.blocked_by_type || {}) },
+        blocked_by_reason: { ...(shadow.blocked_by_reason || {}) },
+        samples: Array.isArray(shadow.samples) ? shadow.samples.slice() : []
+    };
+}
+
+function recordAllowlistShadowHit(shadow, signal, reason, cycleCount) {
+    if (!shadow) return;
+    const signalType = signal?.signalType || signal?.signal_type || 'unknown';
+    shadow.snapshot_at = new Date().toISOString();
+    shadow.cycle_count = cycleCount;
+    shadow.blocked_total += 1;
+    shadow.blocked_by_type[signalType] = (shadow.blocked_by_type[signalType] || 0) + 1;
+    shadow.blocked_by_reason[reason] = (shadow.blocked_by_reason[reason] || 0) + 1;
+
+    if (reason !== 'unsupported_signal_type') return;
+
+    shadow.samples.push({
+        ts: Date.now(),
+        marketId: signal?.marketId || null,
+        title: signal?.title || signal?.eventTitle || null,
+        signalType,
+        reason,
+        score: Number.isFinite(Number(signal?.score)) ? Number(signal.score) : null,
+        edge: Number.isFinite(Number(signal?.edge)) ? Number(signal.edge) : null,
+        netEdge: Number.isFinite(Number(signal?.netEdge)) ? Number(signal.netEdge) : null,
+        direction: signal?.direction || null,
+        confidence: signal?.confidence || null
+    });
+
+    if (shadow.samples.length > ALLOWLIST_SHADOW_SAMPLE_LIMIT) {
+        shadow.samples.splice(0, shadow.samples.length - ALLOWLIST_SHADOW_SAMPLE_LIMIT);
+    }
+}
 
 function createEmptyFunnelCounters() {
     return {
@@ -3659,6 +3795,9 @@ function accumulateFunnelCounters(counter, funnel) {
 
 let cumulativeSignalFunnel = createEmptyFunnelCounters();
 let sessionSignalFunnel = createEmptyFunnelCounters();
+let latestAllowlistShadow = createEmptyAllowlistShadow();
+let cumulativeAllowlistShadow = createEmptyAllowlistShadow();
+let sessionAllowlistShadow = createEmptyAllowlistShadow();
 let matchedMarketCache = [];
 let cryptoMatchMeta = new Map(); // GEMI-* → { crypto_match, kalshi_synthetic_bid/ask/mid, ... }
 let priceUpdateRunning = false;
@@ -3998,6 +4137,9 @@ async function updatePrices() {
         // Strategy 1: Composite score (velocity + spread + consensus)
         latestSignals = signalDetector.processMarkets(marketStates);
         let actionable = latestSignals.filter(s => s.actionable);
+        const cycleAllowlistShadow = createEmptyAllowlistShadow();
+        cycleAllowlistShadow.snapshot_at = new Date().toISOString();
+        cycleAllowlistShadow.cycle_count = botState.cycleCount;
         const funnel = {
             snapshot_at: new Date().toISOString(),
             cycle_count: botState.cycleCount,
@@ -4284,6 +4426,7 @@ async function updatePrices() {
                 }
 
                 if (dropReason) {
+                    recordAllowlistShadowHit(cycleAllowlistShadow, signal, dropReason, botState.cycleCount);
                     funnel.dropped.autonomous_15m_mode_filter.total += 1;
                     funnel.dropped.autonomous_15m_mode_filter.by_reason[dropReason] =
                         (funnel.dropped.autonomous_15m_mode_filter.by_reason[dropReason] || 0) + 1;
@@ -4403,6 +4546,43 @@ async function updatePrices() {
             accumulateFunnelCounters(cumulativeSignalFunnel, funnel);
             if (botState.running) {
                 accumulateFunnelCounters(sessionSignalFunnel, funnel);
+            }
+
+            latestAllowlistShadow = cloneAllowlistShadow(cycleAllowlistShadow);
+            latestSignalFunnel.allowlist_shadow = {
+                blocked_total: latestAllowlistShadow.blocked_total,
+                blocked_by_type: latestAllowlistShadow.blocked_by_type,
+                blocked_by_reason: latestAllowlistShadow.blocked_by_reason
+            };
+
+            if (latestAllowlistShadow.blocked_total > 0) {
+                cumulativeAllowlistShadow.snapshot_at = latestAllowlistShadow.snapshot_at;
+                cumulativeAllowlistShadow.cycle_count = latestAllowlistShadow.cycle_count;
+                cumulativeAllowlistShadow.blocked_total += latestAllowlistShadow.blocked_total;
+                mergeCountMaps(cumulativeAllowlistShadow.blocked_by_type, latestAllowlistShadow.blocked_by_type);
+                mergeCountMaps(cumulativeAllowlistShadow.blocked_by_reason, latestAllowlistShadow.blocked_by_reason);
+                cumulativeAllowlistShadow.samples.push(...latestAllowlistShadow.samples);
+                if (cumulativeAllowlistShadow.samples.length > ALLOWLIST_SHADOW_SAMPLE_LIMIT) {
+                    cumulativeAllowlistShadow.samples.splice(
+                        0,
+                        cumulativeAllowlistShadow.samples.length - ALLOWLIST_SHADOW_SAMPLE_LIMIT
+                    );
+                }
+            }
+
+            if (botState.running && latestAllowlistShadow.blocked_total > 0) {
+                sessionAllowlistShadow.snapshot_at = latestAllowlistShadow.snapshot_at;
+                sessionAllowlistShadow.cycle_count = latestAllowlistShadow.cycle_count;
+                sessionAllowlistShadow.blocked_total += latestAllowlistShadow.blocked_total;
+                mergeCountMaps(sessionAllowlistShadow.blocked_by_type, latestAllowlistShadow.blocked_by_type);
+                mergeCountMaps(sessionAllowlistShadow.blocked_by_reason, latestAllowlistShadow.blocked_by_reason);
+                sessionAllowlistShadow.samples.push(...latestAllowlistShadow.samples);
+                if (sessionAllowlistShadow.samples.length > ALLOWLIST_SHADOW_SAMPLE_LIMIT) {
+                    sessionAllowlistShadow.samples.splice(
+                        0,
+                        sessionAllowlistShadow.samples.length - ALLOWLIST_SHADOW_SAMPLE_LIMIT
+                    );
+                }
             }
 
             // Warm-up period: observe but don't trade for first N cycles

@@ -691,6 +691,7 @@ const DEFAULT_LIVE_MIN_TRADABLE_BALANCE = 2;
 const LIVE_MIN_TRADABLE_BALANCE = Math.max(0.5, Number(process.env.LIVE_MIN_TRADABLE_BALANCE || DEFAULT_LIVE_MIN_TRADABLE_BALANCE));
 const LIVE_PREFLIGHT_TTL_MS = Math.max(1000, Number(process.env.LIVE_PREFLIGHT_TTL_MS || 300000));
 const AUTONOMOUS_SOURCE_TTX_FILTER = autonomous15mSession && process.env.AUTONOMOUS_SOURCE_TTX_FILTER !== 'false';
+const ALLOW_LIVE_CAPITAL_RISK = String(process.env.ALLOW_LIVE_CAPITAL_RISK || '').toLowerCase() === 'true';
 const GEMINI_REAL_FETCH_INTERVAL_MS = Math.max(
     5000,
     Number(process.env.GEMINI_REAL_FETCH_INTERVAL_MS || (autonomous15mSession ? 10000 : 30000))
@@ -2686,6 +2687,13 @@ app.post('/api/bot/start', async (req, res) => {
     if (!botState.running) {
         try {
             if (isLiveOrSandboxMode()) {
+                if (!ALLOW_LIVE_CAPITAL_RISK) {
+                    return res.status(409).json({
+                        status: 'blocked',
+                        error: 'capital_preservation_lock',
+                        hint: 'Set ALLOW_LIVE_CAPITAL_RISK=true to explicitly allow live bot start'
+                    });
+                }
                 const token = req.body?.preflight_token || req.headers['x-preflight-token'];
                 if (!hasValidLivePreflightToken(token)) {
                     return res.status(409).json({
@@ -4906,6 +4914,10 @@ let warmupCyclesRemaining = WARMUP_CYCLES;
 async function startBot() {
     if (botState.running) return;
 
+    if (isLiveOrSandboxMode() && !ALLOW_LIVE_CAPITAL_RISK) {
+        throw new Error('capital_preservation_lock');
+    }
+
     let preflight = null;
     const sessionTradeMode = isLiveOrSandboxMode() ? 'live' : 'paper';
     if (isLiveOrSandboxMode()) {
@@ -4994,6 +5006,9 @@ async function validateStartup() {
     if (dataOnlyMode) logger.info('DATA_ONLY mode: collecting price data, NO trades will be placed');
     if (isLiveOrSandboxMode()) {
         warnings.push('Live/sandbox mode requires explicit preflight before /api/bot/start (POST /api/bot/preflight)');
+        if (!ALLOW_LIVE_CAPITAL_RISK) {
+            warnings.push('Capital preservation lock active: set ALLOW_LIVE_CAPITAL_RISK=true to permit live bot start');
+        }
     }
 
     // 1. Env var checks for live/sandbox mode

@@ -301,6 +301,7 @@ function isNonSessionQualityFailure(message) {
         || text.includes('run exited zero trades')
         || text.includes('below execute threshold')
         || text.includes('capital_preservation_lock')
+        || text.includes('live_preflight_failed:capital_preservation_lock')
         || text.includes('bot start failed');
 }
 

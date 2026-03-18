@@ -6,8 +6,23 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const RUNS = Math.max(1, Number(process.env.RUNS || 5));
-const SESSION_SECONDS = Math.max(60, Number(process.env.SESSION_SECONDS || 120));
+function readCliNumberFlag(name) {
+    const idx = process.argv.indexOf(name);
+    if (idx === -1) return null;
+    const raw = process.argv[idx + 1];
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : null;
+}
+
+const cliRuns = readCliNumberFlag('--runs');
+const cliMinutes = readCliNumberFlag('--minutes');
+const cliSeconds = readCliNumberFlag('--seconds');
+
+const RUNS = Math.max(1, Number(cliRuns ?? process.env.RUNS ?? 5));
+const SESSION_SECONDS = Math.max(
+    60,
+    Number(cliSeconds ?? (cliMinutes != null ? cliMinutes * 60 : null) ?? process.env.SESSION_SECONDS ?? 120)
+);
 const POLL_SECONDS = Math.max(5, Number(process.env.POLL_SECONDS || 15));
 const MAX_LIVE_OPEN = Math.max(1, Number(process.env.MAX_LIVE_OPEN || 1));
 const DRIFT_CONFIRM_TICKS = Math.max(1, Number(process.env.DRIFT_CONFIRM_TICKS || 2));

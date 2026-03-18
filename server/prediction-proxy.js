@@ -152,6 +152,9 @@ async function getDisplayWallet() {
 
 // ===== Emergency Exit All Positions =====
 
+const POST_EXIT_RECONCILE_GRACE_MS = Math.max(0, Number(process.env.POST_EXIT_RECONCILE_GRACE_MS || 100));
+const POST_EXIT_RECONCILE_RETRY_MS = Math.max(0, Number(process.env.POST_EXIT_RECONCILE_RETRY_MS || 250));
+
 async function emergencyExitAll(options = {}) {
     const { liveOnly = false, closeReason = 'emergency_stop' } = options;
 
@@ -337,12 +340,45 @@ async function emergencyExitAll(options = {}) {
     // Runs after the exit loop so the result reflects what's actually on the
     // exchange, not just what we attempted to close.
     let postReconcile = null;
+    let reconcileRetry = null;
     let isFlat = unresolvedExits.length === 0;
     try {
+        if (POST_EXIT_RECONCILE_GRACE_MS > 0) {
+            await sleep(POST_EXIT_RECONCILE_GRACE_MS);
+        }
+
         postReconcile = await tradingEngine.reconcilePositions();
-        const orphaned = (postReconcile.orphaned || []).length;
-        const phantom = (postReconcile.phantom || []).filter(p => !p.pendingExit && !p.transientGrace).length;
-        const qtyMismatch = (postReconcile.quantityMismatch || []).length;
+        let orphaned = (postReconcile.orphaned || []).length;
+        let phantom = (postReconcile.phantom || []).filter(p => !p.pendingExit && !p.transientGrace).length;
+        let qtyMismatch = (postReconcile.quantityMismatch || []).length;
+
+        const isOrphanOnlyReconcileRace = unresolvedExits.length === 0 && orphaned > 0 && phantom === 0 && qtyMismatch === 0;
+        if (isOrphanOnlyReconcileRace && POST_EXIT_RECONCILE_RETRY_MS > 0) {
+            await sleep(POST_EXIT_RECONCILE_RETRY_MS);
+            const retryReconcile = await tradingEngine.reconcilePositions();
+            const retryOrphaned = (retryReconcile.orphaned || []).length;
+            const retryPhantom = (retryReconcile.phantom || []).filter(p => !p.pendingExit && !p.transientGrace).length;
+            const retryQtyMismatch = (retryReconcile.quantityMismatch || []).length;
+
+            reconcileRetry = {
+                wait_ms: POST_EXIT_RECONCILE_RETRY_MS,
+                before: { orphaned, phantom, qtyMismatch },
+                after: { orphaned: retryOrphaned, phantom: retryPhantom, qtyMismatch: retryQtyMismatch }
+            };
+
+            postReconcile = retryReconcile;
+            orphaned = retryOrphaned;
+            phantom = retryPhantom;
+            qtyMismatch = retryQtyMismatch;
+
+            if (retryOrphaned < reconcileRetry.before.orphaned) {
+                logger.info(
+                    `Post-emergency reconcile retry reduced orphaned count: ` +
+                    `${reconcileRetry.before.orphaned} -> ${retryOrphaned}`
+                );
+            }
+        }
+
         isFlat = unresolvedExits.length === 0 && orphaned === 0 && phantom === 0 && qtyMismatch === 0;
     } catch (reconErr) {
         logger.error(`Post-emergency reconcile failed: ${reconErr.message}`);
@@ -368,6 +404,7 @@ async function emergencyExitAll(options = {}) {
                 qtyMismatch: (postReconcile.quantityMismatch || []).length
             }
             : null,
+        reconcile_retry: reconcileRetry,
         is_flat: isFlat
     };
     botState.cleanupStatus = isFlat ? 'complete' : 'complete_non_flat';

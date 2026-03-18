@@ -2,6 +2,7 @@
 
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
@@ -14,6 +15,19 @@ const POLL_SECONDS = Math.max(5, Number(process.env.POLL_SECONDS || 15));
 const MAX_LIVE_OPEN = Math.max(1, Number(process.env.MAX_LIVE_OPEN || 1));
 const DRIFT_CONFIRM_TICKS = Math.max(1, Number(process.env.DRIFT_CONFIRM_TICKS || 2));
 const DRIFT_SETTLE_WAIT_MS = Math.max(0, Number(process.env.DRIFT_SETTLE_WAIT_MS || 10000));
+const ORPHAN_RECOVERY_GRACE_MS = Math.max(0, Number(process.env.ORPHAN_RECOVERY_GRACE_MS || 8000));
+const ORPHAN_RECOVERY_POLL_MS = Math.max(250, Number(process.env.ORPHAN_RECOVERY_POLL_MS || 1000));
+const ORPHAN_RECOVERY_RETRY_AFTER_MS = Math.max(0, Number(process.env.ORPHAN_RECOVERY_RETRY_AFTER_MS || 2000));
+const BASELINE_RECOVERY_MAX_ATTEMPTS = Math.max(1, Number(process.env.BASELINE_RECOVERY_MAX_ATTEMPTS || 3));
+const BASELINE_RECOVERY_WAIT_MS = Math.max(250, Number(process.env.BASELINE_RECOVERY_WAIT_MS || 1200));
+const MIN_EXECUTE_LIVE_BALANCE_USD = Math.max(0, Number(process.env.MIN_EXECUTE_LIVE_BALANCE_USD || 10));
+const API_TIMEOUT_MS = Math.max(1000, Number(process.env.API_TIMEOUT_MS || 15000));
+const API_MAX_RETRIES = Math.max(0, Number(process.env.API_MAX_RETRIES || 2));
+const STABILITY_RESULTS_DIR = process.env.STABILITY_RESULTS_DIR || path.join(__dirname, '..', 'test-results');
+const STABILITY_LOOKBACK_FILES = Math.max(1, Number(process.env.STABILITY_LOOKBACK_FILES || 20));
+const REQUIRED_CONSECUTIVE_CLEAN_RUNS = Math.max(1, Number(process.env.REQUIRED_CONSECUTIVE_CLEAN_RUNS || 3));
+const ALLOW_UNSTABLE_EXECUTE_START = String(process.env.ALLOW_UNSTABLE_EXECUTE_START || '').toLowerCase() === 'true';
+const STABILITY_STATE_FILE = process.env.STABILITY_STATE_FILE || path.join(STABILITY_RESULTS_DIR, 'capped_stability_state.json');
 
 const ALLOWED_STOP_REASONS = new Set([
     null,
@@ -40,30 +54,285 @@ async function sleep(ms) {
 }
 
 async function api(pathname, options = {}) {
-    const response = await fetch(`${API_BASE}${pathname}`, {
-        method: options.method || 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-            ...(options.headers || {})
-        },
-        body: options.body ? JSON.stringify(options.body) : undefined
-    });
+    let lastError = null;
 
-    const text = await response.text();
-    let data;
-    try {
-        data = text ? JSON.parse(text) : {};
-    } catch (error) {
-        throw new Error(`${pathname} returned invalid JSON: ${text}`);
+    for (let attempt = 0; attempt <= API_MAX_RETRIES; attempt += 1) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+
+        try {
+            const response = await fetch(`${API_BASE}${pathname}`, {
+                method: options.method || 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(options.headers || {})
+                },
+                body: options.body ? JSON.stringify(options.body) : undefined,
+                signal: controller.signal
+            });
+
+            clearTimeout(timeout);
+
+            const text = await response.text();
+            let data;
+            try {
+                data = text ? JSON.parse(text) : {};
+            } catch (_) {
+                throw new Error(`${pathname} returned invalid JSON: ${text}`);
+            }
+
+            return { ok: response.ok, status: response.status, data };
+        } catch (error) {
+            clearTimeout(timeout);
+            lastError = error;
+
+            if (attempt >= API_MAX_RETRIES) {
+                break;
+            }
+
+            const message = String(error?.message || '').toLowerCase();
+            const isTransient = message.includes('fetch failed')
+                || message.includes('econnrefused')
+                || message.includes('enotfound')
+                || message.includes('eai_again')
+                || message.includes('socket hang up')
+                || message.includes('aborted');
+
+            if (!isTransient) {
+                break;
+            }
+
+            // Exponential backoff between retry attempts for transient transport failures.
+            await sleep(500 * (2 ** attempt));
+        }
     }
 
-    return { ok: response.ok, status: response.status, data };
+    throw lastError || new Error(`${pathname} request failed`);
 }
 
 function assert(condition, message) {
     if (!condition) {
         throw new Error(message);
     }
+}
+
+function formatPreflightError(response, contextLabel = 'preflight invalid') {
+    const status = response?.status;
+    const payload = response?.data || {};
+    const reason = payload?.reason || payload?.error || (status != null ? `status_${status}` : 'unknown');
+    const details = payload?.details || {};
+
+    const balance = Number(details.balance);
+    const tradable = Number(details.tradable_balance);
+    const reserve = Number(details.live_usd_reserve);
+    const minTradable = Number(details.live_min_tradable_balance);
+    const parts = [];
+
+    if (Number.isFinite(balance)) parts.push(`balance=${balance.toFixed(2)}`);
+    if (Number.isFinite(tradable)) parts.push(`tradable=${tradable.toFixed(2)}`);
+    if (Number.isFinite(reserve)) parts.push(`reserve=${reserve.toFixed(2)}`);
+    if (Number.isFinite(minTradable)) parts.push(`min_tradable=${minTradable.toFixed(2)}`);
+
+    const detailSuffix = parts.length > 0 ? ` (${parts.join(', ')})` : '';
+    return `${contextLabel}: ${reason}${detailSuffix}`;
+}
+
+function listRecentBatchFiles() {
+    if (!fs.existsSync(STABILITY_RESULTS_DIR)) return [];
+
+    const names = fs.readdirSync(STABILITY_RESULTS_DIR)
+        .filter(name => /^capped_session_batch_.*\.json$/.test(name));
+
+    return names
+        .map(name => {
+            const filePath = path.join(STABILITY_RESULTS_DIR, name);
+            let mtimeMs = 0;
+            try {
+                mtimeMs = fs.statSync(filePath).mtimeMs;
+            } catch (_) {
+                mtimeMs = 0;
+            }
+            return { name, filePath, mtimeMs };
+        })
+        .sort((a, b) => b.mtimeMs - a.mtimeMs)
+        .slice(0, STABILITY_LOOKBACK_FILES);
+}
+
+function readBatchJson(filePath) {
+    try {
+        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch (_) {
+        return null;
+    }
+}
+
+function isCleanRun(run) {
+    const outcome = run?.result?.outcome;
+    const conversion = outcome?.conversion || {};
+    return run?.success === true
+        && outcome?.ground_truth_flat === true
+        && conversion?.reconcile_flat === true
+        && Number(conversion?.open_live_post_count || 0) === 0;
+}
+
+function evaluateRecentStabilityGate() {
+    const files = listRecentBatchFiles();
+    const recentRuns = [];
+
+    for (const file of files) {
+        const batch = readBatchJson(file.filePath);
+        if (!batch || !Array.isArray(batch.runs)) continue;
+        for (const run of batch.runs) {
+            recentRuns.push({
+                file: file.name,
+                run: run?.run ?? null,
+                clean: isCleanRun(run),
+                success: run?.success === true,
+                error: run?.result?.error || null
+            });
+        }
+    }
+
+    let consecutiveClean = 0;
+    let firstBlocking = null;
+    for (const run of recentRuns) {
+        if (run.clean) {
+            consecutiveClean += 1;
+            if (consecutiveClean >= REQUIRED_CONSECUTIVE_CLEAN_RUNS) break;
+            continue;
+        }
+        firstBlocking = run;
+        break;
+    }
+
+    return {
+        passed: consecutiveClean >= REQUIRED_CONSECUTIVE_CLEAN_RUNS,
+        source: 'artifacts',
+        required_consecutive_clean_runs: REQUIRED_CONSECUTIVE_CLEAN_RUNS,
+        lookback_files: STABILITY_LOOKBACK_FILES,
+        files_considered: files.length,
+        runs_considered: recentRuns.length,
+        consecutive_clean_runs: consecutiveClean,
+        first_blocking_run: firstBlocking,
+        sample: recentRuns.slice(0, Math.max(REQUIRED_CONSECUTIVE_CLEAN_RUNS + 2, 6))
+    };
+}
+
+function readStabilityState() {
+    try {
+        if (!fs.existsSync(STABILITY_STATE_FILE)) return null;
+        const raw = JSON.parse(fs.readFileSync(STABILITY_STATE_FILE, 'utf8'));
+        if (!raw || typeof raw !== 'object') return null;
+        return {
+            consecutive_clean_runs: Math.max(0, Number(raw.consecutive_clean_runs || 0)),
+            total_runs_recorded: Math.max(0, Number(raw.total_runs_recorded || 0)),
+            last_result: raw.last_result || null,
+            updated_at: raw.updated_at || null
+        };
+    } catch (_) {
+        return null;
+    }
+}
+
+function writeStabilityState(nextState) {
+    try {
+        fs.mkdirSync(path.dirname(STABILITY_STATE_FILE), { recursive: true });
+        fs.writeFileSync(STABILITY_STATE_FILE, `${JSON.stringify(nextState, null, 2)}\n`, 'utf8');
+    } catch (error) {
+        log('Failed to persist stability state', { error: error.message, file: STABILITY_STATE_FILE });
+    }
+}
+
+function updateStabilityState(runWasClean, resultContext = {}) {
+    const prev = readStabilityState() || {
+        consecutive_clean_runs: 0,
+        total_runs_recorded: 0,
+        last_result: null,
+        updated_at: null
+    };
+
+    const countTowardsStreak = resultContext.count_towards_streak !== false;
+
+    const next = {
+        consecutive_clean_runs: countTowardsStreak
+            ? (runWasClean ? (prev.consecutive_clean_runs + 1) : 0)
+            : prev.consecutive_clean_runs,
+        total_runs_recorded: countTowardsStreak
+            ? (prev.total_runs_recorded + 1)
+            : prev.total_runs_recorded,
+        last_result: {
+            clean: !!runWasClean,
+            counted: countTowardsStreak,
+            mode: resultContext.mode || null,
+            stop_reason: resultContext.stop_reason || null,
+            ground_truth_flat: resultContext.ground_truth_flat === true,
+            reconcile_flat: resultContext.reconcile_flat === true,
+            error: resultContext.error || null,
+            ts: new Date().toISOString()
+        },
+        updated_at: new Date().toISOString()
+    };
+
+    writeStabilityState(next);
+    return next;
+}
+
+function isNonSessionQualityFailure(message) {
+    const text = String(message || '').toLowerCase();
+    if (!text) return false;
+
+    return text.includes('fetch failed')
+        || text.includes('this operation was aborted')
+        || text === 'aborted'
+        || text.includes(' aborted')
+        || text.includes('preflight invalid')
+        || text.includes('balance_below_reserve_floor')
+        || text.includes('live_balance_below_reserve_floor')
+        || text.includes('econnrefused')
+        || text.includes('enotfound')
+        || text.includes('eai_again')
+        || text.includes('socket hang up')
+        || text.includes('valid_live_preflight_required')
+        || text.includes('zero_eligible_contracts')
+        || text.includes('zero_actionable_signals')
+        || text.includes('run entered zero trades')
+        || text.includes('run exited zero trades')
+        || text.includes('bot start failed');
+}
+
+    function getSessionUniverseEligibleCount(outcome, baseline) {
+        const fromOutcome = Number(outcome?.diagnostics?.post?.funnel?.session_universe?.eligible_contracts);
+        if (Number.isFinite(fromOutcome)) return fromOutcome;
+
+        const fromBaselineDiag = Number(baseline?.diagnostics?.funnel?.session_universe?.eligible_contracts);
+        if (Number.isFinite(fromBaselineDiag)) return fromBaselineDiag;
+
+        const fromReadiness = Number(baseline?.readiness?.session_universe?.eligible_contracts);
+        if (Number.isFinite(fromReadiness)) return fromReadiness;
+
+        return 0;
+    }
+
+function evaluateStabilityGate() {
+    const state = readStabilityState();
+    if (state && Number.isFinite(state.consecutive_clean_runs)) {
+        return {
+            passed: state.consecutive_clean_runs >= REQUIRED_CONSECUTIVE_CLEAN_RUNS,
+            source: 'state_file',
+            required_consecutive_clean_runs: REQUIRED_CONSECUTIVE_CLEAN_RUNS,
+            consecutive_clean_runs: state.consecutive_clean_runs,
+            total_runs_recorded: state.total_runs_recorded,
+            updated_at: state.updated_at,
+            last_result: state.last_result,
+            state_file: STABILITY_STATE_FILE
+        };
+    }
+
+    const artifactEval = evaluateRecentStabilityGate();
+    return {
+        ...artifactEval,
+        state_file: STABILITY_STATE_FILE
+    };
 }
 
 function summarizeTradeSnapshot(trades = []) {
@@ -114,10 +383,8 @@ function summarizeDiagnosticsWindow({ signalTypes, rejectionSummary, funnel, fil
 
 async function ensureBaseline() {
     const baselineSinceMs = Date.now() - 15 * 60 * 1000;
-    const [health, preflightInitial, readiness, groundTruth, reconcile, status, signalTypes, rejectionSummary, funnel, filters, allowlistShadow, recentTrades, openTrades] = await Promise.all([
+    let [health, groundTruth, reconcile, status, signalTypes, rejectionSummary, funnel, filters, allowlistShadow, recentTrades, openTrades] = await Promise.all([
         api('/api/health'),
-        api('/api/bot/preflight', { method: 'POST', body: {} }),
-        api('/api/session/readiness?force_preflight=true&force_gate=true'),
         api('/api/bot/ground-truth'),
         api('/api/reconcile'),
         api('/api/bot/status'),
@@ -132,31 +399,9 @@ async function ensureBaseline() {
 
     assert(health.ok && health.data?.status === 'ok', 'health check failed');
     assert(status.ok, 'bot status unavailable');
-    assert(status.data?.running === false, 'bot must be stopped before capped session start');
 
-    let preflight = preflightInitial;
-    if (!(preflight.ok && preflight.data?.valid === true)) {
-        const reason = preflight.data?.reason || preflight.data?.error || `status_${preflight.status}`;
-        log('Preflight invalid before run, attempting auto-recovery', { reason });
-
-        // Best-effort recovery path for stale open orders / orphaned state.
-        await api('/api/reconcile/fix', {
-            method: 'POST',
-            body: { recover_orphans: true }
-        }).catch(() => null);
-
-        await api('/api/bot/emergency-stop', {
-            method: 'POST',
-            body: {}
-        }).catch(() => null);
-
-        await sleep(3000);
-        preflight = await api('/api/bot/preflight', { method: 'POST', body: {} });
-    }
-
-    assert(preflight.ok && preflight.data?.valid === true, `preflight invalid: ${preflight.data?.reason || preflight.status}`);
-    assert(readiness.ok, 'session readiness unavailable');
-    assert(groundTruth.ok && groundTruth.data?.is_flat === true, 'ground-truth is not flat');
+    let preflight = await api('/api/bot/preflight', { method: 'POST', body: {} });
+    assert(groundTruth.ok, 'ground-truth unavailable');
     assert(reconcile.ok, 'reconcile endpoint unavailable');
     assert(signalTypes.ok, 'signals/types endpoint unavailable');
     assert(rejectionSummary.ok, 'rejections/summary endpoint unavailable');
@@ -166,16 +411,109 @@ async function ensureBaseline() {
     assert(recentTrades.ok, 'trades/recent endpoint unavailable');
     assert(openTrades.ok, 'trades/open endpoint unavailable');
 
-    const orphaned = reconcile.data?.orphaned?.length || 0;
-    const phantom = (reconcile.data?.phantom || []).filter(item => !item.pendingExit && !item.transientGrace).length;
-    const qtyMismatch = reconcile.data?.quantityMismatch?.length || 0;
+    let orphaned = reconcile.data?.orphaned?.length || 0;
+    let phantom = (reconcile.data?.phantom || []).filter(item => !item.pendingExit && !item.transientGrace).length;
+    let qtyMismatch = reconcile.data?.quantityMismatch?.length || 0;
+    let groundTruthFlat = groundTruth.ok && groundTruth.data?.is_flat === true;
+    let openLiveCount = Number(openTrades.data?.count || 0);
+    let running = status.data?.running === true;
+
+    for (let attempt = 1; attempt <= BASELINE_RECOVERY_MAX_ATTEMPTS; attempt += 1) {
+        const preflightValid = preflight.ok && preflight.data?.valid === true;
+        const reconcileFlat = orphaned === 0 && phantom === 0 && qtyMismatch === 0;
+        const fullyReady = !running && groundTruthFlat && reconcileFlat && openLiveCount === 0 && preflightValid;
+        const preflightReason = String(preflight.data?.reason || preflight.data?.error || `status_${preflight.status}`);
+        const reserveFloorOnly = !preflightValid
+            && !running
+            && groundTruthFlat
+            && reconcileFlat
+            && openLiveCount === 0
+            && (preflightReason === 'balance_below_reserve_floor'
+                || preflightReason === 'live_balance_below_reserve_floor');
+
+        if (fullyReady) {
+            break;
+        }
+
+        if (reserveFloorOnly) {
+            log('Baseline recovery skipped: reserve-floor preflight blocker is operational', {
+                preflight_reason: preflightReason,
+                details: preflight.data?.details || null
+            });
+            break;
+        }
+
+        log('Baseline pre-run state requires recovery', {
+            attempt,
+            max_attempts: BASELINE_RECOVERY_MAX_ATTEMPTS,
+            running,
+            ground_truth_flat: groundTruthFlat,
+            reconcile: { orphaned, phantom, qtyMismatch },
+            open_live: openLiveCount,
+            preflight_valid: preflightValid,
+            preflight_reason: preflightReason
+        });
+
+        await api('/api/bot/stop', { method: 'POST', body: {} }).catch(() => null);
+        await api('/api/bot/emergency-stop', {
+            method: 'POST',
+            body: {}
+        }).catch(() => null);
+
+        await sleep(BASELINE_RECOVERY_WAIT_MS);
+
+        await api('/api/reconcile/fix', {
+            method: 'POST',
+            body: { recover_orphans: true }
+        }).catch(() => null);
+
+        await sleep(BASELINE_RECOVERY_WAIT_MS);
+
+        [groundTruth, reconcile, status, openTrades, preflight] = await Promise.all([
+            api('/api/bot/ground-truth'),
+            api('/api/reconcile'),
+            api('/api/bot/status'),
+            api('/api/trades/open?mode=live'),
+            api('/api/bot/preflight', { method: 'POST', body: {} })
+        ]);
+
+        assert(groundTruth.ok, 'ground-truth unavailable after baseline auto-recovery');
+        assert(reconcile.ok, 'reconcile unavailable after baseline auto-recovery');
+        assert(status.ok, 'bot status unavailable after baseline auto-recovery');
+        assert(openTrades.ok, 'trades/open unavailable after baseline auto-recovery');
+
+        orphaned = reconcile.data?.orphaned?.length || 0;
+        phantom = (reconcile.data?.phantom || []).filter(item => !item.pendingExit && !item.transientGrace).length;
+        qtyMismatch = reconcile.data?.quantityMismatch?.length || 0;
+        groundTruthFlat = groundTruth.data?.is_flat === true;
+        openLiveCount = Number(openTrades.data?.count || 0);
+        running = status.data?.running === true;
+    }
+
+    assert(status.data?.running === false, 'bot must be stopped before capped session start');
+    if (!(preflight.ok && preflight.data?.valid === true)) {
+        throw new Error(formatPreflightError(preflight, 'preflight invalid'));
+    }
+
     assert(orphaned === 0 && phantom === 0 && qtyMismatch === 0, 'reconcile drift present before session start');
+    assert(groundTruthFlat, 'ground-truth is not flat');
+    assert(openLiveCount === 0, 'live trades remain open before session start');
+
+    const [readiness, finalPreflight] = await Promise.all([
+        api('/api/session/readiness?force_gate=true'),
+        api('/api/bot/preflight', { method: 'POST', body: {} })
+    ]);
+
+    assert(readiness.ok, 'session readiness unavailable');
+    if (!(finalPreflight.ok && finalPreflight.data?.valid === true)) {
+        throw new Error(formatPreflightError(finalPreflight, 'final preflight invalid'));
+    }
 
     return {
         startTimestampSec: Math.floor(Date.now() / 1000),
-        token: preflight.data.token,
-        balance: preflight.data?.details?.balance,
-        livePreflight: preflight.data,
+        token: finalPreflight.data.token,
+        balance: finalPreflight.data?.details?.balance ?? preflight.data?.details?.balance,
+        livePreflight: finalPreflight.data,
         readiness: readiness.data,
         status: status.data,
         trades: {
@@ -242,6 +580,133 @@ function summarizeStatus(status, reconcile) {
                 transientGrace: !!item.transientGrace
             }))
         }
+    };
+}
+
+function summarizeReconcileCounts(reconcile, openCount) {
+    const unresolvedPhantom = (reconcile?.phantom || []).filter(item => !item.pendingExit && !item.transientGrace);
+    return {
+        orphaned: reconcile?.orphaned?.length || 0,
+        phantom: unresolvedPhantom.length,
+        qtyMismatch: reconcile?.quantityMismatch?.length || 0,
+        openLive: Number(openCount || 0),
+        phantom_samples: unresolvedPhantom.slice(0, 3).map(item => ({
+            tradeId: item.tradeId,
+            symbol: item.symbol,
+            reason: item.reason,
+            age: item.age,
+            transientGrace: !!item.transientGrace
+        }))
+    };
+}
+
+async function tryOrphanOnlyRecovery(contextLabel) {
+    if (ORPHAN_RECOVERY_GRACE_MS <= 0) {
+        return {
+            attempted: false,
+            reason: 'disabled',
+            context: contextLabel,
+            grace_ms: ORPHAN_RECOVERY_GRACE_MS
+        };
+    }
+
+    const startedAt = Date.now();
+    let attemptedRetryFix = false;
+    let lastSnapshot = null;
+
+    while (Date.now() - startedAt <= ORPHAN_RECOVERY_GRACE_MS) {
+        const [groundTruthRes, reconcileRes, openTradesRes] = await Promise.all([
+            api('/api/bot/ground-truth'),
+            api('/api/reconcile'),
+            api('/api/trades/open?mode=live')
+        ]);
+
+        if (!(groundTruthRes.ok && reconcileRes.ok && openTradesRes.ok)) {
+            return {
+                attempted: true,
+                context: contextLabel,
+                recovered: false,
+                reason: 'snapshot_unavailable',
+                ground_truth_ok: groundTruthRes.ok,
+                reconcile_ok: reconcileRes.ok,
+                open_trades_ok: openTradesRes.ok,
+                status_codes: {
+                    ground_truth: groundTruthRes.status,
+                    reconcile: reconcileRes.status,
+                    open_trades: openTradesRes.status
+                }
+            };
+        }
+
+        const counts = summarizeReconcileCounts(reconcileRes.data, openTradesRes.data?.count || 0);
+        const groundTruthFlat = groundTruthRes.data?.is_flat === true;
+        const fullyFlat = groundTruthFlat
+            && counts.orphaned === 0
+            && counts.phantom === 0
+            && counts.qtyMismatch === 0
+            && counts.openLive === 0;
+
+        lastSnapshot = {
+            ts: new Date().toISOString(),
+            ground_truth_flat: groundTruthFlat,
+            counts
+        };
+
+        if (fullyFlat) {
+            return {
+                attempted: true,
+                context: contextLabel,
+                recovered: true,
+                attempted_retry_fix: attemptedRetryFix,
+                elapsed_ms: Date.now() - startedAt,
+                final_snapshot: lastSnapshot
+            };
+        }
+
+        const orphanOnlyResidual = counts.orphaned > 0
+            && counts.phantom === 0
+            && counts.qtyMismatch === 0
+            && counts.openLive === 0;
+
+        if (!orphanOnlyResidual) {
+            return {
+                attempted: true,
+                context: contextLabel,
+                recovered: false,
+                reason: 'non_orphan_drift',
+                attempted_retry_fix: attemptedRetryFix,
+                elapsed_ms: Date.now() - startedAt,
+                final_snapshot: lastSnapshot
+            };
+        }
+
+        const elapsed = Date.now() - startedAt;
+        if (!attemptedRetryFix && elapsed >= ORPHAN_RECOVERY_RETRY_AFTER_MS) {
+            attemptedRetryFix = true;
+            const fix = await api('/api/reconcile/fix', {
+                method: 'POST',
+                body: { recover_orphans: true }
+            }).catch(error => ({ ok: false, status: 0, data: { error: error.message } }));
+
+            log('Orphan-only post-flatten recovery retry', {
+                context: contextLabel,
+                ok: fix.ok,
+                status: fix.status,
+                response: fix.data || null
+            });
+        }
+
+        await sleep(ORPHAN_RECOVERY_POLL_MS);
+    }
+
+    return {
+        attempted: true,
+        context: contextLabel,
+        recovered: false,
+        reason: 'grace_timeout',
+        attempted_retry_fix: attemptedRetryFix,
+        elapsed_ms: Date.now() - startedAt,
+        final_snapshot: lastSnapshot
     };
 }
 
@@ -323,6 +788,30 @@ async function monitorSession(sessionDeadlineMs) {
                             drift_timeline: driftTimeline
                         };
                     }
+
+                    // The auto-fix path stops the bot before attempting repair.
+                    // If we didn't restore a flat state immediately, don't keep
+                    // polling a stopped bot; flatten deterministically and end.
+                    log('Reconcile auto-fix incomplete after bot stop, ending capped session', {
+                        fix_ok: fix.ok,
+                        fix_is_flat: fix.data?.is_flat,
+                        ground_truth_flat: postFixGroundTruth.ok ? postFixGroundTruth.data?.is_flat : null,
+                        post_fix: fix.data?.post_fix || null,
+                        response: fix.data || null
+                    });
+
+                    const flattenResult = await flattenSession('reconcile_drift_autofix_incomplete');
+                    const finalGroundTruth = await api('/api/bot/ground-truth');
+                    return {
+                        completed: true,
+                        stop_reason: 'reconcile_drift_autofix_incomplete',
+                        checkpoint: checkpointRes.data?.decision || null,
+                        ground_truth_flat: finalGroundTruth.ok && finalGroundTruth.data?.is_flat === true,
+                        reconcile_fix: fix.data,
+                        flatten_result: flattenResult,
+                        summary,
+                        drift_timeline: driftTimeline
+                    };
                 } catch (fixErr) {
                     log('Reconcile auto-fix failed', { error: fixErr.message });
                 }
@@ -375,7 +864,8 @@ async function monitorSession(sessionDeadlineMs) {
                 stop_reason: summary.stop_reason
             });
             const flattenResult = await flattenSession(`cleanup_${summary.stop_reason}`);
-            const postGT = await api('/api/bot/ground-truth');
+            let postGT = await api('/api/bot/ground-truth');
+            let orphanRecovery = null;
 
             // If still non-flat after flatten (e.g. GTC sell not yet filled), attempt
             // a reconcile/fix to cancel outstanding orders and repair state.
@@ -389,6 +879,12 @@ async function monitorSession(sessionDeadlineMs) {
                     method: 'POST',
                     body: { recover_orphans: true }
                 }).catch(e => log('reconcile/fix after flatten failed', { error: e.message }));
+
+                orphanRecovery = await tryOrphanOnlyRecovery(`cleanup_${summary.stop_reason}`);
+                if (orphanRecovery?.attempted) {
+                    log('Orphan-only post-flatten recovery outcome', orphanRecovery);
+                }
+                postGT = await api('/api/bot/ground-truth');
             }
 
             return {
@@ -397,6 +893,7 @@ async function monitorSession(sessionDeadlineMs) {
                 checkpoint: checkpointRes.data?.decision || null,
                 ground_truth_flat: postGT.data?.is_flat === true,
                 flatten_result: flattenResult,
+                orphan_recovery: orphanRecovery,
                 summary,
                 drift_timeline: driftTimeline
             };
@@ -421,12 +918,18 @@ async function monitorSession(sessionDeadlineMs) {
         }).catch(e => log('reconcile/fix after cap-flatten failed', { error: e.message }));
     }
 
+    const orphanRecovery = await tryOrphanOnlyRecovery('session_time_cap_reached');
+    if (orphanRecovery?.attempted) {
+        log('Orphan-only cap-flatten recovery outcome', orphanRecovery);
+    }
+
     const postGroundTruth = await api('/api/bot/ground-truth');
     return {
         completed: true,
         stop_reason: 'session_time_cap_reached',
         flattened: flattenResult,
         ground_truth_flat: postGroundTruth.data?.is_flat === true,
+        orphan_recovery: orphanRecovery,
         drift_timeline: driftTimeline
     };
 }
@@ -438,6 +941,16 @@ async function main() {
     log(`SESSION_SECONDS=${SESSION_SECONDS}`);
     log(`POLL_SECONDS=${POLL_SECONDS}`);
     log(`MAX_LIVE_OPEN=${MAX_LIVE_OPEN}`);
+    log(`BASELINE_RECOVERY_MAX_ATTEMPTS=${BASELINE_RECOVERY_MAX_ATTEMPTS}`);
+    log(`BASELINE_RECOVERY_WAIT_MS=${BASELINE_RECOVERY_WAIT_MS}`);
+    log(`ORPHAN_RECOVERY_GRACE_MS=${ORPHAN_RECOVERY_GRACE_MS}`);
+    log(`ORPHAN_RECOVERY_POLL_MS=${ORPHAN_RECOVERY_POLL_MS}`);
+    log(`ORPHAN_RECOVERY_RETRY_AFTER_MS=${ORPHAN_RECOVERY_RETRY_AFTER_MS}`);
+    log(`MIN_EXECUTE_LIVE_BALANCE_USD=${MIN_EXECUTE_LIVE_BALANCE_USD}`);
+    log(`API_TIMEOUT_MS=${API_TIMEOUT_MS}`);
+    log(`API_MAX_RETRIES=${API_MAX_RETRIES}`);
+    log(`REQUIRED_CONSECUTIVE_CLEAN_RUNS=${REQUIRED_CONSECUTIVE_CLEAN_RUNS}`);
+    log(`ALLOW_UNSTABLE_EXECUTE_START=${ALLOW_UNSTABLE_EXECUTE_START}`);
 
     if (APPLY_PROFILE) {
         log('Applying short_horizon_v1 profile overrides');
@@ -469,6 +982,29 @@ async function main() {
     if (!EXECUTE_START) {
         log('Dry run complete. Re-run with --execute-start to launch capped live session.');
         return;
+    }
+
+    const mode = String(baseline.status?.mode || '').toLowerCase();
+    const isLiveMode = mode === 'live' || mode === 'sandbox';
+
+    if (isLiveMode) {
+        const stabilityGate = evaluateStabilityGate();
+        log('Recent stability gate', stabilityGate);
+        if (!ALLOW_UNSTABLE_EXECUTE_START && !stabilityGate.passed) {
+            throw new Error(
+                `stability gate blocked --execute-start: require ${stabilityGate.required_consecutive_clean_runs} ` +
+                `consecutive clean capped runs, found ${stabilityGate.consecutive_clean_runs}; ` +
+                `set ALLOW_UNSTABLE_EXECUTE_START=true to bypass`
+            );
+        }
+    }
+
+    const liveBalance = Number(baseline.balance);
+    if (isLiveMode && Number.isFinite(liveBalance) && liveBalance < MIN_EXECUTE_LIVE_BALANCE_USD) {
+        throw new Error(
+            `live balance $${liveBalance.toFixed(2)} below execute threshold ` +
+            `$${MIN_EXECUTE_LIVE_BALANCE_USD.toFixed(2)}; refusing --execute-start`
+        );
     }
 
     await startBot(baseline.token);
@@ -547,10 +1083,39 @@ async function main() {
     };
 
     if (EXECUTE_START) {
-        assert(outcome.conversion.entered_trade_count > 0, '--execute-start run entered zero trades');
+        if (!(outcome.conversion.entered_trade_count > 0)) {
+            const eligibleContracts = getSessionUniverseEligibleCount(outcome, baseline);
+            const actionableSignals = Number(outcome?.diagnostics?.post?.funnel?.stages?.actionable_post_spot_freshness || 0);
+            const scoredSignals = Number(outcome?.diagnostics?.post?.funnel?.stages?.scored || 0);
+
+            if (eligibleContracts <= 0) {
+                throw new Error(
+                    `--execute-start run entered zero trades: zero_eligible_contracts ` +
+                    `(eligible=${eligibleContracts}, scored=${scoredSignals}, actionable=${actionableSignals})`
+                );
+            }
+
+            if (actionableSignals <= 0) {
+                throw new Error(
+                    `--execute-start run entered zero trades: zero_actionable_signals ` +
+                    `(eligible=${eligibleContracts}, scored=${scoredSignals}, actionable=${actionableSignals})`
+                );
+            }
+
+            throw new Error('--execute-start run entered zero trades');
+        }
         assert(outcome.conversion.completed_exit_count > 0, '--execute-start run exited zero trades');
         assert(outcome.ground_truth_flat === true, '--execute-start run ended non-flat according to ground-truth');
         assert(outcome.conversion.reconcile_flat === true, '--execute-start run ended with reconcile drift or open live positions');
+
+        const state = updateStabilityState(true, {
+            mode: 'execute',
+            stop_reason: outcome.stop_reason || null,
+            ground_truth_flat: outcome.ground_truth_flat === true,
+            reconcile_flat: outcome.conversion.reconcile_flat === true,
+            error: null
+        });
+        log('Updated stability state', state);
     }
 
     log('Session complete', outcome);
@@ -572,6 +1137,19 @@ main().then((result) => {
         console.log(`CAPPED_SESSION_RESULT_JSON:${JSON.stringify(result)}`);
     }
 }).catch(error => {
+    if (EXECUTE_START) {
+        const countTowardsStreak = !isNonSessionQualityFailure(error.message);
+        const state = updateStabilityState(false, {
+            mode: 'execute',
+            stop_reason: null,
+            ground_truth_flat: false,
+            reconcile_flat: false,
+            error: error.message,
+            count_towards_streak: countTowardsStreak
+        });
+        log('Updated stability state', state);
+    }
+
     const failure = {
         success: false,
         mode: EXECUTE_START ? 'execute' : 'dry',

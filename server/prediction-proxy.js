@@ -34,6 +34,7 @@ const SpotWebSocket = require('../lib/spot_ws');
 const { Logger } = require('../lib/logger');
 
 const logger = new Logger({ component: 'SERVER', level: 'INFO' });
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // ===== Circuit Breaker + Health Monitor =====
 
@@ -154,6 +155,7 @@ async function getDisplayWallet() {
 
 const POST_EXIT_RECONCILE_GRACE_MS = Math.max(0, Number(process.env.POST_EXIT_RECONCILE_GRACE_MS || 100));
 const POST_EXIT_RECONCILE_RETRY_MS = Math.max(0, Number(process.env.POST_EXIT_RECONCILE_RETRY_MS || 250));
+const POST_EXIT_RECONCILE_MAX_RETRIES = Math.max(1, Number(process.env.POST_EXIT_RECONCILE_MAX_RETRIES || 3));
 
 async function emergencyExitAll(options = {}) {
     const { liveOnly = false, closeReason = 'emergency_stop' } = options;
@@ -206,12 +208,20 @@ async function emergencyExitAll(options = {}) {
 
                 if (!forcedReconcileClose) {
                     // Live trade: get real price and place actual sell order on Gemini
+                    const priceFromPosition = trade.direction === 'YES'
+                        ? Number(exchangePos?.prices?.sell?.yes)
+                        : Number(exchangePos?.prices?.sell?.no);
+
                     const realPrices = geminiClient.realClient
                         ? geminiClient.realClient.getBestPrices(trade.gemini_market_id)
                         : null;
-                    exitPrice = realPrices?.bid != null
-                        ? (trade.direction === 'YES' ? realPrices.bid : (1 - realPrices.ask))
+                    const priceFromOrderbook = realPrices?.bid != null && realPrices?.ask != null
+                        ? (trade.direction === 'YES' ? Number(realPrices.bid) : Number(1 - realPrices.ask))
                         : null;
+
+                    exitPrice = Number.isFinite(priceFromPosition) && priceFromPosition > 0
+                        ? priceFromPosition
+                        : (Number.isFinite(priceFromOrderbook) && priceFromOrderbook > 0 ? priceFromOrderbook : null);
 
                     if (exitPrice != null) {
                         try {
@@ -280,12 +290,19 @@ async function emergencyExitAll(options = {}) {
                             }
                         }
                     } else {
-                        // No real price — fall back to paper price for record closure.
-                        exitPrice = geminiClient.getPaperExitPrice(trade.gemini_market_id, trade.direction);
-                        exitStatus = 'exit_price_fallback';
-                        logger.warn(
-                            `EMERGENCY EXIT (no real price): ${trade.gemini_market_id} using paper price.`
+                        // Never close a live DB trade without a confirmed executable live price.
+                        // Keeping the trade open is safer than creating an exchange orphan.
+                        exitStatus = 'exit_price_unavailable_live';
+                        logger.error(
+                            `EMERGENCY LIVE EXIT PRICE UNAVAILABLE: ${trade.gemini_market_id} ` +
+                            `— keeping DB trade open. CHECK GEMINI.`
                         );
+                        unresolvedExits.push({
+                            tradeId: trade.id,
+                            market: trade.gemini_market_id,
+                            exitStatus
+                        });
+                        continue; // Do NOT close DB trade
                     }
                 }
             } else {
@@ -354,27 +371,45 @@ async function emergencyExitAll(options = {}) {
 
         const isOrphanOnlyReconcileRace = unresolvedExits.length === 0 && orphaned > 0 && phantom === 0 && qtyMismatch === 0;
         if (isOrphanOnlyReconcileRace && POST_EXIT_RECONCILE_RETRY_MS > 0) {
-            await sleep(POST_EXIT_RECONCILE_RETRY_MS);
-            const retryReconcile = await tradingEngine.reconcilePositions();
-            const retryOrphaned = (retryReconcile.orphaned || []).length;
-            const retryPhantom = (retryReconcile.phantom || []).filter(p => !p.pendingExit && !p.transientGrace).length;
-            const retryQtyMismatch = (retryReconcile.quantityMismatch || []).length;
-
             reconcileRetry = {
                 wait_ms: POST_EXIT_RECONCILE_RETRY_MS,
+                max_attempts: POST_EXIT_RECONCILE_MAX_RETRIES,
                 before: { orphaned, phantom, qtyMismatch },
-                after: { orphaned: retryOrphaned, phantom: retryPhantom, qtyMismatch: retryQtyMismatch }
+                attempts: []
             };
 
-            postReconcile = retryReconcile;
-            orphaned = retryOrphaned;
-            phantom = retryPhantom;
-            qtyMismatch = retryQtyMismatch;
+            for (let attempt = 1; attempt <= POST_EXIT_RECONCILE_MAX_RETRIES; attempt++) {
+                await sleep(POST_EXIT_RECONCILE_RETRY_MS);
+                const retryReconcile = await tradingEngine.reconcilePositions();
+                const retryOrphaned = (retryReconcile.orphaned || []).length;
+                const retryPhantom = (retryReconcile.phantom || []).filter(p => !p.pendingExit && !p.transientGrace).length;
+                const retryQtyMismatch = (retryReconcile.quantityMismatch || []).length;
 
-            if (retryOrphaned < reconcileRetry.before.orphaned) {
+                reconcileRetry.attempts.push({
+                    attempt,
+                    orphaned: retryOrphaned,
+                    phantom: retryPhantom,
+                    qtyMismatch: retryQtyMismatch
+                });
+
+                postReconcile = retryReconcile;
+                orphaned = retryOrphaned;
+                phantom = retryPhantom;
+                qtyMismatch = retryQtyMismatch;
+
+                const resolved = retryOrphaned === 0 && retryPhantom === 0 && retryQtyMismatch === 0;
+                const stillOrphanOnlyRace = retryOrphaned > 0 && retryPhantom === 0 && retryQtyMismatch === 0;
+                if (resolved || !stillOrphanOnlyRace) {
+                    break;
+                }
+            }
+
+            reconcileRetry.after = { orphaned, phantom, qtyMismatch };
+
+            if (orphaned < reconcileRetry.before.orphaned) {
                 logger.info(
                     `Post-emergency reconcile retry reduced orphaned count: ` +
-                    `${reconcileRetry.before.orphaned} -> ${retryOrphaned}`
+                    `${reconcileRetry.before.orphaned} -> ${orphaned}`
                 );
             }
         }
@@ -650,6 +685,8 @@ const SPOT_HARD_STALE_THRESHOLD_MS = Math.round(SPOT_STALE_THRESHOLD_MS * SPOT_H
 const SPOT_STALE_SCORE_PENALTY_MAX = Math.max(0, Math.min(40, Number(process.env.SPOT_STALE_SCORE_PENALTY_MAX || 15)));
 const SPOT_STALE_EDGE_PENALTY_MAX = Math.max(0, Math.min(0.05, Number(process.env.SPOT_STALE_EDGE_PENALTY_MAX || 0.01)));
 const sessionMaxConcurrentLive = Math.max(1, Number(process.env.SESSION_MAX_CONCURRENT_LIVE || 1));
+const LIVE_USD_RESERVE = Math.max(0, Number(process.env.LIVE_USD_RESERVE || 5));
+const LIVE_MIN_TRADABLE_BALANCE = Math.max(0.5, Number(process.env.LIVE_MIN_TRADABLE_BALANCE || 2));
 const LIVE_PREFLIGHT_TTL_MS = Math.max(1000, Number(process.env.LIVE_PREFLIGHT_TTL_MS || 300000));
 const AUTONOMOUS_SOURCE_TTX_FILTER = autonomous15mSession && process.env.AUTONOMOUS_SOURCE_TTX_FILTER !== 'false';
 const GEMINI_REAL_FETCH_INTERVAL_MS = Math.max(
@@ -708,7 +745,9 @@ const tradingEngine = new PaperTradingEngine(db, geminiClient, {
     sessionLossLimitUsd,
     sessionMinTtxSeconds,
     sessionMaxTtxSeconds,
-    sessionMaxConcurrentLive
+    sessionMaxConcurrentLive,
+    liveUsdReserve: LIVE_USD_RESERVE,
+    liveMinTradableBalance: LIVE_MIN_TRADABLE_BALANCE
 });
 const alerts = new Alerts({ webhookUrl: process.env.DISCORD_WEBHOOK_URL });
 const kalshiWS = new KalshiWS({ apiKey: process.env.KALSHI_API_KEY });
@@ -1001,6 +1040,9 @@ async function runLivePreflightCheck(options = {}) {
     const details = {
         mode: geminiMode,
         balance: null,
+        tradable_balance: null,
+        live_usd_reserve: LIVE_USD_RESERVE,
+        live_min_tradable_balance: LIVE_MIN_TRADABLE_BALANCE,
         positions: 0,
         open_orders: 0,
         reconciliation: null,
@@ -1018,6 +1060,9 @@ async function runLivePreflightCheck(options = {}) {
 
         const nonPendingPhantom = (reconciliation?.phantom || []).filter(p => !p.pendingExit && !p.transientGrace);
         details.balance = Number.isFinite(Number(balance)) ? Number(balance) : null;
+        details.tradable_balance = Number.isFinite(details.balance)
+            ? Math.max(0, details.balance - LIVE_USD_RESERVE)
+            : null;
         details.positions = Array.isArray(positions) ? positions.length : 0;
         details.open_orders = Array.isArray(openOrders) ? openOrders.length : 0;
         details.reconciliation = {
@@ -1032,12 +1077,15 @@ async function runLivePreflightCheck(options = {}) {
             details.reconciliation.phantom === 0 &&
             details.reconciliation.quantityMismatch === 0;
         const cleanOrders = details.open_orders === 0;
-        const hasBalance = details.balance != null && details.balance > 0;
+        const hasTradableBalance =
+            details.tradable_balance != null &&
+            Number.isFinite(Number(details.tradable_balance)) &&
+            Number(details.tradable_balance) >= LIVE_MIN_TRADABLE_BALANCE;
         const gateAllowed = gate ? !!gate.allowed : false;
 
-        const valid = hasBalance && cleanReconcile && cleanOrders && gateAllowed;
-        const reason = !hasBalance
-            ? 'balance_unavailable'
+        const valid = hasTradableBalance && cleanReconcile && cleanOrders && gateAllowed;
+        const reason = !hasTradableBalance
+            ? 'balance_below_reserve_floor'
             : !cleanReconcile
                 ? 'reconciliation_not_clean'
                 : !cleanOrders
@@ -1055,6 +1103,7 @@ async function runLivePreflightCheck(options = {}) {
 
         if (valid) {
             tradingEngine._liveBalance = details.balance;
+            tradingEngine._liveTradableBalance = details.tradable_balance;
         }
 
         return { ...livePreflightState };
@@ -2666,11 +2715,16 @@ app.post('/api/bot/emergency-stop', async (req, res) => {
     try {
         stopBot();
         let result = await emergencyExitAll();
+        const shouldAttemptQuickFix = !result.skipped_duplicate && (
+            !result.is_flat || ((geminiMode === 'live' || geminiMode === 'sandbox') && result.closed === 0)
+        );
 
         // If cleanup left unresolved state, do a best-effort sweep: cancel open orders
         // then re-attempt reconcile.  This handles the quantityOnHold / GTC-unfilled case
         // so the harness doesn't need a separate manual reconcile/fix call.
-        if (!result.is_flat && !result.skipped_duplicate) {
+        // Also sweep the live exchange when no DB trades were open, because late fills can
+        // leave orphaned exchange positions after emergencyExitAll returns early.
+        if (shouldAttemptQuickFix) {
             try {
                 const openOrders = await geminiClient.getOpenOrders().catch(() => []);
                 for (const order of openOrders) {

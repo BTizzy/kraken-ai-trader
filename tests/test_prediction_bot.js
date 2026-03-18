@@ -774,14 +774,52 @@ test('emergencyExitAll source uses bounded orphan-only reconcile retry', () => {
     const serverSource = fs.readFileSync(
         path.join(__dirname, '../server/prediction-proxy.js'), 'utf8');
 
+    assert(serverSource.includes('const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));'),
+        'Expected emergency cleanup retry path to define the async sleep helper it uses');
+    assert(serverSource.includes('POST_EXIT_RECONCILE_MAX_RETRIES'),
+        'Expected configurable post-exit reconcile retry attempt budget');
     assert(serverSource.includes('POST_EXIT_RECONCILE_GRACE_MS'),
         'Expected configurable post-exit reconcile grace window');
     assert(serverSource.includes('POST_EXIT_RECONCILE_RETRY_MS'),
         'Expected configurable post-exit reconcile retry window');
     assert(serverSource.includes('isOrphanOnlyReconcileRace'),
         'Expected orphan-only reconcile race detection before retry');
+    assert(serverSource.includes('reconcileRetry.attempts.push'),
+        'Expected post-exit reconcile retry diagnostics to track each retry attempt');
     assert(serverSource.includes('reconcile_retry'),
         'Expected emergency cleanup result to expose reconcile_retry diagnostics');
+});
+
+test('emergencyExitAll source does not paper-close unresolved live exits', () => {
+    const serverSource = fs.readFileSync(
+        path.join(__dirname, '../server/prediction-proxy.js'), 'utf8');
+
+    assert(serverSource.includes('exit_price_unavailable_live'),
+        'Expected explicit unresolved status for live exits without executable price');
+    assert(!serverSource.includes('EMERGENCY EXIT (no real price):'),
+        'Live emergency exits should not fall back to paper close when real exit price is unavailable');
+});
+
+test('emergency-stop source runs quick reconcile sweep for zero-close live cleanup', () => {
+    const serverSource = fs.readFileSync(
+        path.join(__dirname, '../server/prediction-proxy.js'), 'utf8');
+
+    assert(serverSource.includes('const shouldAttemptQuickFix = !result.skipped_duplicate'),
+        'Expected emergency-stop to decide quick-fix sweep via explicit shouldAttemptQuickFix gate');
+    assert(serverSource.includes("result.closed === 0"),
+        'Expected emergency-stop quick-fix gate to cover zero-close live cleanup');
+});
+
+test('capped harness source classifies zero-trade execute windows as non-session-quality', () => {
+    const harnessSource = fs.readFileSync(
+        path.join(__dirname, '../scripts/run_capped_live_session.js'), 'utf8');
+
+    assert(harnessSource.includes('function isNonSessionQualityFailure('),
+        'Expected non-session-quality classifier helper in capped harness');
+    assert(harnessSource.includes("text.includes('run entered zero trades')"),
+        'Expected zero-trade execute failure to be treated as non-session-quality');
+    assert(harnessSource.includes("text.includes('run exited zero trades')"),
+        'Expected zero-exit execute failure to be treated as non-session-quality');
 });
 
 // ===== Wait for async tests then Summary =====

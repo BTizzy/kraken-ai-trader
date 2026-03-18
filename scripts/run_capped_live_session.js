@@ -8,6 +8,7 @@ const { execFileSync } = require('child_process');
 const API_BASE = process.env.API_BASE || `http://localhost:${process.env.PREDICTION_PORT || 3003}`;
 const EXECUTE_START = process.argv.includes('--execute-start');
 const APPLY_PROFILE = process.argv.includes('--apply-profile');
+const EMIT_RESULT_JSON = String(process.env.EMIT_RESULT_JSON || '').toLowerCase() === 'true';
 const SESSION_SECONDS = Math.max(60, Number(process.env.SESSION_SECONDS || 900));
 const POLL_SECONDS = Math.max(5, Number(process.env.POLL_SECONDS || 15));
 const MAX_LIVE_OPEN = Math.max(1, Number(process.env.MAX_LIVE_OPEN || 1));
@@ -553,9 +554,39 @@ async function main() {
     }
 
     log('Session complete', outcome);
+    return {
+        success: true,
+        mode: EXECUTE_START ? 'execute' : 'dry',
+        api_base: API_BASE,
+        session_seconds: SESSION_SECONDS,
+        poll_seconds: POLL_SECONDS,
+        max_live_open: MAX_LIVE_OPEN,
+        applied_profile: APPLY_PROFILE,
+        outcome
+    };
 }
 
-main().catch(error => {
+main().then((result) => {
+    if (EMIT_RESULT_JSON) {
+        // Single-line marker for batch parsers.
+        console.log(`CAPPED_SESSION_RESULT_JSON:${JSON.stringify(result)}`);
+    }
+}).catch(error => {
+    const failure = {
+        success: false,
+        mode: EXECUTE_START ? 'execute' : 'dry',
+        api_base: API_BASE,
+        session_seconds: SESSION_SECONDS,
+        poll_seconds: POLL_SECONDS,
+        max_live_open: MAX_LIVE_OPEN,
+        applied_profile: APPLY_PROFILE,
+        error: error.message,
+        failed_at: new Date().toISOString()
+    };
+
     console.error(`[${timestamp()}] ${error.message}`);
+    if (EMIT_RESULT_JSON) {
+        console.log(`CAPPED_SESSION_RESULT_JSON:${JSON.stringify(failure)}`);
+    }
     process.exitCode = 1;
 });

@@ -375,6 +375,210 @@ async function emergencyExitAll(options = {}) {
     return result;
 }
 
+async function runQuickReconcileFix(options = {}) {
+    const recoverOrphans = options.recoverOrphans !== false;
+    const isLive = geminiMode === 'live' || geminiMode === 'sandbox';
+    if (!isLive) {
+        return { skipped: true, reason: 'paper_mode_no_exchange', is_flat: true };
+    }
+
+    const actions = [];
+    const errors = [];
+    const now = Math.floor(Date.now() / 1000);
+
+    const candidateOrderIds = (order) => {
+        const ids = [];
+        if (order?.hashOrderId != null) ids.push(String(order.hashOrderId));
+        if (order?.globalOrderId != null) ids.push(String(order.globalOrderId));
+        if (order?.orderId != null) ids.push(String(order.orderId));
+        if (order?.order_id != null) ids.push(String(order.order_id));
+        if (order?.id != null) ids.push(String(order.id));
+        return [...new Set(ids.filter(Boolean))];
+    };
+
+    // 1) Cancel open orders
+    const openOrders = await geminiClient.getOpenOrders().catch((e) => {
+        errors.push({ step: 'fetch_open_orders', error: e.message });
+        return [];
+    });
+    for (const order of openOrders || []) {
+        const ids = candidateOrderIds(order);
+        let cancelled = false;
+        for (const orderId of ids) {
+            try {
+                await geminiClient.cancelOrder(orderId);
+                actions.push({ step: 'cancel_order', orderId, symbol: order.symbol, status: 'ok' });
+                cancelled = true;
+                break;
+            } catch (e) {
+                errors.push({ step: 'cancel_order', orderId, symbol: order.symbol, error: e.message });
+            }
+        }
+        if (!cancelled && ids.length === 0) {
+            errors.push({ step: 'cancel_order', symbol: order.symbol, error: 'no_order_id_candidates' });
+        }
+    }
+
+    // 2) Reconcile current state
+    const pre = await tradingEngine.reconcilePositions();
+    const positions = await geminiClient.getPositions().catch((e) => {
+        errors.push({ step: 'fetch_positions', error: e.message });
+        return [];
+    });
+
+    // 3) Close/recover orphaned exchange positions
+    for (const orphan of pre.orphaned || []) {
+        try {
+            const outcome = String(orphan.outcome || 'yes').toLowerCase();
+            const position = (positions || []).find(p =>
+                (p.symbol || p.instrumentSymbol) === orphan.symbol &&
+                String(p.outcome || '').toLowerCase() === outcome
+            );
+
+            const totalQty = Math.max(0, Math.floor(Number(orphan.quantity || 0)));
+            const heldQty = Math.max(0, Math.floor(Number(orphan.quantityOnHold || 0)));
+            const availableQty = Math.max(0, totalQty - heldQty);
+
+            if (availableQty <= 0) {
+                if (recoverOrphans && position) {
+                    const recoveredEntryPrice = Number(position.avgPrice || 0);
+                    if (Number.isFinite(recoveredEntryPrice) && recoveredEntryPrice > 0 && totalQty > 0) {
+                        const recoveredPositionSize = parseFloat((totalQty * recoveredEntryPrice).toFixed(6));
+                        const recoveredTradeId = db.insertTrade({
+                            timestamp: now,
+                            gemini_market_id: orphan.symbol,
+                            market_title: `${position.contractMetadata?.eventName || orphan.symbol}: ${position.contractMetadata?.contractName || orphan.symbol}`,
+                            category: position.contractMetadata?.category || 'other',
+                            trade_state: 'ENTERED',
+                            direction: String(outcome || '').toUpperCase(),
+                            entry_price: recoveredEntryPrice,
+                            position_size: recoveredPositionSize,
+                            opportunity_score: 0,
+                            gemini_entry_bid: position.prices?.bestBid ? Number(position.prices.bestBid) : null,
+                            gemini_entry_ask: position.prices?.bestAsk ? Number(position.prices.bestAsk) : null,
+                            gemini_volume: 0,
+                            slippage: 0,
+                            mode: 'live'
+                        });
+                        actions.push({
+                            step: 'recover_orphan_db',
+                            tradeId: recoveredTradeId,
+                            symbol: orphan.symbol,
+                            qty: totalQty,
+                            quantityOnHold: heldQty,
+                            entryPrice: recoveredEntryPrice,
+                            reason: orphan.reason || 'orphaned_no_db_trade'
+                        });
+                        continue;
+                    }
+                }
+                actions.push({
+                    step: 'skip_orphan',
+                    symbol: orphan.symbol,
+                    reason: 'qty_on_hold',
+                    quantity: totalQty,
+                    quantityOnHold: heldQty
+                });
+                continue;
+            }
+
+            let exitPrice = null;
+            if (outcome === 'no' && position?.prices?.sell?.no != null) {
+                exitPrice = Number(position.prices.sell.no);
+            } else if (outcome === 'yes' && position?.prices?.sell?.yes != null) {
+                exitPrice = Number(position.prices.sell.yes);
+            }
+            if (!Number.isFinite(exitPrice)) {
+                const market = await geminiClient.getMarketState(orphan.symbol).catch(() => null);
+                if (outcome === 'yes') {
+                    exitPrice = Number(market?.bid);
+                } else {
+                    exitPrice = Number.isFinite(Number(market?.ask)) ? (1 - Number(market.ask)) : null;
+                }
+            }
+            if (!Number.isFinite(exitPrice)) exitPrice = 0.50;
+            exitPrice = Math.max(0.01, Math.min(0.99, exitPrice));
+
+            const exitOrder = await geminiClient.placeOrder({
+                symbol: orphan.symbol,
+                side: 'sell',
+                amount: availableQty,
+                price: exitPrice.toFixed(2),
+                direction: String(outcome || '').toUpperCase()
+            });
+
+            const filled = Number(exitOrder?.filledQuantity || 0);
+            const fullyFilled = String(exitOrder?.orderStatus || '').toLowerCase() === 'filled' || filled >= availableQty;
+            let status = fullyFilled ? 'filled' : 'unfilled';
+            if (status !== 'filled' && exitOrder?.orderId) {
+                await geminiClient.cancelOrder(exitOrder.orderId).catch((e) => {
+                    errors.push({ step: 'close_orphan_cancel', symbol: orphan.symbol, orderId: exitOrder.orderId, error: e.message });
+                });
+            }
+            actions.push({
+                step: 'close_orphan',
+                symbol: orphan.symbol,
+                qty: availableQty,
+                exitPrice,
+                orderId: exitOrder?.orderId,
+                filled,
+                status,
+                reason: orphan.reason || 'orphaned_no_db_trade'
+            });
+        } catch (e) {
+            errors.push({ step: 'close_orphan', symbol: orphan.symbol, error: e.message });
+        }
+    }
+
+    // 4) Close phantom DB trades (non-pending)
+    for (const ph of pre.phantom || []) {
+        if (ph.pendingExit || ph.transientGrace) {
+            actions.push({ step: 'skip_phantom', tradeId: ph.tradeId, reason: ph.pendingExit ? 'exit_in_flight' : 'recent_entry_grace' });
+            continue;
+        }
+        try {
+            db.closeTrade(ph.tradeId, ph.entryPrice, 0, ph.age, 'reconcile_no_exchange');
+            actions.push({ step: 'close_phantom_db', tradeId: ph.tradeId, symbol: ph.symbol, reason: ph.reason || 'phantom_no_exchange_position' });
+        } catch (e) {
+            errors.push({ step: 'close_phantom_db', tradeId: ph.tradeId, error: e.message });
+        }
+    }
+
+    // 5) Final state
+    const post = await tradingEngine.reconcilePositions();
+    const nonPendingPre = (pre.phantom || []).filter(p => !p.pendingExit && !p.transientGrace);
+    const nonPendingPost = (post.phantom || []).filter(p => !p.pendingExit && !p.transientGrace);
+    const openLiveTrades = (db.getOpenTrades('live') || []).length;
+    const exchangePositions = await geminiClient.getPositions().catch(() => []);
+    const activeExchangePositions = (exchangePositions || []).filter(p => Number(p.totalQuantity || 0) > 0).length;
+    const isFlat =
+        (post.orphaned || []).length === 0 &&
+        nonPendingPost.length === 0 &&
+        (post.quantityMismatch || []).length === 0 &&
+        openLiveTrades === 0 &&
+        activeExchangePositions === 0;
+
+    return {
+        actions,
+        errors,
+        is_flat: isFlat,
+        pre_fix: {
+            orphaned: (pre.orphaned || []).length,
+            phantom: nonPendingPre.length,
+            qty_mismatch: (pre.quantityMismatch || []).length,
+            matched: (pre.matched || []).length
+        },
+        post_fix: {
+            orphaned: (post.orphaned || []).length,
+            phantom: nonPendingPost.length,
+            qty_mismatch: (post.quantityMismatch || []).length,
+            matched: (post.matched || []).length,
+            open_live_trades: openLiveTrades,
+            open_exchange_positions: activeExchangePositions
+        }
+    };
+}
+
 // ===== Initialize Components =====
 
 const db = new PredictionDatabase();
@@ -400,6 +604,14 @@ const sessionMinTtxSeconds = Math.max(60, Number(process.env.SESSION_MIN_TTX_SEC
 const sessionMaxTtxSeconds = Math.max(sessionMinTtxSeconds, Number(process.env.SESSION_MAX_TTX_SECONDS || 3600));
 const allowLongTtxIn15mSession = String(process.env.ALLOW_LONG_TTX_IN_15M_SESSION || '').toLowerCase() === 'true';
 const SPOT_STALE_THRESHOLD_MS = Math.max(1000, Number(process.env.SPOT_STALE_THRESHOLD_MS || 30000));
+const SPOT_SOFT_STALE_THRESHOLD_MS = Math.max(
+    1000,
+    Number(process.env.SPOT_SOFT_STALE_THRESHOLD_MS || Math.floor(SPOT_STALE_THRESHOLD_MS / 2))
+);
+const SPOT_HARD_STALE_MULTIPLIER = Math.max(1, Number(process.env.SPOT_HARD_STALE_MULTIPLIER || 3));
+const SPOT_HARD_STALE_THRESHOLD_MS = Math.round(SPOT_STALE_THRESHOLD_MS * SPOT_HARD_STALE_MULTIPLIER);
+const SPOT_STALE_SCORE_PENALTY_MAX = Math.max(0, Math.min(40, Number(process.env.SPOT_STALE_SCORE_PENALTY_MAX || 15)));
+const SPOT_STALE_EDGE_PENALTY_MAX = Math.max(0, Math.min(0.05, Number(process.env.SPOT_STALE_EDGE_PENALTY_MAX || 0.01)));
 const sessionMaxConcurrentLive = Math.max(1, Number(process.env.SESSION_MAX_CONCURRENT_LIVE || 1));
 const LIVE_PREFLIGHT_TTL_MS = Math.max(1000, Number(process.env.LIVE_PREFLIGHT_TTL_MS || 300000));
 const AUTONOMOUS_SOURCE_TTX_FILTER = autonomous15mSession && process.env.AUTONOMOUS_SOURCE_TTX_FILTER !== 'false';
@@ -1466,21 +1678,35 @@ app.get('/api/spot/status', (req, res) => {
     try {
         const assets = Object.keys(spotPriceMeta || {});
         const perAsset = {};
-        let staleCount = 0;
+        let softStaleCount = 0;
+        let hardStaleCount = 0;
         let maxAgeMs = 0;
-        const staleAssets = [];
-        const staleThresholdMs = SPOT_STALE_THRESHOLD_MS;
+        const softStaleAssets = [];
+        const hardStaleAssets = [];
+        const softStaleThresholdMs = SPOT_SOFT_STALE_THRESHOLD_MS;
+        const hardStaleThresholdMs = SPOT_HARD_STALE_THRESHOLD_MS;
         for (const asset of assets) {
             const ageMs = getSpotAgeMs(asset);
             if (typeof ageMs === 'number') {
                 maxAgeMs = Math.max(maxAgeMs, ageMs);
-                if (ageMs > staleThresholdMs) {
-                    staleCount += 1;
-                    staleAssets.push(asset);
+                if (ageMs > softStaleThresholdMs) {
+                    softStaleCount += 1;
+                    softStaleAssets.push(asset);
+                }
+                if (ageMs > hardStaleThresholdMs) {
+                    hardStaleCount += 1;
+                    hardStaleAssets.push(asset);
                 }
             }
             perAsset[asset] = {
                 age_ms: ageMs,
+                freshness_state: ageMs == null
+                    ? 'unknown'
+                    : ageMs > hardStaleThresholdMs
+                        ? 'hard_stale'
+                        : ageMs > softStaleThresholdMs
+                            ? 'soft_stale'
+                            : 'fresh',
                 source: spotPriceMeta[asset]?.source || null,
                 fetched_at: spotPriceMeta[asset]?.fetchedAt || null,
                 price: Number.isFinite(Number(spotPriceCache[asset])) ? Number(spotPriceCache[asset]) : null
@@ -1492,9 +1718,13 @@ app.get('/api/spot/status', (req, res) => {
             websocket_connected: spotWS.isReady(),
             last_websocket_tick_ms: lastWebsocketTickTime || null,
             summary: {
-                stale_threshold_ms: staleThresholdMs,
-                stale_count: staleCount,
-                stale_assets: staleAssets,
+                stale_threshold_ms: SPOT_STALE_THRESHOLD_MS,
+                soft_stale_threshold_ms: softStaleThresholdMs,
+                hard_stale_threshold_ms: hardStaleThresholdMs,
+                soft_stale_count: softStaleCount,
+                soft_stale_assets: softStaleAssets,
+                hard_stale_count: hardStaleCount,
+                hard_stale_assets: hardStaleAssets,
                 max_age_ms: maxAgeMs
             },
             assets: perAsset
@@ -1574,17 +1804,25 @@ app.get('/api/signals/deep-fv', async (req, res) => {
         });
         const contracts = buildDeepFairValueContracts({ minTtxSeconds, maxTtxSeconds });
         const deribitByMarketId = new Map();
-        for (const contract of contracts) {
-            try {
+        const deribitTasks = contracts
+            .map((contract) => {
                 const ttx = parseGemiExpirySeconds(contract.marketId);
-                if (ttx != null && ttx > 0 && ttx <= 3600 && contract.asset) {
-                    const spread = await deribitClient.getOptionsSpread(contract.asset, ttx * 1000);
-                    if (spread && Number.isFinite(spread.mid)) {
-                        deribitByMarketId.set(contract.marketId, spread.mid);
-                    }
-                }
-            } catch (e) {
-                // Optional source: continue without Deribit enrichment
+                if (ttx == null || ttx <= 0 || ttx > 3600 || !contract.asset) return null;
+                return { contract, ttx };
+            })
+            .filter(Boolean)
+            .map(({ contract, ttx }) =>
+                deribitClient
+                    .getOptionsSpread(contract.asset, ttx * 1000)
+                    .then((spread) => ({ marketId: contract.marketId, mid: spread?.mid }))
+            );
+        const deribitResults = await Promise.allSettled(deribitTasks);
+        for (const result of deribitResults) {
+            if (result.status !== 'fulfilled') continue;
+            const mid = result.value?.mid;
+            const marketId = result.value?.marketId;
+            if (marketId && Number.isFinite(mid)) {
+                deribitByMarketId.set(marketId, mid);
             }
         }
 
@@ -2329,7 +2567,7 @@ app.post('/api/bot/stop', (req, res) => {
 app.post('/api/bot/emergency-stop', async (req, res) => {
     try {
         stopBot();
-        const result = await emergencyExitAll();
+        let result = await emergencyExitAll();
 
         // If cleanup left unresolved state, do a best-effort sweep: cancel open orders
         // then re-attempt reconcile.  This handles the quantityOnHold / GTC-unfilled case
@@ -2355,6 +2593,27 @@ app.post('/api/bot/emergency-stop', async (req, res) => {
                 }
             } catch (sweepErr) {
                 logger.error(`EMERGENCY STOP post-cancel sweep failed: ${sweepErr.message}`);
+            }
+
+            try {
+                const quickFix = await runQuickReconcileFix({ recoverOrphans: true });
+                result.quick_fix = {
+                    is_flat: quickFix.is_flat,
+                    pre_fix: quickFix.pre_fix,
+                    post_fix: quickFix.post_fix,
+                    actions: (quickFix.actions || []).length,
+                    errors: (quickFix.errors || []).length
+                };
+                result.is_flat = Boolean(quickFix.is_flat);
+                if (quickFix.is_flat) {
+                    botState.cleanupStatus = 'complete';
+                } else {
+                    botState.cleanupStatus = 'complete_non_flat';
+                }
+                botState.cleanupResult = result;
+            } catch (fixErr) {
+                logger.error(`EMERGENCY STOP quick reconcile/fix failed: ${fixErr.message}`);
+                result.quick_fix = { error: fixErr.message, is_flat: false };
             }
         }
 
@@ -2616,7 +2875,8 @@ app.post('/api/bot/close-position/:tradeId', async (req, res) => {
                 });
 
                 const filled = Number(exitOrder?.filledQuantity || 0);
-                if (!exitOrder || !exitOrder.success || filled <= 0) {
+                const fullyFilled = String(exitOrder?.orderStatus || '').toLowerCase() === 'filled' || filled >= contracts;
+                if (!exitOrder || !exitOrder.success || !fullyFilled) {
                     try {
                         for (const cancelId of candidateOrderIds(exitOrder)) {
                             try {
@@ -2629,9 +2889,10 @@ app.post('/api/bot/close-position/:tradeId', async (req, res) => {
                     } catch (cancelErr) {
                         logger.debug(`Manual close cancel failed: ${cancelErr.message}`);
                     }
-                    return rejectClose(409, `Live exit order not filled (status=${exitOrder?.orderStatus || 'unknown'}, filled=${filled}). Position NOT closed.`, 'manual_close_unfilled', {
+                    return rejectClose(409, `Live exit order not fully filled (status=${exitOrder?.orderStatus || 'unknown'}, filled=${filled}/${contracts}). Position NOT closed.`, 'manual_close_unfilled', {
                         order_status: exitOrder?.orderStatus || 'unknown',
-                        filled_quantity: filled
+                        filled_quantity: filled,
+                        requested_quantity: contracts
                     });
                 }
 
@@ -3423,14 +3684,62 @@ function snapshotSpotStatusFromSignals(signals) {
     for (const asset of assets) {
         const ageMs = getSpotAgeMs(asset);
         const meta = spotPriceMeta[asset] || {};
+        const freshnessState = ageMs == null
+            ? 'unknown'
+            : ageMs > SPOT_HARD_STALE_THRESHOLD_MS
+                ? 'hard_stale'
+                : ageMs > SPOT_SOFT_STALE_THRESHOLD_MS
+                    ? 'soft_stale'
+                    : 'fresh';
         status[asset] = {
             age_ms: ageMs,
+            freshness_state: freshnessState,
+            soft_stale_threshold_ms: SPOT_SOFT_STALE_THRESHOLD_MS,
+            hard_stale_threshold_ms: SPOT_HARD_STALE_THRESHOLD_MS,
             source: meta.source || null,
             fetched_at: meta.fetchedAt || null,
             price: Number.isFinite(Number(spotPriceCache[asset])) ? Number(spotPriceCache[asset]) : null
         };
     }
     return status;
+}
+
+function computeSpotFreshnessAdjustment(ageMs) {
+    if (!Number.isFinite(ageMs)) {
+        return {
+            hardStale: false,
+            scorePenalty: 0,
+            edgePenalty: 0,
+            freshnessScale: 1
+        };
+    }
+
+    if (ageMs > SPOT_HARD_STALE_THRESHOLD_MS) {
+        return {
+            hardStale: true,
+            scorePenalty: SPOT_STALE_SCORE_PENALTY_MAX,
+            edgePenalty: SPOT_STALE_EDGE_PENALTY_MAX,
+            freshnessScale: 0
+        };
+    }
+
+    if (ageMs <= SPOT_SOFT_STALE_THRESHOLD_MS) {
+        return {
+            hardStale: false,
+            scorePenalty: 0,
+            edgePenalty: 0,
+            freshnessScale: 1
+        };
+    }
+
+    const denom = Math.max(1, SPOT_HARD_STALE_THRESHOLD_MS - SPOT_SOFT_STALE_THRESHOLD_MS);
+    const ratio = Math.max(0, Math.min(1, (ageMs - SPOT_SOFT_STALE_THRESHOLD_MS) / denom));
+    return {
+        hardStale: false,
+        scorePenalty: ratio * SPOT_STALE_SCORE_PENALTY_MAX,
+        edgePenalty: ratio * SPOT_STALE_EDGE_PENALTY_MAX,
+        freshnessScale: Math.max(0, 1 - ratio)
+    };
 }
 
 const botState = {
@@ -4058,8 +4367,9 @@ async function updatePrices() {
                     if (assetMatch && spotPriceCache[assetMatch[1]]) {
                         const asset = assetMatch[1];
                         const ageMs = getSpotAgeMs(asset);
-                        if (ageMs !== null && ageMs > SPOT_STALE_THRESHOLD_MS) {
-                            const reason = `spot_age_gt_${SPOT_STALE_THRESHOLD_MS}ms`;
+                        const freshness = computeSpotFreshnessAdjustment(ageMs);
+                        if (freshness.hardStale) {
+                            const reason = `spot_age_gt_${SPOT_HARD_STALE_THRESHOLD_MS}ms`;
                             funnel.dropped.spot_freshness_filter.total += 1;
                             funnel.dropped.spot_freshness_filter.by_reason[reason] =
                                 (funnel.dropped.spot_freshness_filter.by_reason[reason] || 0) + 1;
@@ -4068,6 +4378,17 @@ async function updatePrices() {
                             continue;
                         }
                         sig._spotPrice = spotPriceCache[asset];
+                        sig._spotAgeMs = ageMs;
+                        sig._spotFreshnessScale = freshness.freshnessScale;
+                        if (freshness.scorePenalty > 0 && Number.isFinite(Number(sig.score))) {
+                            sig.score = Math.max(0, Number(sig.score) - freshness.scorePenalty);
+                        }
+                        if (freshness.edgePenalty > 0 && Number.isFinite(Number(sig.netEdge))) {
+                            sig.netEdge = Number(sig.netEdge) - freshness.edgePenalty;
+                        }
+                        if (freshness.edgePenalty > 0 && Number.isFinite(Number(sig.edge))) {
+                            sig.edge = Number(sig.edge) - freshness.edgePenalty;
+                        }
                     }
                 }
                 filteredForSpotFreshness.push(sig);

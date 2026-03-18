@@ -386,6 +386,66 @@ test('Session policy exposes coherent short-session entry timing', () => {
     assert(policy.min_entry_ttx_seconds === 300, `Expected min_entry_ttx_seconds=300, got ${policy.min_entry_ttx_seconds}`);
 });
 
+test('Signal entry policy applies short medium and long TTX buckets', () => {
+    const bucketedEngine = new PaperTradingEngine(db, gemini, {
+        shortTtxMaxSeconds: 3600,
+        mediumTtxMaxSeconds: 14400,
+        shortTtxEntryThreshold: 60,
+        mediumTtxEntryThreshold: 52,
+        longTtxEntryThreshold: 47,
+        shortTtxMinEdgeLive: 0.09,
+        mediumTtxMinEdgeLive: 0.06,
+        longTtxMinEdgeLive: 0.04
+    });
+
+    const shortPolicy = bucketedEngine.getSignalEntryPolicy({
+        marketId: makeFutureGemiSymbol('BTC', '50000', 20)
+    });
+    const mediumPolicy = bucketedEngine.getSignalEntryPolicy({
+        marketId: makeFutureGemiSymbol('BTC', '50000', 120)
+    });
+    const longPolicy = bucketedEngine.getSignalEntryPolicy({
+        marketId: makeFutureGemiSymbol('BTC', '50000', 480)
+    });
+
+    assert(shortPolicy.bucket === 'short', `Expected short bucket, got ${shortPolicy.bucket}`);
+    assert(shortPolicy.entryThreshold === 60, `Expected short entry threshold 60, got ${shortPolicy.entryThreshold}`);
+    assert(shortPolicy.minEdgeLive === 0.09, `Expected short min edge 0.09, got ${shortPolicy.minEdgeLive}`);
+
+    assert(mediumPolicy.bucket === 'medium', `Expected medium bucket, got ${mediumPolicy.bucket}`);
+    assert(mediumPolicy.entryThreshold === 52, `Expected medium entry threshold 52, got ${mediumPolicy.entryThreshold}`);
+    assert(mediumPolicy.minEdgeLive === 0.06, `Expected medium min edge 0.06, got ${mediumPolicy.minEdgeLive}`);
+
+    assert(longPolicy.bucket === 'long', `Expected long bucket, got ${longPolicy.bucket}`);
+    assert(longPolicy.entryThreshold === 47, `Expected long entry threshold 47, got ${longPolicy.entryThreshold}`);
+    assert(longPolicy.minEdgeLive === 0.04, `Expected long min edge 0.04, got ${longPolicy.minEdgeLive}`);
+});
+
+test('Engine status exposes TTX policy thresholds', () => {
+    const bucketedEngine = new PaperTradingEngine(db, gemini, {
+        shortTtxMaxSeconds: 3600,
+        mediumTtxMaxSeconds: 14400,
+        shortTtxEntryThreshold: 58,
+        mediumTtxEntryThreshold: 50,
+        longTtxEntryThreshold: 46,
+        shortTtxMinEdgeLive: 0.08,
+        mediumTtxMinEdgeLive: 0.055,
+        longTtxMinEdgeLive: 0.04
+    });
+
+    const status = bucketedEngine.getStatus();
+    assert(status.ttx_policy.short_max_seconds === 3600, `Expected short max 3600, got ${status.ttx_policy.short_max_seconds}`);
+    assert(status.ttx_policy.medium_max_seconds === 14400, `Expected medium max 14400, got ${status.ttx_policy.medium_max_seconds}`);
+    assert(status.ttx_policy.thresholds.short.entry_threshold === 58,
+        `Expected short entry threshold 58, got ${status.ttx_policy.thresholds.short.entry_threshold}`);
+    assert(status.ttx_policy.thresholds.medium.min_edge_live === 0.055,
+        `Expected medium min edge 0.055, got ${status.ttx_policy.thresholds.medium.min_edge_live}`);
+    assert(status.ttx_policy.thresholds.long.min_edge_live === 0.04,
+        `Expected long min edge 0.04, got ${status.ttx_policy.thresholds.long.min_edge_live}`);
+    assert(status.ttx_policy.thresholds.fallback.entry_threshold === bucketedEngine.params.entry_threshold,
+        'Expected fallback entry threshold to match effective params');
+});
+
 test('Autonomous session blocks late entries near session end', () => {
     sessionEngine.markSessionStart(0, 100);
     sessionEngine.sessionStartTimeMs = Date.now() - (sessionEngine.sessionTimeoutMs - 45000);

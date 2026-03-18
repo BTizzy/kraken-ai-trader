@@ -1,7 +1,7 @@
 {
     "_comment": "Prediction Market Bot Configuration",
     "_version": "1.0.0",
-    "_updated": "2026-02-16",
+    "_updated": "2026-03-17",
 
     "trading": {
         "mode": "paper",
@@ -22,7 +22,7 @@
     },
 
     "position_sizing": {
-        "kelly_multiplier": 0.25,
+        "kelly_multiplier": 0.15,
         "max_position_usd": 100.0,
         "min_position_usd": 5.0,
         "max_capital_at_risk_pct": 50
@@ -68,5 +68,59 @@
     "server": {
         "port": 3003,
         "dashboard_refresh_ms": 5000
+    },
+
+    "_profiles": {
+        "_comment": "Named session profiles. Activate via env vars — not loaded by the engine directly. These are reference values.",
+
+        "short_horizon_v1": {
+            "_description": "Short-session 15-minute operating profile. Use with AUTONOMOUS_15M_SESSION=true and TRADING_PROFILE=short-run.",
+            "_env_vars": {
+                "TRADING_PROFILE": "short-run",
+                "AUTONOMOUS_15M_SESSION": "true",
+                "SESSION_MIN_TTX_SECONDS": "600",
+                "SESSION_MAX_TTX_SECONDS": "3600",
+                "SESSION_ENTRY_BUFFER_SECONDS": "120",
+                "SESSION_FORCE_EXIT_BUFFER_SECONDS": "60",
+                "SESSION_MAX_CONCURRENT_LIVE": "2",
+                "SESSION_DAILY_LOSS_LIMIT_USD": "3",
+                "SESSION_PROFIT_TARGET_USD": "10",
+                "SESSION_TIMEOUT_MS": "900000",
+                "PRE_TRADE_GATE_CACHE_MS": "1000",
+                "PRICE_UPDATE_INTERVAL_MS": "1000",
+                "MATCH_INTERVAL_MS": "10000",
+                "REF_BULK_REFRESH_INTERVAL_MS": "5000",
+                "GEMINI_REAL_FETCH_INTERVAL_MS": "10000",
+                "GEMINI_TICKER_FETCH_INTERVAL_MS": "1000",
+                "CLEANUP_INTERVAL_MS": "60000",
+                "SESSION_SPREAD_CAP": "0.08"
+            },
+            "_param_overrides": {
+                "max_position_size": 10.0,
+                "live_max_position_size": 10.0,
+                "stop_loss_width": 0.06,
+                "min_edge_live": 0.06,
+                "hold_to_settlement": 0,
+                "max_hold_time": 480,
+                "pre_expiry_exit_seconds": 180
+            },
+            "_notes": [
+                "TTX window is narrowed at source so long-dated contracts do not enter the active universe.",
+                "15-minute timeout plus explicit entry and force-exit buffers create a real short-session lifecycle.",
+                "Cadence defaults are tightened for faster short-horizon capture without changing non-session mode.",
+                "Position caps are restored to a plausible economic range; viability still depends on measured edge and fill frequency.",
+                "hold_to_settlement=0 because short-session trades must exit inside the session rather than wait for binary settlement."
+            ]
+        },
+
+        "standard_v18": {
+            "_description": "Standard V18 validated profile. Paper mode, all categories, settlement holds.",
+            "_env_vars": {},
+            "_param_overrides": {
+                "stop_loss_width": 0.10,
+                "max_hold_time": 14400,
+                "hold_to_settlement": 1
+            }
+        }
     }
 }

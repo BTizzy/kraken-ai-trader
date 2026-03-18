@@ -4,11 +4,11 @@
 
 ## What This Project Is
 
-A self-sustaining paper + live prediction market arbitrage bot targeting Gemini Prediction Markets (launched Dec 2025, thin/illiquid) by exploiting mispricings vs Polymarket (liquid, high-volume) and Kalshi (deep orderbooks).
+A live prediction market arbitrage/trading bot targeting Gemini Prediction Markets (launched Dec 2025, thin/illiquid) by exploiting mispricings vs Polymarket (liquid, high-volume) and Kalshi (deep orderbooks) among other stategies.
 
 **The core insight:** Gemini is thin because it's new. Our bot provides liquidity to Gemini while earning the spread vs Poly/Kalshi. **We are a market maker, not just a price taker.**
 
-**Goal:** Run profitably, paper-first, until 500+ trades with Sharpe > 2.0, then go live. Self-sustain until 2047.
+**Goal:** Produce 10$ in 15min runs.
 
 ---
 

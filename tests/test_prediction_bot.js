@@ -732,6 +732,20 @@ test('stopBot source resets session state to avoid stale timeout preflight failu
         'stopBot should reset session state so stale autonomous timeouts do not block preflight');
 });
 
+test('emergencyExitAll source uses bounded orphan-only reconcile retry', () => {
+    const serverSource = fs.readFileSync(
+        path.join(__dirname, '../server/prediction-proxy.js'), 'utf8');
+
+    assert(serverSource.includes('POST_EXIT_RECONCILE_GRACE_MS'),
+        'Expected configurable post-exit reconcile grace window');
+    assert(serverSource.includes('POST_EXIT_RECONCILE_RETRY_MS'),
+        'Expected configurable post-exit reconcile retry window');
+    assert(serverSource.includes('isOrphanOnlyReconcileRace'),
+        'Expected orphan-only reconcile race detection before retry');
+    assert(serverSource.includes('reconcile_retry'),
+        'Expected emergency cleanup result to expose reconcile_retry diagnostics');
+});
+
 // ===== Wait for async tests then Summary =====
 Promise.all(asyncTests).then(() => {
     // Cleanup

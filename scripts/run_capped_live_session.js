@@ -20,10 +20,11 @@ const ORPHAN_RECOVERY_POLL_MS = Math.max(250, Number(process.env.ORPHAN_RECOVERY
 const ORPHAN_RECOVERY_RETRY_AFTER_MS = Math.max(0, Number(process.env.ORPHAN_RECOVERY_RETRY_AFTER_MS || 2000));
 const BASELINE_RECOVERY_MAX_ATTEMPTS = Math.max(1, Number(process.env.BASELINE_RECOVERY_MAX_ATTEMPTS || 3));
 const BASELINE_RECOVERY_WAIT_MS = Math.max(250, Number(process.env.BASELINE_RECOVERY_WAIT_MS || 1200));
-const DEFAULT_MIN_EXECUTE_LIVE_BALANCE_USD = APPLY_PROFILE ? 6.0 : 10;
+const DEFAULT_MIN_EXECUTE_LIVE_BALANCE_USD = 10;
 const MIN_EXECUTE_LIVE_BALANCE_USD = Math.max(0, Number(process.env.MIN_EXECUTE_LIVE_BALANCE_USD || DEFAULT_MIN_EXECUTE_LIVE_BALANCE_USD));
 const API_TIMEOUT_MS = Math.max(1000, Number(process.env.API_TIMEOUT_MS || 15000));
 const API_MAX_RETRIES = Math.max(0, Number(process.env.API_MAX_RETRIES || 2));
+const ALLOW_LIVE_CAPITAL_RISK = String(process.env.ALLOW_LIVE_CAPITAL_RISK || '').toLowerCase() === 'true';
 const STABILITY_RESULTS_DIR = process.env.STABILITY_RESULTS_DIR || path.join(__dirname, '..', 'test-results');
 const STABILITY_LOOKBACK_FILES = Math.max(1, Number(process.env.STABILITY_LOOKBACK_FILES || 20));
 const REQUIRED_CONSECUTIVE_CLEAN_RUNS = Math.max(1, Number(process.env.REQUIRED_CONSECUTIVE_CLEAN_RUNS || 3));
@@ -299,6 +300,7 @@ function isNonSessionQualityFailure(message) {
         || text.includes('run entered zero trades')
         || text.includes('run exited zero trades')
         || text.includes('below execute threshold')
+        || text.includes('capital_preservation_lock')
         || text.includes('bot start failed');
 }
 
@@ -982,6 +984,7 @@ async function main() {
     log(`MIN_EXECUTE_LIVE_BALANCE_USD=${MIN_EXECUTE_LIVE_BALANCE_USD}`);
     log(`API_TIMEOUT_MS=${API_TIMEOUT_MS}`);
     log(`API_MAX_RETRIES=${API_MAX_RETRIES}`);
+    log(`ALLOW_LIVE_CAPITAL_RISK=${ALLOW_LIVE_CAPITAL_RISK}`);
     log(`REQUIRED_CONSECUTIVE_CLEAN_RUNS=${REQUIRED_CONSECUTIVE_CLEAN_RUNS}`);
     log(`ALLOW_UNSTABLE_EXECUTE_START=${ALLOW_UNSTABLE_EXECUTE_START}`);
 
@@ -1019,6 +1022,10 @@ async function main() {
 
     const mode = String(baseline.status?.mode || '').toLowerCase();
     const isLiveMode = mode === 'live' || mode === 'sandbox';
+
+    if (EXECUTE_START && isLiveMode && !ALLOW_LIVE_CAPITAL_RISK) {
+        throw new Error('capital_preservation_lock: live execute disabled; set ALLOW_LIVE_CAPITAL_RISK=true to override');
+    }
 
     if (isLiveMode) {
         const stabilityGate = evaluateStabilityGate();

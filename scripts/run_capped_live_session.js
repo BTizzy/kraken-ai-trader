@@ -381,6 +381,37 @@ function summarizeDiagnosticsWindow({ signalTypes, rejectionSummary, funnel, fil
     };
 }
 
+function summarizeOpportunitySufficiency(outcome, baseline) {
+    const eligibleContracts = getSessionUniverseEligibleCount(outcome, baseline);
+    const scoredSignals = Number(outcome?.diagnostics?.post?.funnel?.stages?.scored || 0);
+    const actionableSignals = Number(outcome?.diagnostics?.post?.funnel?.stages?.actionable_post_spot_freshness || 0);
+    const enteredTrades = Number(outcome?.conversion?.entered_trade_count || 0);
+    const exitedTrades = Number(outcome?.conversion?.completed_exit_count || 0);
+    const sessionMinutes = Math.max(SESSION_SECONDS / 60, 1 / 60);
+
+    let classification = 'sufficient';
+    if (eligibleContracts <= 0) {
+        classification = 'sparse_universe';
+    } else if (actionableSignals <= 0) {
+        classification = 'sparse_signals';
+    } else if (enteredTrades <= 0) {
+        classification = 'conversion_zero_entries';
+    } else if (exitedTrades <= 0) {
+        classification = 'conversion_zero_exits';
+    }
+
+    return {
+        classification,
+        eligible_contracts: eligibleContracts,
+        scored_signals: scoredSignals,
+        actionable_signals: actionableSignals,
+        entered_trades: enteredTrades,
+        completed_exits: exitedTrades,
+        actionable_per_minute: Number((actionableSignals / sessionMinutes).toFixed(3)),
+        entered_per_minute: Number((enteredTrades / sessionMinutes).toFixed(3))
+    };
+}
+
 async function ensureBaseline() {
     const baselineSinceMs = Date.now() - 15 * 60 * 1000;
     let [health, groundTruth, reconcile, status, signalTypes, rejectionSummary, funnel, filters, allowlistShadow, recentTrades, openTrades] = await Promise.all([
@@ -1082,11 +1113,14 @@ async function main() {
         }
     };
 
+    outcome.opportunity_sufficiency = summarizeOpportunitySufficiency(outcome, baseline);
+
     if (EXECUTE_START) {
         if (!(outcome.conversion.entered_trade_count > 0)) {
-            const eligibleContracts = getSessionUniverseEligibleCount(outcome, baseline);
-            const actionableSignals = Number(outcome?.diagnostics?.post?.funnel?.stages?.actionable_post_spot_freshness || 0);
-            const scoredSignals = Number(outcome?.diagnostics?.post?.funnel?.stages?.scored || 0);
+            const opportunity = outcome.opportunity_sufficiency || summarizeOpportunitySufficiency(outcome, baseline);
+            const eligibleContracts = Number(opportunity.eligible_contracts || 0);
+            const actionableSignals = Number(opportunity.actionable_signals || 0);
+            const scoredSignals = Number(opportunity.scored_signals || 0);
 
             if (eligibleContracts <= 0) {
                 throw new Error(

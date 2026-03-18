@@ -700,6 +700,38 @@ test('stopBot source no longer contains fire-and-forget emergencyExitAll', () =>
         'stopBot still contains fire-and-forget emergencyExitAll pattern — regression!');
 });
 
+test('resetSessionState clears stale autonomous session timeout state', async () => {
+    const timedOutEngine = new PaperTradingEngine(db, gemini, {
+        autonomous15mSession: true,
+        sessionTimeoutMs: 60000
+    });
+
+    timedOutEngine.markSessionStart(0, 100);
+    timedOutEngine.sessionStartTimeMs = Date.now() - 120000;
+
+    const timedOutGate = await timedOutEngine.evaluatePreTradeSafetyGate(true);
+    assert(timedOutGate.allowed === false, 'Expected stale session to block before reset');
+    assert(timedOutGate.reason === 'session_timeout', `Expected session_timeout, got ${timedOutGate.reason}`);
+
+    timedOutEngine.resetSessionState('stopped:test');
+    const resetPolicy = timedOutEngine.getSessionPolicy();
+    assert(resetPolicy.session_start_time_ms === null, 'Expected session start time to be cleared after reset');
+
+    const resetGate = await timedOutEngine.evaluatePreTradeSafetyGate(true);
+    assert(resetGate.allowed === true, `Expected reset gate to allow fresh session, got ${resetGate.reason}`);
+});
+
+test('stopBot source resets session state to avoid stale timeout preflight failures', () => {
+    const serverSource = fs.readFileSync(
+        path.join(__dirname, '../server/prediction-proxy.js'), 'utf8');
+    const stopBotIdx = serverSource.indexOf('function stopBot(');
+    assert(stopBotIdx !== -1, 'stopBot function not found in server source');
+
+    const stopBotSection = serverSource.slice(stopBotIdx, stopBotIdx + 2200);
+    assert(stopBotSection.includes('tradingEngine.resetSessionState('),
+        'stopBot should reset session state so stale autonomous timeouts do not block preflight');
+});
+
 // ===== Wait for async tests then Summary =====
 Promise.all(asyncTests).then(() => {
     // Cleanup

@@ -4990,6 +4990,10 @@ function stopBot(reason) {
         botState.cleanupTs = null;
     }
 
+    // Clear the prior autonomous session baseline so a stopped bot does not
+    // keep failing the next preflight with a stale session timeout.
+    tradingEngine.resetSessionState(reason ? `stopped:${reason}` : 'stopped');
+
     // NOTE: session-end cleanup (emergencyExitAll) is intentionally NOT fired here.
     // The harness always calls POST /api/bot/emergency-stop after detecting that the
     // bot has stopped, which runs a single awaited cleanup with proper state tracking.

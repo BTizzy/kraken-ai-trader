@@ -20,7 +20,8 @@ const ORPHAN_RECOVERY_POLL_MS = Math.max(250, Number(process.env.ORPHAN_RECOVERY
 const ORPHAN_RECOVERY_RETRY_AFTER_MS = Math.max(0, Number(process.env.ORPHAN_RECOVERY_RETRY_AFTER_MS || 2000));
 const BASELINE_RECOVERY_MAX_ATTEMPTS = Math.max(1, Number(process.env.BASELINE_RECOVERY_MAX_ATTEMPTS || 3));
 const BASELINE_RECOVERY_WAIT_MS = Math.max(250, Number(process.env.BASELINE_RECOVERY_WAIT_MS || 1200));
-const MIN_EXECUTE_LIVE_BALANCE_USD = Math.max(0, Number(process.env.MIN_EXECUTE_LIVE_BALANCE_USD || 10));
+const DEFAULT_MIN_EXECUTE_LIVE_BALANCE_USD = APPLY_PROFILE ? 6.0 : 10;
+const MIN_EXECUTE_LIVE_BALANCE_USD = Math.max(0, Number(process.env.MIN_EXECUTE_LIVE_BALANCE_USD || DEFAULT_MIN_EXECUTE_LIVE_BALANCE_USD));
 const API_TIMEOUT_MS = Math.max(1000, Number(process.env.API_TIMEOUT_MS || 15000));
 const API_MAX_RETRIES = Math.max(0, Number(process.env.API_MAX_RETRIES || 2));
 const STABILITY_RESULTS_DIR = process.env.STABILITY_RESULTS_DIR || path.join(__dirname, '..', 'test-results');
@@ -297,6 +298,7 @@ function isNonSessionQualityFailure(message) {
         || text.includes('zero_actionable_signals')
         || text.includes('run entered zero trades')
         || text.includes('run exited zero trades')
+        || text.includes('below execute threshold')
         || text.includes('bot start failed');
 }
 

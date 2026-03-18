@@ -36,3 +36,5 @@ node_modules/
 data/prediction_markets.db
 data/prediction_markets.db-wal
 data/prediction_markets.db-shm
+*.db.bak*
+data/*.db*

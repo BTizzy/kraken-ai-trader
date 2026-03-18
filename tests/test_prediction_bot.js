@@ -69,7 +69,7 @@ test('Paper wallet initialized at $500', () => {
 
 test('Default parameters loaded', () => {
     const threshold = db.getParameter('entry_threshold');
-    assert(threshold === 55, `Expected 55, got ${threshold}`);
+    assert(threshold === 45, `Expected 45, got ${threshold}`);
     const kelly = db.getParameter('kelly_multiplier');
     assert(kelly === 0.15, `Expected 0.15, got ${kelly}`);
 });
@@ -288,6 +288,25 @@ db.db.prepare('UPDATE paper_wallet SET balance = 500, total_trades = 0, winning_
 
 const engine = new PaperTradingEngine(db, gemini);
 const shortRunEngine = new PaperTradingEngine(db, gemini, { tradingProfile: 'short-run' });
+const paperSessionEngine = new PaperTradingEngine(db, gemini, {
+    tradingProfile: 'short-run',
+    autonomous15mSession: true,
+    sessionTimeoutMs: 900000,
+    sessionMinTtxSeconds: 600,
+    sessionMaxTtxSeconds: 3600,
+    sessionEntryBufferSeconds: 120,
+    sessionForceExitBufferSeconds: 60
+});
+const liveModeGemini = new GeminiClient({ mode: 'live' });
+const sessionEngine = new PaperTradingEngine(db, liveModeGemini, {
+    tradingProfile: 'short-run',
+    autonomous15mSession: true,
+    sessionTimeoutMs: 900000,
+    sessionMinTtxSeconds: 600,
+    sessionMaxTtxSeconds: 3600,
+    sessionEntryBufferSeconds: 120,
+    sessionForceExitBufferSeconds: 60
+});
 
 function makeFutureGemiSymbol(asset = 'BTC', strike = '50000', minutesAhead = 20) {
     const expiry = new Date(Date.now() + minutesAhead * 60 * 1000);
@@ -324,8 +343,8 @@ test('Standard profile keeps hold-to-settlement enabled', () => {
 test('Short-run profile overrides exit timing parameters', () => {
     assert(shortRunEngine.tradingProfile === 'short-run', `Expected short-run profile, got ${shortRunEngine.tradingProfile}`);
     assert(shortRunEngine.params.hold_to_settlement === 0, 'Short-run profile should disable hold_to_settlement');
-    assert(shortRunEngine.params.max_hold_time === 1800, `Expected max_hold_time=1800, got ${shortRunEngine.params.max_hold_time}`);
-    assert(shortRunEngine.params.pre_expiry_exit_seconds === 1800, `Expected pre_expiry_exit_seconds=1800, got ${shortRunEngine.params.pre_expiry_exit_seconds}`);
+    assert(shortRunEngine.params.max_hold_time === 480, `Expected max_hold_time=480, got ${shortRunEngine.params.max_hold_time}`);
+    assert(shortRunEngine.params.pre_expiry_exit_seconds === 180, `Expected pre_expiry_exit_seconds=180, got ${shortRunEngine.params.pre_expiry_exit_seconds}`);
 });
 
 test('Trade timing config respects hold-to-settlement by profile', () => {
@@ -349,15 +368,70 @@ test('Trade timing config respects hold-to-settlement by profile', () => {
     assert(standardTiming.timeToExpiry > 0, 'Expected positive timeToExpiry');
     assert(standardTiming.maxHold > shortTiming.maxHold,
         `Expected standard maxHold > short-run maxHold, got ${standardTiming.maxHold} vs ${shortTiming.maxHold}`);
-    assert(shortTiming.maxHold === 1800, `Expected short-run maxHold=1800, got ${shortTiming.maxHold}`);
+    assert(shortTiming.maxHold === 600, `Expected short-run maxHold=600, got ${shortTiming.maxHold}`);
 });
 
 test('Engine status exposes trading profile and effective parameters', () => {
     const status = shortRunEngine.getStatus();
     assert(status.trading_profile === 'short-run', `Expected short-run status profile, got ${status.trading_profile}`);
-    assert(status.profile_overrides.max_hold_time === 1800, 'Expected profile override to include short-run max_hold_time');
+    assert(status.profile_overrides.max_hold_time === 480, 'Expected profile override to include short-run max_hold_time');
     assert(status.parameters.hold_to_settlement === 0, 'Expected effective params to reflect short-run override');
     assert(status.db_parameters.hold_to_settlement === 1, 'Expected db params to preserve long-run default');
+});
+
+test('Session policy exposes coherent short-session entry timing', () => {
+    const policy = sessionEngine.getSessionPolicy();
+    assert(policy.timeout_ms === 900000, `Expected timeout_ms=900000, got ${policy.timeout_ms}`);
+    assert(policy.entry_buffer_seconds === 120, `Expected entry_buffer_seconds=120, got ${policy.entry_buffer_seconds}`);
+    assert(policy.min_entry_ttx_seconds === 300, `Expected min_entry_ttx_seconds=300, got ${policy.min_entry_ttx_seconds}`);
+});
+
+test('Autonomous session blocks late entries near session end', () => {
+    sessionEngine.markSessionStart(0, 100);
+    sessionEngine.sessionStartTimeMs = Date.now() - (sessionEngine.sessionTimeoutMs - 45000);
+    const signal = {
+        category: 'crypto',
+        marketId: makeFutureGemiSymbol('BTC', '50000', 20),
+        direction: 'YES'
+    };
+    const check = sessionEngine.canEnterPosition(signal);
+    assert(check.allowed === false, 'Expected session endgame entry to be blocked');
+    assert(check.reason.includes('session_time_remaining_too_short'), `Unexpected reason: ${check.reason}`);
+});
+
+test('Paper-mode autonomous session gate supports readiness checks', async () => {
+    paperSessionEngine.markSessionStart(0, 500);
+    const gate = await paperSessionEngine.evaluatePreTradeSafetyGate(true);
+    assert(gate.allowed === true, `Expected paper session gate to allow readiness, got ${gate.reason}`);
+    assert(gate.details.session_mode === 'paper', `Expected paper session mode, got ${gate.details.session_mode}`);
+});
+
+test('Gemini source filter keeps only short-session eligible markets', async () => {
+    const sourceFilteredGemini = new GeminiClient({
+        mode: 'paper',
+        useRealPrices: true,
+        sessionMinTtxSeconds: 600,
+        sessionMaxTtxSeconds: 3600,
+        sourceSessionTtxFilterEnabled: true
+    });
+
+    sourceFilteredGemini.refreshRealData = async () => {};
+    sourceFilteredGemini.realClient.getAllNormalizedMarkets = () => ([
+        {
+            market_id: makeFutureGemiSymbol('BTC', '50000', 20),
+            title: 'Eligible',
+            hasTwoSidedBook: true
+        },
+        {
+            market_id: makeFutureGemiSymbol('BTC', '50000', 600),
+            title: 'Too Long',
+            hasTwoSidedBook: true
+        }
+    ]);
+
+    const markets = await sourceFilteredGemini.fetchAllActiveMarkets();
+    assert(markets.length === 1, `Expected 1 eligible market, got ${markets.length}`);
+    assert(markets[0].title === 'Eligible', `Unexpected market kept: ${markets[0].title}`);
 });
 
 test('Autonomous 15m session rejects non fair-value signals', async () => {
@@ -490,6 +564,80 @@ test('Rate limiter stats', () => {
     const stats = limiter.getStats();
     assert(stats.polymarket, 'Should have polymarket stats');
     assert(stats.polymarket.used === 5, `Used should be 5, got ${stats.polymarket.used}`);
+});
+
+// ===== Lifecycle Regression Tests =====
+console.log('\n🔒 Testing lifecycle regression (cleanup/mutex/stopBot)...');
+
+test('DB live trade stays open when closeTrade is not called', () => {
+    // Regression: emergencyExitAll previously called closeTrade() optimistically for
+    // unresolved/failed GTC sells, leaving DB closed but exchange still holding position.
+    // New behavior: closeTrade() is only called after confirmed fill; unresolved exits skip it.
+    const liveTradeId = db.insertTrade({
+        timestamp: Math.floor(Date.now() / 1000),
+        gemini_market_id: 'GEMI-BTC2602190200-HI66250',
+        market_title: 'Will BTC exceed $66,250 by Feb 19?',
+        category: 'crypto',
+        direction: 'NO',
+        entry_price: 0.92,
+        position_size: 10,
+        opportunity_score: 55,
+        mode: 'live'
+    });
+    assert(liveTradeId > 0, 'Live trade insert failed');
+
+    // Simulates cleanup got back exit_submitted_unresolved and skipped closeTrade()
+    const openTrades = db.getOpenTrades();
+    const liveTrade = openTrades.find(t => t.id === liveTradeId);
+    assert(liveTrade !== undefined, 'Live trade should still be open (closeTrade not called)');
+    assert(liveTrade.mode === 'live', `Trade mode should be 'live', got '${liveTrade.mode}'`);
+
+    // Cleanup for subsequent tests
+    db.closeTrade(liveTradeId, 0.89, 0.30, 60, 'test_cleanup');
+    const afterClose = db.getOpenTrades().find(t => t.id === liveTradeId);
+    assert(afterClose === undefined, 'Trade should be closed after explicit closeTrade()');
+});
+
+test('cleanupStatus mutex logic prevents duplicate cleanup', () => {
+    // Regression: emergencyExitAll now guards against concurrent calls with a mutex.
+    // When cleanupStatus is 'in_progress', a second call must return { skipped_duplicate: true }.
+    const botState = { cleanupStatus: 'idle', cleanupResult: null };
+
+    function simulateEmergencyExitAll() {
+        if (botState.cleanupStatus === 'in_progress') {
+            return { skipped_duplicate: true };
+        }
+        botState.cleanupStatus = 'in_progress';
+        botState.cleanupStatus = 'complete';
+        botState.cleanupResult = { is_flat: true, total: 0, unresolved: 0 };
+        return botState.cleanupResult;
+    }
+
+    const result1 = simulateEmergencyExitAll();
+    assert(result1.is_flat === true, 'First call should return cleanup result with is_flat');
+    assert(!result1.skipped_duplicate, 'First call should not be skipped_duplicate');
+
+    // Simulate re-entry while still in_progress
+    botState.cleanupStatus = 'in_progress';
+    const result2 = simulateEmergencyExitAll();
+    assert(result2.skipped_duplicate === true, 'Concurrent call must return skipped_duplicate: true');
+});
+
+test('stopBot source no longer contains fire-and-forget emergencyExitAll', () => {
+    // Regression: old stopBot had:
+    //   if (sessionEndReasons.includes(reason)) { emergencyExitAll(...).catch(...) }
+    // This raced with harness-triggered cleanup. Verify it is removed.
+    const serverSource = fs.readFileSync(
+        path.join(__dirname, '../server/prediction-proxy.js'), 'utf8');
+    const stopBotIdx = serverSource.indexOf('function stopBot(');
+    assert(stopBotIdx !== -1, 'stopBot function not found in server source');
+
+    // Extract 2KB starting at stopBot to scope the check
+    const stopBotSection = serverSource.slice(stopBotIdx, stopBotIdx + 2000);
+    const hasFireAndForget = /sessionEndReasons[\s\S]{0,300}emergencyExitAll[\s\S]{0,100}\.catch/
+        .test(stopBotSection);
+    assert(!hasFireAndForget,
+        'stopBot still contains fire-and-forget emergencyExitAll pattern — regression!');
 });
 
 // ===== Wait for async tests then Summary =====

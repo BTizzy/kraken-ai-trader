@@ -816,6 +816,10 @@ test('capped harness source classifies zero-trade execute windows as non-session
 
     assert(harnessSource.includes('function isNonSessionQualityFailure('),
         'Expected non-session-quality classifier helper in capped harness');
+    assert(harnessSource.includes('function summarizeOpportunitySufficiency('),
+        'Expected capped harness to summarize opportunity sufficiency for short sessions');
+    assert(harnessSource.includes('outcome.opportunity_sufficiency = summarizeOpportunitySufficiency(outcome, baseline);'),
+        'Expected capped harness output to expose an opportunity_sufficiency summary block');
     assert(harnessSource.includes("text.includes('run entered zero trades')"),
         'Expected zero-trade execute failure to be treated as non-session-quality');
     assert(harnessSource.includes("text.includes('run exited zero trades')"),

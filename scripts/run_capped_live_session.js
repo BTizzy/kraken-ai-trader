@@ -253,6 +253,8 @@ async function monitorSession(sessionDeadlineMs) {
             // First drift detection gets one recovery attempt before forcing flatten.
             if (consecutiveDriftTicks === 1) {
                 try {
+                    await api('/api/bot/stop', { method: 'POST', body: {} }).catch(() => null);
+                    await sleep(1000);
                     const fix = await api('/api/reconcile/fix', {
                         method: 'POST',
                         body: { recover_orphans: true }
@@ -266,6 +268,19 @@ async function monitorSession(sessionDeadlineMs) {
                         response: fix.data,
                         recover_orphans: true
                     });
+
+                    const postFixGroundTruth = await api('/api/bot/ground-truth');
+                    if (fix.ok && fix.data?.is_flat === true && postFixGroundTruth.ok && postFixGroundTruth.data?.is_flat === true) {
+                        return {
+                            completed: true,
+                            stop_reason: 'reconcile_drift_autofixed',
+                            checkpoint: checkpointRes.data?.decision || null,
+                            ground_truth_flat: true,
+                            reconcile_fix: fix.data,
+                            summary,
+                            drift_timeline: driftTimeline
+                        };
+                    }
                 } catch (fixErr) {
                     log('Reconcile auto-fix failed', { error: fixErr.message });
                 }

@@ -820,6 +820,10 @@ test('capped harness source classifies zero-trade execute windows as non-session
         'Expected zero-trade execute failure to be treated as non-session-quality');
     assert(harnessSource.includes("text.includes('run exited zero trades')"),
         'Expected zero-exit execute failure to be treated as non-session-quality');
+    assert(harnessSource.includes("text.includes('zero_eligible_contracts')"),
+        'Expected sparse-universe zero_eligible_contracts failures to be treated as non-session-quality');
+    assert(harnessSource.includes("text.includes('zero_actionable_signals')"),
+        'Expected sparse-signal zero_actionable_signals failures to be treated as non-session-quality');
 });
 
 // ===== Wait for async tests then Summary =====

@@ -1057,8 +1057,10 @@ private:
         }
 
         // FEE-AWARE TRADING: Only trade if expected profit > fees
-        // Round-trip fee is 0.8% (0.4% entry + 0.4% exit)
-        const double FEE_RATE = 0.008;  // 0.8% round-trip fees
+        // Gemini ActiveTrader maker fee: 0.20% base (use limit orders!)
+        // Round-trip: 0.40% with limit orders (maker-or-cancel)
+        // Old rate was 0.8% (Kraken taker) — 2x too high, killed all profits
+        const double FEE_RATE = 0.004;  // 0.4% round-trip with Gemini ActiveTrader limit orders
         const double MIN_PROFIT_BUFFER = 0.001;  // 0.1% buffer above fees
         double expected_fees_pct = FEE_RATE * 100.0;  // Convert to percentage (0.8%)
         double min_required_tp = expected_fees_pct + (MIN_PROFIT_BUFFER * 100.0);  // 0.9% minimum
@@ -1305,7 +1307,7 @@ private:
             pnl_pct = ((exit_price - entry_price) / entry_price) * 100.0;  // LONG: profit when price rises
         }
         double pnl_usd = position_usd * (pnl_pct / 100.0);
-        double fees = position_usd * 0.008;  // 0.8% round-trip: 0.4% entry + 0.4% exit
+        double fees = position_usd * 0.004;  // 0.4% round-trip: 0.20% maker entry + 0.20% maker exit (Gemini ActiveTrader)
         double net_pnl = pnl_usd - fees;
         bool is_win = net_pnl > 0;
 

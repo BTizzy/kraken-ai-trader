@@ -707,7 +707,8 @@ async function runQuickReconcileFix(options = {}) {
 
 // ===== Initialize Components =====
 
-const db = new PredictionDatabase();
+const dbPathOverride = process.env.PREDICTION_DB_PATH || null;
+const db = new PredictionDatabase(dbPathOverride);
 const rateLimiter = new RateLimiter();
 
 const polyClient = new PolymarketClient({ rateLimiter });

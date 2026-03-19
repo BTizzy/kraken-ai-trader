@@ -5,6 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { PROFILE_JSON_PREFIX } = require('./activate_session_profile');
 
 function readCliNumberFlag(name) {
     const idx = process.argv.indexOf(name);
@@ -56,6 +57,33 @@ function parseResultJson(stdout = '') {
         }
     }
     return null;
+}
+
+function parseProfileManifest(stdout = '') {
+    const lines = String(stdout || '').split('\n');
+    for (let i = lines.length - 1; i >= 0; i -= 1) {
+        const line = lines[i].trim();
+        if (!line.startsWith(PROFILE_JSON_PREFIX)) continue;
+        const raw = line.slice(PROFILE_JSON_PREFIX.length);
+        try {
+            return JSON.parse(raw);
+        } catch (_) {
+            return null;
+        }
+    }
+    return null;
+}
+
+function resolveProfileManifest() {
+    const scriptPath = path.join('scripts', 'activate_session_profile.js');
+    const proc = spawnSync(process.execPath, [scriptPath, '--dry-run', '--emit-json'], {
+        cwd: process.cwd(),
+        env: process.env,
+        encoding: 'utf8',
+        maxBuffer: 1024 * 1024
+    });
+    if (proc.status !== 0) return null;
+    return parseProfileManifest(proc.stdout);
 }
 
 function median(values = []) {
@@ -160,6 +188,10 @@ function summarize(runs) {
 
 function main() {
     log(`Starting capped-session batch: runs=${RUNS}, execute=${EXECUTE_START}, apply_profile=${APPLY_PROFILE}`);
+    const profileManifest = APPLY_PROFILE ? resolveProfileManifest() : null;
+    if (APPLY_PROFILE) {
+        log('Profile manifest', profileManifest || { error: 'unavailable' });
+    }
 
     const allRuns = [];
     for (let i = 1; i <= RUNS; i++) {
@@ -190,6 +222,7 @@ function main() {
             runs: RUNS,
             execute_start: EXECUTE_START,
             apply_profile: APPLY_PROFILE,
+            profile_manifest: profileManifest,
             session_seconds: SESSION_SECONDS,
             poll_seconds: POLL_SECONDS,
             max_live_open: MAX_LIVE_OPEN,

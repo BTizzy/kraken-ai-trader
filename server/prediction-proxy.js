@@ -1869,12 +1869,20 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-app.get('/api/bot/preflight', (req, res) => {
-    res.json({
-        mode: geminiMode,
-        required: isLiveOrSandboxMode(),
-        ...livePreflightState
-    });
+app.get('/api/bot/preflight', async (req, res) => {
+    try {
+        const preflight = isLiveOrSandboxMode()
+            ? await runLivePreflightCheck({ forceGate: true })
+            : { ...livePreflightState };
+
+        res.status(preflight.valid ? 200 : 409).json({
+            mode: geminiMode,
+            required: isLiveOrSandboxMode(),
+            ...preflight
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
 app.get('/api/session/checkpoint', async (req, res) => {

@@ -97,6 +97,8 @@ function recordCycleResult(success, error) {
 
 const DRAWDOWN_LIMIT = 0.20;  // 20% max drawdown → auto-stop
 let peakBalance = null;
+let liveBalanceUnavailableStreak = 0;
+const LIVE_BALANCE_UNAVAILABLE_MAX_STREAK = Math.max(1, Number(process.env.LIVE_BALANCE_UNAVAILABLE_MAX_STREAK || 3));
 
 function checkDrawdownKillSwitch() {
     try {
@@ -106,7 +108,25 @@ function checkDrawdownKillSwitch() {
             balance = (tradingEngine && tradingEngine._liveBalance)
                 || (geminiClient && geminiClient._cachedBalance)
                 || null;
-            if (balance === null) return false; // not fetched yet, skip check
+            if (balance === null) {
+                liveBalanceUnavailableStreak += 1;
+                logger.warn(
+                    `Drawdown check skipped: live balance unavailable ` +
+                    `(${liveBalanceUnavailableStreak}/${LIVE_BALANCE_UNAVAILABLE_MAX_STREAK})`
+                );
+                if (liveBalanceUnavailableStreak >= LIVE_BALANCE_UNAVAILABLE_MAX_STREAK) {
+                    if (!health.circuitOpen) {
+                        health.circuitOpen = true;
+                        health.circuitOpenedAt = Date.now();
+                    }
+                    logger.error(
+                        'Circuit breaker OPEN — live balance unavailable for drawdown checks; blocking entries until balance telemetry recovers'
+                    );
+                    return true;
+                }
+                return false;
+            }
+            liveBalanceUnavailableStreak = 0;
         } else {
             const wallet = db.getWallet();
             if (!wallet) return false;
@@ -130,25 +150,59 @@ function checkDrawdownKillSwitch() {
 
 // ===== Live Wallet Helper =====
 async function getDisplayWallet() {
-    if (geminiMode === 'live') {
-        let balance = (tradingEngine && tradingEngine._liveBalance)
-            || (geminiClient && geminiClient._cachedBalance)
-            || null;
-        // If no cached balance yet, fetch it now
-        if (balance === null && geminiClient) {
-            balance = await geminiClient.getAvailableBalance();
+    const paperWallet = db.getWallet();
+    const initialBalance = paperWallet ? Number(paperWallet.initial_balance) : 140;
+
+    if (geminiMode === 'live' || geminiMode === 'sandbox') {
+        let balance = null;
+        let walletSource = null;
+
+        if (tradingEngine && Number.isFinite(Number(tradingEngine._liveBalance))) {
+            balance = Number(tradingEngine._liveBalance);
+            walletSource = 'runtime_live_cache';
+        } else if (geminiClient && Number.isFinite(Number(geminiClient._cachedBalance))) {
+            balance = Number(geminiClient._cachedBalance);
+            walletSource = 'gemini_cached_balance';
+        } else if (geminiClient) {
+            try {
+                const fetched = await geminiClient.getAvailableBalance();
+                if (Number.isFinite(Number(fetched))) {
+                    balance = Number(fetched);
+                    walletSource = 'gemini_api';
+                }
+            } catch (error) {
+                logger.warn(`Unable to fetch live balance for display wallet: ${error.message}`);
+            }
         }
-        if (balance !== null) {
-            const paperWallet = db.getWallet();
-            const initialBalance = paperWallet ? paperWallet.initial_balance : 140;
+
+        if (Number.isFinite(balance)) {
             return {
                 balance,
                 initial_balance: initialBalance,
-                total_pnl: balance - initialBalance
+                total_pnl: balance - initialBalance,
+                wallet_source: walletSource,
+                mode: geminiMode
             };
         }
+
+        return {
+            balance: null,
+            initial_balance: initialBalance,
+            total_pnl: null,
+            wallet_source: 'balance_unavailable',
+            mode: geminiMode,
+            error: 'live_balance_unavailable',
+            fallback_db_balance: paperWallet && Number.isFinite(Number(paperWallet.balance))
+                ? Number(paperWallet.balance)
+                : null
+        };
     }
-    return db.getWallet();
+
+    return {
+        ...(paperWallet || { balance: null, initial_balance: initialBalance, total_pnl: null }),
+        wallet_source: 'db_wallet',
+        mode: geminiMode
+    };
 }
 
 // ===== Emergency Exit All Positions =====
@@ -674,6 +728,10 @@ const autonomousAllowedSignalTypes = new Set(
 const sessionLossLimitUsd = Math.abs(Number(process.env.SESSION_DAILY_LOSS_LIMIT_USD || 3));
 const sessionMinTtxSeconds = Math.max(60, Number(process.env.SESSION_MIN_TTX_SECONDS || 600));
 const sessionMaxTtxSeconds = Math.max(sessionMinTtxSeconds, Number(process.env.SESSION_MAX_TTX_SECONDS || 3600));
+const SHORT_SESSION_FV_MIN_EDGE = Math.max(
+    0,
+    Number(process.env.SHORT_SESSION_FV_MIN_EDGE || 0.025)
+);
 const allowLongTtxIn15mSession = String(process.env.ALLOW_LONG_TTX_IN_15M_SESSION || '').toLowerCase() === 'true';
 const SPOT_STALE_THRESHOLD_MS = Math.max(1000, Number(process.env.SPOT_STALE_THRESHOLD_MS || 30000));
 const SPOT_SOFT_STALE_THRESHOLD_MS = Math.max(
@@ -688,7 +746,7 @@ const sessionMaxConcurrentLive = Math.max(1, Number(process.env.SESSION_MAX_CONC
 const DEFAULT_LIVE_USD_RESERVE = 5;
 const LIVE_USD_RESERVE = Math.max(0, Number(process.env.LIVE_USD_RESERVE || DEFAULT_LIVE_USD_RESERVE));
 const DEFAULT_LIVE_MIN_TRADABLE_BALANCE = 2;
-const LIVE_MIN_TRADABLE_BALANCE = Math.max(0.5, Number(process.env.LIVE_MIN_TRADABLE_BALANCE || DEFAULT_LIVE_MIN_TRADABLE_BALANCE));
+const LIVE_MIN_TRADABLE_BALANCE = Math.max(0.01, Number(process.env.LIVE_MIN_TRADABLE_BALANCE || DEFAULT_LIVE_MIN_TRADABLE_BALANCE));
 const LIVE_PREFLIGHT_TTL_MS = Math.max(1000, Number(process.env.LIVE_PREFLIGHT_TTL_MS || 300000));
 const AUTONOMOUS_SOURCE_TTX_FILTER = autonomous15mSession && process.env.AUTONOMOUS_SOURCE_TTX_FILTER !== 'false';
 const ALLOW_LIVE_CAPITAL_RISK = String(process.env.ALLOW_LIVE_CAPITAL_RISK || '').toLowerCase() === 'true';
@@ -740,6 +798,10 @@ const signalDetector = new SignalDetector(db, {
     feePerSide: 0.0001,
     minEdge: 0.03,
     highConfidenceEdge: 0.08,
+    fairValueShortSessionEnabled: autonomous15mSession && geminiMode === 'paper',
+    fairValueSessionMinTtxSeconds: sessionMinTtxSeconds,
+    fairValueSessionMaxTtxSeconds: sessionMaxTtxSeconds,
+    fairValueShortSessionMinEdge: SHORT_SESSION_FV_MIN_EDGE,
     kalshiClient: kalshiClient
 });
 const tradingEngine = new PaperTradingEngine(db, geminiClient, {
@@ -750,7 +812,11 @@ const tradingEngine = new PaperTradingEngine(db, geminiClient, {
     sessionMaxTtxSeconds,
     sessionMaxConcurrentLive,
     liveUsdReserve: LIVE_USD_RESERVE,
-    liveMinTradableBalance: LIVE_MIN_TRADABLE_BALANCE
+    liveMinTradableBalance: LIVE_MIN_TRADABLE_BALANCE,
+    liveCanaryMode: String(process.env.LIVE_CANARY_MODE || '').toLowerCase() === 'true',
+    liveCanaryMaxPositionSizeUsd: Number(process.env.LIVE_CANARY_MAX_POSITION_SIZE_USD || 0.10),
+    liveCanaryMaxOrdersPerSession: Number(process.env.LIVE_CANARY_MAX_ORDERS_PER_SESSION || 3),
+    liveCanaryStopOnExitFailure: String(process.env.LIVE_CANARY_STOP_ON_EXIT_FAILURE || 'true').toLowerCase() !== 'false'
 });
 const alerts = new Alerts({ webhookUrl: process.env.DISCORD_WEBHOOK_URL });
 const kalshiWS = new KalshiWS({ apiKey: process.env.KALSHI_API_KEY });
@@ -1062,10 +1128,18 @@ async function runLivePreflightCheck(options = {}) {
         ]);
 
         const nonPendingPhantom = (reconciliation?.phantom || []).filter(p => !p.pendingExit && !p.transientGrace);
+        const effectiveReserveUsd = Number.isFinite(Number(balance))
+            ? tradingEngine.getEffectiveLiveReserve(Number(balance))
+            : LIVE_USD_RESERVE;
+        const effectiveMinTradableUsd = Number.isFinite(Number(balance))
+            ? tradingEngine.getEffectiveLiveMinTradableBalance(Number(balance))
+            : LIVE_MIN_TRADABLE_BALANCE;
         details.balance = Number.isFinite(Number(balance)) ? Number(balance) : null;
         details.tradable_balance = Number.isFinite(details.balance)
-            ? Math.max(0, details.balance - LIVE_USD_RESERVE)
+            ? Math.max(0, details.balance - effectiveReserveUsd)
             : null;
+        details.live_usd_reserve_effective = effectiveReserveUsd;
+        details.live_min_tradable_balance_effective = effectiveMinTradableUsd;
         details.positions = Array.isArray(positions) ? positions.length : 0;
         details.open_orders = Array.isArray(openOrders) ? openOrders.length : 0;
         details.reconciliation = {
@@ -1083,7 +1157,7 @@ async function runLivePreflightCheck(options = {}) {
         const hasTradableBalance =
             details.tradable_balance != null &&
             Number.isFinite(Number(details.tradable_balance)) &&
-            Number(details.tradable_balance) >= LIVE_MIN_TRADABLE_BALANCE;
+            Number(details.tradable_balance) >= effectiveMinTradableUsd;
         const gateAllowed = gate ? !!gate.allowed : false;
 
         const valid = hasTradableBalance && cleanReconcile && cleanOrders && gateAllowed;
@@ -1104,9 +1178,17 @@ async function runLivePreflightCheck(options = {}) {
         livePreflightState.token = valid ? `${now}-${Math.random().toString(36).slice(2, 10)}` : null;
         livePreflightState.details = details;
 
-        if (valid) {
-            tradingEngine._liveBalance = details.balance;
-            tradingEngine._liveTradableBalance = details.tradable_balance;
+        // Keep runtime wallet truth in sync with latest preflight observation
+        // even when preflight fails (e.g., reserve-floor block). This prevents
+        // stale high balances from leaking into /api/bot/status and readiness.
+        if (Number.isFinite(Number(details.balance))) {
+            tradingEngine._liveBalance = Number(details.balance);
+            tradingEngine._liveTradableBalance = Number.isFinite(Number(details.tradable_balance))
+                ? Number(details.tradable_balance)
+                : Math.max(0, Number(details.balance) - effectiveReserveUsd);
+        } else {
+            tradingEngine._liveBalance = null;
+            tradingEngine._liveTradableBalance = null;
         }
 
         return { ...livePreflightState };
@@ -1117,6 +1199,8 @@ async function runLivePreflightCheck(options = {}) {
         livePreflightState.reason = 'preflight_error';
         livePreflightState.token = null;
         livePreflightState.details = { ...details, error: error.message };
+        tradingEngine._liveBalance = null;
+        tradingEngine._liveTradableBalance = null;
         return { ...livePreflightState };
     }
 }
@@ -1511,6 +1595,236 @@ async function buildSessionReadinessSummary(options = {}) {
     };
 }
 
+function summarizeSignalTypeDiagnostics() {
+    const scoredSignals = latestSignals || [];
+    const actionableSignals = latestActionable || [];
+
+    const scoredByType = {};
+    const actionableByType = {};
+    const nonActionableReasons = {};
+
+    for (const signal of scoredSignals) {
+        const signalType = signal.signalType || signal.signal_type || 'unknown';
+        scoredByType[signalType] = (scoredByType[signalType] || 0) + 1;
+
+        if (!signal.actionable) {
+            const reason = signal.rejection_reason || 'unknown';
+            nonActionableReasons[reason] = (nonActionableReasons[reason] || 0) + 1;
+        }
+    }
+
+    for (const signal of actionableSignals) {
+        const signalType = signal.signalType || signal.signal_type || 'unknown';
+        actionableByType[signalType] = (actionableByType[signalType] || 0) + 1;
+    }
+
+    return {
+        snapshot_at: new Date().toISOString(),
+        total_scored: scoredSignals.length,
+        total_actionable: actionableSignals.length,
+        scored_by_type: scoredByType,
+        actionable_by_type: actionableByType,
+        non_actionable_reasons: nonActionableReasons,
+        funnel: latestSignalFunnel
+    };
+}
+
+const PARAMETER_GUARDRAILS = {
+    entry_threshold: { min: 40, max: 65, severity: 'high' },
+    daily_loss_limit: { min: -100, max: -5, severity: 'critical' },
+    live_daily_loss_limit: { min: -50, max: -1, severity: 'critical' },
+    max_capital_at_risk_pct: { min: 5, max: 30, severity: 'high' },
+    stop_loss_width: { min: 0.03, max: 0.12, severity: 'high' },
+    max_hold_time: { min: 120, max: 21600, severity: 'medium' },
+    pre_expiry_exit_seconds: { min: 60, max: 7200, severity: 'medium' },
+    time_decay_start_fraction: { min: 0.5, max: 0.9, severity: 'medium' },
+    kelly_multiplier: { min: 0.05, max: 0.2, severity: 'high' },
+    min_edge_live: { min: 0.03, max: 0.12, severity: 'high' },
+    live_max_position_size: { min: 1, max: 10, severity: 'high' }
+};
+
+function buildParameterAuditReport(options = {}) {
+    const applyClamp = options.applyClamp === true;
+    const rows = db.getAllParameters() || [];
+    const appliedChanges = [];
+
+    const entries = rows.map((row) => {
+        const key = row.key;
+        const value = Number(row.value);
+        const dbMin = row.min_value == null ? null : Number(row.min_value);
+        const dbMax = row.max_value == null ? null : Number(row.max_value);
+        const guardrail = PARAMETER_GUARDRAILS[key] || null;
+
+        const dbViolation =
+            (dbMin != null && Number.isFinite(dbMin) && value < dbMin) ||
+            (dbMax != null && Number.isFinite(dbMax) && value > dbMax);
+
+        const guardrailViolation =
+            guardrail && Number.isFinite(value) && (
+                value < guardrail.min || value > guardrail.max
+            );
+
+        let clampedTo = null;
+        if (applyClamp && guardrail && Number.isFinite(value) && guardrailViolation) {
+            const clamped = Math.max(guardrail.min, Math.min(guardrail.max, value));
+            if (clamped !== value) {
+                db.setParameter(key, clamped);
+                tradingEngine.params[key] = clamped;
+                clampedTo = clamped;
+                appliedChanges.push({ key, from: value, to: clamped });
+            }
+        }
+
+        return {
+            key,
+            value,
+            db_range: {
+                min: dbMin,
+                max: dbMax,
+                violation: dbViolation
+            },
+            guardrail: guardrail
+                ? {
+                    min: guardrail.min,
+                    max: guardrail.max,
+                    severity: guardrail.severity,
+                    violation: guardrailViolation
+                }
+                : null,
+            clamped_to: clampedTo
+        };
+    });
+
+    const envChecks = [
+        {
+            key: 'session_ttx_bounds',
+            pass: sessionMaxTtxSeconds >= sessionMinTtxSeconds,
+            value: {
+                min_ttx_seconds: sessionMinTtxSeconds,
+                max_ttx_seconds: sessionMaxTtxSeconds
+            }
+        },
+        {
+            key: 'short_session_fv_min_edge',
+            pass: SHORT_SESSION_FV_MIN_EDGE >= 0 && SHORT_SESSION_FV_MIN_EDGE <= 0.1,
+            value: SHORT_SESSION_FV_MIN_EDGE
+        },
+        {
+            key: 'live_usd_reserve_floor',
+            pass: LIVE_USD_RESERVE >= 0 && LIVE_MIN_TRADABLE_BALANCE >= 0.01,
+            value: {
+                reserve: LIVE_USD_RESERVE,
+                min_tradable: LIVE_MIN_TRADABLE_BALANCE
+            }
+        }
+    ];
+
+    return {
+        snapshot_at: new Date().toISOString(),
+        mode: geminiMode,
+        apply_clamp: applyClamp,
+        summary: {
+            total_parameters: entries.length,
+            db_range_violations: entries.filter(e => e.db_range.violation).length,
+            guardrail_violations: entries.filter(e => e.guardrail?.violation).length,
+            env_guardrail_failures: envChecks.filter(c => !c.pass).length,
+            clamp_applied: appliedChanges.length
+        },
+        env_checks: envChecks,
+        parameters: entries,
+        applied_changes: appliedChanges
+    };
+}
+
+async function buildDiagnosticsBundle(options = {}) {
+    const forcePreflight = options.forcePreflight === true;
+    const forceGate = options.forceGate === true;
+    const minActionable = options.minActionable;
+    const minRuntimeFairValue = options.minRuntimeFairValue;
+    const minNetEdge = options.minNetEdge;
+    const applyClamp = options.applyClamp === true;
+    const rejectionSinceMs = Number(options.rejectionSinceMs || (Date.now() - 15 * 60 * 1000));
+    const rejectionLimit = Math.max(1, Math.min(200, Number(options.rejectionLimit || 100)));
+
+    const [wallet, checkpoint, readiness, reconcile] = await Promise.all([
+        getDisplayWallet(),
+        buildSessionCheckpointSummary({
+            minActionable,
+            minRuntimeFairValue,
+            minNetEdge,
+            forceGate
+        }),
+        buildSessionReadinessSummary({
+            minActionable,
+            minRuntimeFairValue,
+            minNetEdge,
+            forcePreflight,
+            forceGate
+        }),
+        tradingEngine.reconcilePositions()
+    ]);
+
+    const rejectionSummary = (() => {
+        const grouped = db.getEntryRejectionSummary({ sinceMs: rejectionSinceMs });
+        const recent = db.getRecentEntryRejections({ sinceMs: rejectionSinceMs, limit: rejectionLimit }) || [];
+        const byReason = {};
+        const byStage = {};
+        for (const row of grouped || []) {
+            byReason[row.rejection_reason] = (byReason[row.rejection_reason] || 0) + row.count;
+            byStage[row.rejection_stage] = (byStage[row.rejection_stage] || 0) + row.count;
+        }
+        return {
+            snapshot_at: new Date().toISOString(),
+            since_ms: rejectionSinceMs,
+            total_rejections: (grouped || []).reduce((sum, row) => sum + Number(row.count || 0), 0),
+            by_reason: byReason,
+            by_stage: byStage,
+            grouped: grouped || [],
+            recent: recent || []
+        };
+    })();
+
+    return {
+        generated_at: new Date().toISOString(),
+        mode: geminiMode,
+        bot_running: botState.running,
+        wallet,
+        preflight: {
+            mode: geminiMode,
+            required: isLiveOrSandboxMode(),
+            ...livePreflightState
+        },
+        checkpoint,
+        readiness,
+        reconcile: {
+            orphaned: (reconcile?.orphaned || []).length,
+            phantom: ((reconcile?.phantom || []).filter(p => !p.pendingExit && !p.transientGrace)).length,
+            quantityMismatch: (reconcile?.quantityMismatch || []).length
+        },
+        diagnostics: {
+            signal_types: summarizeSignalTypeDiagnostics(),
+            funnel: {
+                snapshot_at: new Date().toISOString(),
+                autonomous_allowed_signal_types: Array.from(autonomousAllowedSignalTypes),
+                session_universe: geminiClient.getSessionUniverseStats(),
+                funnel: latestSignalFunnel
+            },
+            filters: {
+                snapshot_at: new Date().toISOString(),
+                dropped: latestSignalFunnel?.dropped || {},
+                stages: latestSignalFunnel?.stages || {}
+            },
+            allowlist_shadow: {
+                latest: latestAllowlistShadow,
+                cumulative: cumulativeAllowlistShadow,
+                current_session: sessionAllowlistShadow
+            },
+            rejection_summary: rejectionSummary
+        },
+        parameter_audit: buildParameterAuditReport({ applyClamp })
+    };
+}
+
 // ===== Express App =====
 
 const app = express();
@@ -1588,6 +1902,24 @@ app.get('/api/session/readiness', async (req, res) => {
             forceGate: toBoolean(req.query.force_gate)
         });
         res.json(summary);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/session/diagnostics-bundle', async (req, res) => {
+    try {
+        const bundle = await buildDiagnosticsBundle({
+            forcePreflight: toBoolean(req.query.force_preflight),
+            forceGate: toBoolean(req.query.force_gate),
+            minActionable: req.query.min_actionable,
+            minRuntimeFairValue: req.query.min_runtime_fair_value,
+            minNetEdge: req.query.min_net_edge,
+            applyClamp: toBoolean(req.query.apply_clamp),
+            rejectionSinceMs: req.query.rejection_since_ms,
+            rejectionLimit: req.query.rejection_limit
+        });
+        res.json(bundle);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -1692,37 +2024,7 @@ app.get('/api/signals', (req, res) => {
 // Diagnostic: signal type mix and non-actionable reason breakdown for latest cycle
 app.get('/api/signals/types', (req, res) => {
     try {
-        const scoredSignals = latestSignals || [];
-        const actionableSignals = latestActionable || [];
-
-        const scoredByType = {};
-        const actionableByType = {};
-        const nonActionableReasons = {};
-
-        for (const signal of scoredSignals) {
-            const signalType = signal.signalType || signal.signal_type || 'unknown';
-            scoredByType[signalType] = (scoredByType[signalType] || 0) + 1;
-
-            if (!signal.actionable) {
-                const reason = signal.rejection_reason || 'unknown';
-                nonActionableReasons[reason] = (nonActionableReasons[reason] || 0) + 1;
-            }
-        }
-
-        for (const signal of actionableSignals) {
-            const signalType = signal.signalType || signal.signal_type || 'unknown';
-            actionableByType[signalType] = (actionableByType[signalType] || 0) + 1;
-        }
-
-        res.json({
-            snapshot_at: new Date().toISOString(),
-            total_scored: scoredSignals.length,
-            total_actionable: actionableSignals.length,
-            scored_by_type: scoredByType,
-            actionable_by_type: actionableByType,
-            non_actionable_reasons: nonActionableReasons,
-            funnel: latestSignalFunnel
-        });
+        res.json(summarizeSignalTypeDiagnostics());
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -2125,6 +2427,25 @@ app.get('/api/parameters', (req, res) => {
     try {
         const params = db.getAllParameters();
         res.json({ parameters: params });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/parameters/audit', (req, res) => {
+    try {
+        const applyClamp = toBoolean(req.query.apply_clamp);
+        const audit = buildParameterAuditReport({ applyClamp });
+        res.json(audit);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/parameters/audit/apply', (req, res) => {
+    try {
+        const audit = buildParameterAuditReport({ applyClamp: true });
+        res.json({ success: true, ...audit });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -2838,6 +3159,32 @@ app.post('/api/bot/close-position/:tradeId', async (req, res) => {
             if (o?.id != null) ids.push(String(o.id));
             return [...new Set(ids.filter(Boolean))];
         };
+        const cancelSameOutcomeExitOrders = async (marketId, outcomeLower) => {
+            let cancelled = 0;
+            try {
+                const openOrders = await geminiClient.getOpenOrders();
+                const exitOrders = (openOrders || []).filter(order =>
+                    order.symbol === marketId &&
+                    String(order.side || '').toLowerCase() === 'sell' &&
+                    String(order.outcome || '').toLowerCase() === outcomeLower
+                );
+
+                for (const exitOrder of exitOrders) {
+                    for (const cancelId of candidateOrderIds(exitOrder)) {
+                        try {
+                            await geminiClient.cancelOrder(cancelId);
+                            cancelled += 1;
+                            break;
+                        } catch (cancelErr) {
+                            logger.debug(`Manual close pre-cancel failed (${cancelId}): ${cancelErr.message}`);
+                        }
+                    }
+                }
+            } catch (orderErr) {
+                logger.debug(`Manual close pre-cancel lookup failed: ${orderErr.message}`);
+            }
+            return cancelled;
+        };
         const tradeId = parseInt(req.params.tradeId);
         let openTrades = db.getOpenTrades();
         let trade = openTrades.find(t => t.id === tradeId);
@@ -3059,10 +3406,17 @@ app.post('/api/bot/close-position/:tradeId', async (req, res) => {
                     });
                 }
 
-                // For live exits, use outcome-specific executable price from exchange position payload.
-                const priceFromBook = trade.direction === 'YES'
+                // For live exits, use executable sell-side quote first.
+                // Some payloads also include buy.*; use that only as fallback.
+                const sellSidePrice = trade.direction === 'YES'
                     ? Number(exchangePos?.prices?.sell?.yes)
                     : Number(exchangePos?.prices?.sell?.no);
+                const buySideFallback = trade.direction === 'YES'
+                    ? Number(exchangePos?.prices?.buy?.yes)
+                    : Number(exchangePos?.prices?.buy?.no);
+                const priceFromBook = Number.isFinite(sellSidePrice) && sellSidePrice > 0
+                    ? sellSidePrice
+                    : buySideFallback;
                 if (!Number.isFinite(priceFromBook) || priceFromBook <= 0) {
                     return rejectClose(400, 'Could not determine executable exit price for live trade', 'manual_close_exit_price_unavailable');
                 }
@@ -5095,11 +5449,19 @@ async function validateStartup() {
 
     // 2. Database + wallet check
     try {
-        const wallet = db.getWallet();
+        const wallet = await getDisplayWallet();
         if (!wallet) {
             warnings.push('No wallet found — will be created on first trade');
+        } else if (Number.isFinite(Number(wallet.balance)) && Number.isFinite(Number(wallet.initial_balance))) {
+            logger.info(
+                `Wallet: $${Number(wallet.balance).toFixed(2)} ` +
+                `(initial: $${Number(wallet.initial_balance).toFixed(2)})` +
+                (wallet.wallet_source ? ` [source=${wallet.wallet_source}]` : '')
+            );
         } else {
-            logger.info(`Wallet: $${wallet.balance.toFixed(2)} (initial: $${wallet.initial_balance.toFixed(2)})`);
+            warnings.push(
+                `Wallet balance unavailable${wallet.wallet_source ? ` (source=${wallet.wallet_source})` : ''}`
+            );
         }
     } catch (e) {
         issues.push('Database error: ' + e.message);

@@ -9,12 +9,18 @@
  */
 
 const path = require('path');
+const crypto = require('crypto');
 const PredictionDatabase = require('../lib/prediction_db');
 
 const DRY_RUN = process.argv.includes('--dry-run');
+const EMIT_JSON = process.argv.includes('--emit-json');
 const dbPath = path.join(__dirname, '..', 'data', 'prediction_markets.db');
+const PROFILE_NAME = 'short_horizon_v1';
+const PROFILE_VERSION = 1;
+const PROFILE_JSON_PREFIX = 'SESSION_PROFILE_JSON:';
 
 const OVERRIDES = {
+    entry_threshold: 45,
     max_position_size: 10.0,
     live_max_position_size: 1.0,
     stop_loss_width: 0.06,
@@ -24,6 +30,34 @@ const OVERRIDES = {
     pre_expiry_exit_seconds: 180
 };
 
+function stableOverrides(overrides) {
+    return Object.keys(overrides)
+        .sort()
+        .reduce((acc, key) => {
+            acc[key] = overrides[key];
+            return acc;
+        }, {});
+}
+
+function buildProfileManifest() {
+    const sorted = stableOverrides(OVERRIDES);
+    const payload = {
+        profile: PROFILE_NAME,
+        version: PROFILE_VERSION,
+        overrides: sorted
+    };
+
+    const checksum = crypto
+        .createHash('sha256')
+        .update(JSON.stringify(payload))
+        .digest('hex');
+
+    return {
+        ...payload,
+        checksum
+    };
+}
+
 function toNumberOrNull(value) {
     const n = Number(value);
     return Number.isFinite(n) ? n : null;
@@ -31,9 +65,11 @@ function toNumberOrNull(value) {
 
 function main() {
     const db = new PredictionDatabase(dbPath);
+    const profileManifest = buildProfileManifest();
 
-    console.log('Applying short_horizon_v1 parameter overrides');
+    console.log(`Applying ${profileManifest.profile} parameter overrides`);
     console.log(`Mode: ${DRY_RUN ? 'DRY-RUN' : 'WRITE'}`);
+    console.log(`Profile checksum: ${profileManifest.checksum}`);
 
     const rows = Object.entries(OVERRIDES).map(([key, target]) => {
         const current = toNumberOrNull(db.getParameter(key));
@@ -47,7 +83,15 @@ function main() {
 
     if (DRY_RUN) {
         console.log('Dry-run complete. No changes written.');
-        return;
+        if (EMIT_JSON) {
+            console.log(`${PROFILE_JSON_PREFIX}${JSON.stringify({
+                ...profileManifest,
+                dry_run: true,
+                changed_parameters: rows.filter(r => r.change).map(r => r.key),
+                changed_count: rows.filter(r => r.change).length
+            })}`);
+        }
+        return profileManifest;
     }
 
     for (const row of rows) {
@@ -57,11 +101,30 @@ function main() {
     }
 
     console.log('Profile overrides applied.');
+    if (EMIT_JSON) {
+        console.log(`${PROFILE_JSON_PREFIX}${JSON.stringify({
+            ...profileManifest,
+            dry_run: false,
+            changed_parameters: rows.filter(r => r.change).map(r => r.key),
+            changed_count: rows.filter(r => r.change).length
+        })}`);
+    }
+    return profileManifest;
 }
 
-try {
-    main();
-} catch (error) {
-    console.error('Failed to activate profile:', error.message);
-    process.exitCode = 1;
+if (require.main === module) {
+    try {
+        main();
+    } catch (error) {
+        console.error('Failed to activate profile:', error.message);
+        process.exitCode = 1;
+    }
 }
+
+module.exports = {
+    PROFILE_NAME,
+    PROFILE_VERSION,
+    PROFILE_JSON_PREFIX,
+    OVERRIDES,
+    buildProfileManifest
+};

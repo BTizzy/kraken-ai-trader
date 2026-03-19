@@ -820,6 +820,10 @@ test('capped harness source classifies zero-trade execute windows as non-session
         'Expected capped harness to summarize opportunity sufficiency for short sessions');
     assert(harnessSource.includes('outcome.opportunity_sufficiency = summarizeOpportunitySufficiency(outcome, baseline);'),
         'Expected capped harness output to expose an opportunity_sufficiency summary block');
+    assert(harnessSource.includes('async function settleFinalFlatness(contextLabel) {'),
+        'Expected capped harness to include post-execute flatness settle helper');
+    assert(harnessSource.includes("log('Post-execute flatness settle result'"),
+        'Expected capped harness to log bounded post-execute flatness settle outcomes');
     assert(harnessSource.includes("text.includes('run entered zero trades')"),
         'Expected zero-trade execute failure to be treated as non-session-quality');
     assert(harnessSource.includes("text.includes('run exited zero trades')"),
@@ -828,6 +832,74 @@ test('capped harness source classifies zero-trade execute windows as non-session
         'Expected sparse-universe zero_eligible_contracts failures to be treated as non-session-quality');
     assert(harnessSource.includes("text.includes('zero_actionable_signals')"),
         'Expected sparse-signal zero_actionable_signals failures to be treated as non-session-quality');
+    assert(harnessSource.includes('function toTradeMode(runtimeMode) {'),
+        'Expected capped harness to derive trade mode dynamically from runtime status');
+    assert(harnessSource.includes('/api/trades/recent?limit=500&mode=${tradeMode}'),
+        'Expected capped harness to query recent trades with runtime-derived mode');
+    assert(harnessSource.includes('/api/trades/open?mode=${tradeMode}'),
+        'Expected capped harness to query open trades with runtime-derived mode');
+    assert(harnessSource.includes("if (!Number.isFinite(liveBalance)) {"),
+        'Expected live execute-start guard to block when live balance is unavailable/non-finite');
+});
+
+test('wallet source tagging and live balance unavailability handling are explicit in server source', () => {
+    const serverSource = fs.readFileSync(
+        path.join(__dirname, '../server/prediction-proxy.js'), 'utf8');
+
+    assert(serverSource.includes('wallet_source'),
+        'Expected getDisplayWallet responses to include wallet_source for source-of-truth auditing');
+    assert(serverSource.includes("wallet_source: 'balance_unavailable'"),
+        'Expected explicit live balance unavailable marker instead of silent DB fallback');
+    assert(serverSource.includes('LIVE_BALANCE_UNAVAILABLE_MAX_STREAK'),
+        'Expected drawdown guard to enforce bounded tolerance for missing live balance telemetry');
+    assert(serverSource.includes('Drawdown check skipped: live balance unavailable'),
+        'Expected explicit logging when drawdown checks cannot evaluate live balance');
+    assert(serverSource.includes("app.get('/api/session/diagnostics-bundle'"),
+        'Expected one-shot diagnostics bundle endpoint for baseline/session observability');
+    assert(serverSource.includes("app.get('/api/parameters/audit'"),
+        'Expected parameter guardrail audit endpoint');
+    assert(serverSource.includes("app.post('/api/parameters/audit/apply'"),
+        'Expected parameter guardrail clamp/apply endpoint');
+    assert(serverSource.includes('tradingEngine._liveBalance = Number(details.balance);'),
+        'Expected preflight to synchronize runtime live balance cache with latest observed balance');
+    assert(serverSource.includes('details.live_usd_reserve_effective = effectiveReserveUsd;'),
+        'Expected preflight to expose effective adaptive reserve for small-balance accounts');
+    assert(serverSource.includes('details.live_min_tradable_balance_effective = effectiveMinTradableUsd;'),
+        'Expected preflight to expose effective adaptive min-tradable threshold for small-balance accounts');
+});
+
+test('capped harness and batch artifacts stamp profile checksums', () => {
+    const harnessSource = fs.readFileSync(
+        path.join(__dirname, '../scripts/run_capped_live_session.js'), 'utf8');
+    const batchSource = fs.readFileSync(
+        path.join(__dirname, '../scripts/run_capped_session_batch.js'), 'utf8');
+    const profileSource = fs.readFileSync(
+        path.join(__dirname, '../scripts/activate_session_profile.js'), 'utf8');
+
+    assert(profileSource.includes('PROFILE_JSON_PREFIX = \'SESSION_PROFILE_JSON:\''),
+        'Expected profile activation script to emit a stable machine-readable prefix');
+    assert(profileSource.includes('createHash(\'sha256\')'),
+        'Expected profile activation script to compute deterministic profile checksum');
+    assert(harnessSource.includes('profile_manifest: profileManifest'),
+        'Expected capped harness result payload to include profile_manifest metadata');
+    assert(batchSource.includes('profile_manifest: profileManifest'),
+        'Expected capped batch artifact config to include profile manifest metadata');
+    assert(harnessSource.includes('function getExecuteBalanceThreshold(preflightDetails = {}) {'),
+        'Expected capped harness to derive execute-start threshold from preflight policy details');
+    assert(harnessSource.includes('thresholds.effectiveThreshold'),
+        'Expected capped harness execute-start guard to use effective dynamic threshold');
+});
+
+test('trading engine source exposes adaptive low-balance reserve policy', () => {
+    const engineSource = fs.readFileSync(
+        path.join(__dirname, '../lib/paper_trading_engine.js'), 'utf8');
+
+    assert(engineSource.includes('getEffectiveLiveReserve(balance) {'),
+        'Expected trading engine to compute adaptive reserve from current balance');
+    assert(engineSource.includes('getEffectiveLiveMinTradableBalance(balance) {'),
+        'Expected trading engine to compute adaptive min tradable threshold from current balance');
+    assert(engineSource.includes('live_usd_reserve_fraction_cap'),
+        'Expected session policy/status to include adaptive reserve fraction cap');
 });
 
 test('manual close source pre-cancels exits and retries insufficient funds', () => {
@@ -840,6 +912,10 @@ test('manual close source pre-cancels exits and retries insufficient funds', () 
         'Expected manual close route to pre-cancel same-outcome exit orders before sell');
     assert(serverSource.includes('const isInsufficientFunds = /InsufficientFunds/i.test(msg);'),
         'Expected manual close route to detect InsufficientFunds and retry safely');
+    assert(serverSource.includes('Number(exchangePos?.prices?.sell?.yes)'),
+        'Expected manual close live YES exits to price from executable sell.yes quote');
+    assert(serverSource.includes('Number(exchangePos?.prices?.sell?.no)'),
+        'Expected manual close live NO exits to price from executable sell.no quote');
 });
 
 // ===== Wait for async tests then Summary =====

@@ -5,6 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { PROFILE_JSON_PREFIX } = require('./activate_session_profile');
 
 const API_BASE = process.env.API_BASE || `http://localhost:${process.env.PREDICTION_PORT || 3003}`;
 const EXECUTE_START = process.argv.includes('--execute-start');
@@ -20,7 +21,7 @@ const ORPHAN_RECOVERY_POLL_MS = Math.max(250, Number(process.env.ORPHAN_RECOVERY
 const ORPHAN_RECOVERY_RETRY_AFTER_MS = Math.max(0, Number(process.env.ORPHAN_RECOVERY_RETRY_AFTER_MS || 2000));
 const BASELINE_RECOVERY_MAX_ATTEMPTS = Math.max(1, Number(process.env.BASELINE_RECOVERY_MAX_ATTEMPTS || 3));
 const BASELINE_RECOVERY_WAIT_MS = Math.max(250, Number(process.env.BASELINE_RECOVERY_WAIT_MS || 1200));
-const DEFAULT_MIN_EXECUTE_LIVE_BALANCE_USD = 10;
+const DEFAULT_MIN_EXECUTE_LIVE_BALANCE_USD = 0;
 const MIN_EXECUTE_LIVE_BALANCE_USD = Math.max(0, Number(process.env.MIN_EXECUTE_LIVE_BALANCE_USD || DEFAULT_MIN_EXECUTE_LIVE_BALANCE_USD));
 const API_TIMEOUT_MS = Math.max(1000, Number(process.env.API_TIMEOUT_MS || 15000));
 const API_MAX_RETRIES = Math.max(0, Number(process.env.API_MAX_RETRIES || 2));
@@ -30,6 +31,7 @@ const STABILITY_LOOKBACK_FILES = Math.max(1, Number(process.env.STABILITY_LOOKBA
 const REQUIRED_CONSECUTIVE_CLEAN_RUNS = Math.max(1, Number(process.env.REQUIRED_CONSECUTIVE_CLEAN_RUNS || 3));
 const ALLOW_UNSTABLE_EXECUTE_START = String(process.env.ALLOW_UNSTABLE_EXECUTE_START || '').toLowerCase() === 'true';
 const STABILITY_STATE_FILE = process.env.STABILITY_STATE_FILE || path.join(STABILITY_RESULTS_DIR, 'capped_stability_state.json');
+let lastAppliedProfileManifest = null;
 
 const ALLOWED_STOP_REASONS = new Set([
     null,
@@ -137,6 +139,26 @@ function formatPreflightError(response, contextLabel = 'preflight invalid') {
 
     const detailSuffix = parts.length > 0 ? ` (${parts.join(', ')})` : '';
     return `${contextLabel}: ${reason}${detailSuffix}`;
+}
+
+function getExecuteBalanceThreshold(preflightDetails = {}) {
+    const staticThreshold = MIN_EXECUTE_LIVE_BALANCE_USD;
+    const reserve = Number(
+        preflightDetails.live_usd_reserve_effective ?? preflightDetails.live_usd_reserve
+    );
+    const minTradable = Number(
+        preflightDetails.live_min_tradable_balance_effective ?? preflightDetails.live_min_tradable_balance
+    );
+
+    const policyThreshold = (Number.isFinite(reserve) && Number.isFinite(minTradable))
+        ? Math.max(0, reserve + minTradable)
+        : 0;
+
+    return {
+        staticThreshold,
+        policyThreshold,
+        effectiveThreshold: Math.max(staticThreshold, policyThreshold)
+    };
 }
 
 function listRecentBatchFiles() {
@@ -417,33 +439,57 @@ function summarizeOpportunitySufficiency(outcome, baseline) {
     };
 }
 
+function parseProfileManifest(stdout = '') {
+    const lines = String(stdout || '').split('\n');
+    for (let i = lines.length - 1; i >= 0; i -= 1) {
+        const line = lines[i].trim();
+        if (!line.startsWith(PROFILE_JSON_PREFIX)) continue;
+        const raw = line.slice(PROFILE_JSON_PREFIX.length);
+        try {
+            return JSON.parse(raw);
+        } catch (_) {
+            return null;
+        }
+    }
+    return null;
+}
+
+function toTradeMode(runtimeMode) {
+    const mode = String(runtimeMode || '').toLowerCase();
+    if (mode === 'live' || mode === 'sandbox') return 'live';
+    if (mode === 'paper') return 'paper';
+    return null;
+}
+
 async function ensureBaseline() {
     const baselineSinceMs = Date.now() - 15 * 60 * 1000;
-    let [health, groundTruth, reconcile, status, signalTypes, rejectionSummary, funnel, filters, allowlistShadow, recentTrades, openTrades] = await Promise.all([
+    let [health, groundTruth, reconcile, status, diagnosticsBundle] = await Promise.all([
         api('/api/health'),
         api('/api/bot/ground-truth'),
         api('/api/reconcile'),
         api('/api/bot/status'),
-        api('/api/signals/types'),
-        api(`/api/rejections/summary?since_ms=${baselineSinceMs}&limit=25`),
-        api('/api/signals/funnel'),
-        api('/api/signals/filters'),
-        api('/api/signals/allowlist-shadow?limit=25'),
-        api('/api/trades/recent?limit=500&mode=live'),
-        api('/api/trades/open?mode=live')
+        api(`/api/session/diagnostics-bundle?force_gate=true&rejection_since_ms=${baselineSinceMs}&rejection_limit=25`)
     ]);
 
     assert(health.ok && health.data?.status === 'ok', 'health check failed');
     assert(status.ok, 'bot status unavailable');
+    assert(diagnosticsBundle.ok, 'diagnostics bundle unavailable before capped session start');
 
     let preflight = await api('/api/bot/preflight', { method: 'POST', body: {} });
     assert(groundTruth.ok, 'ground-truth unavailable');
     assert(reconcile.ok, 'reconcile endpoint unavailable');
-    assert(signalTypes.ok, 'signals/types endpoint unavailable');
-    assert(rejectionSummary.ok, 'rejections/summary endpoint unavailable');
-    assert(funnel.ok, 'signals/funnel endpoint unavailable');
-    assert(filters.ok, 'signals/filters endpoint unavailable');
-    assert(allowlistShadow.ok, 'signals/allowlist-shadow endpoint unavailable');
+
+    let tradeMode = toTradeMode(status.data?.mode);
+    const tradesRecentPath = tradeMode
+        ? `/api/trades/recent?limit=500&mode=${tradeMode}`
+        : '/api/trades/recent?limit=500';
+    const tradesOpenPath = tradeMode
+        ? `/api/trades/open?mode=${tradeMode}`
+        : '/api/trades/open';
+    let [recentTrades, openTrades] = await Promise.all([
+        api(tradesRecentPath),
+        api(tradesOpenPath)
+    ]);
     assert(recentTrades.ok, 'trades/recent endpoint unavailable');
     assert(openTrades.ok, 'trades/open endpoint unavailable');
 
@@ -505,13 +551,18 @@ async function ensureBaseline() {
 
         await sleep(BASELINE_RECOVERY_WAIT_MS);
 
-        [groundTruth, reconcile, status, openTrades, preflight] = await Promise.all([
+        [groundTruth, reconcile, status, preflight] = await Promise.all([
             api('/api/bot/ground-truth'),
             api('/api/reconcile'),
             api('/api/bot/status'),
-            api('/api/trades/open?mode=live'),
             api('/api/bot/preflight', { method: 'POST', body: {} })
         ]);
+
+        tradeMode = toTradeMode(status.data?.mode);
+        const refreshedOpenPath = tradeMode
+            ? `/api/trades/open?mode=${tradeMode}`
+            : '/api/trades/open';
+        openTrades = await api(refreshedOpenPath);
 
         assert(groundTruth.ok, 'ground-truth unavailable after baseline auto-recovery');
         assert(reconcile.ok, 'reconcile unavailable after baseline auto-recovery');
@@ -548,6 +599,7 @@ async function ensureBaseline() {
     return {
         startTimestampSec: Math.floor(Date.now() / 1000),
         token: finalPreflight.data.token,
+        trade_mode: tradeMode,
         balance: finalPreflight.data?.details?.balance ?? preflight.data?.details?.balance,
         livePreflight: finalPreflight.data,
         readiness: readiness.data,
@@ -559,19 +611,27 @@ async function ensureBaseline() {
         diagnostics: {
             window_start_ms: baselineSinceMs,
             ...summarizeDiagnosticsWindow({
-                signalTypes: signalTypes.data,
-                rejectionSummary: rejectionSummary.data,
-                funnel: funnel.data,
-                filters: filters.data,
-                allowlistShadow: allowlistShadow.data
+                signalTypes: diagnosticsBundle.data?.diagnostics?.signal_types,
+                rejectionSummary: diagnosticsBundle.data?.diagnostics?.rejection_summary,
+                funnel: diagnosticsBundle.data?.diagnostics?.funnel,
+                filters: diagnosticsBundle.data?.diagnostics?.filters,
+                allowlistShadow: diagnosticsBundle.data?.diagnostics?.allowlist_shadow
             })
-        }
+        },
+        parameter_audit: diagnosticsBundle.data?.parameter_audit || null
     };
 }
 
 function applyShortHorizonProfile() {
     const scriptPath = path.join(__dirname, 'activate_session_profile.js');
-    execFileSync(process.execPath, [scriptPath], { stdio: 'inherit' });
+    const stdout = execFileSync(process.execPath, [scriptPath, '--emit-json'], {
+        encoding: 'utf8',
+        stdio: ['inherit', 'pipe', 'inherit']
+    });
+    process.stdout.write(stdout);
+    const manifest = parseProfileManifest(stdout);
+    assert(manifest && manifest.checksum, 'profile activation did not return manifest/checksum');
+    return manifest;
 }
 
 async function startBot(token) {
@@ -741,6 +801,78 @@ async function tryOrphanOnlyRecovery(contextLabel) {
         recovered: false,
         reason: 'grace_timeout',
         attempted_retry_fix: attemptedRetryFix,
+        elapsed_ms: Date.now() - startedAt,
+        final_snapshot: lastSnapshot
+    };
+}
+
+async function settleFinalFlatness(contextLabel) {
+    if (ORPHAN_RECOVERY_GRACE_MS <= 0) {
+        return {
+            attempted: false,
+            context: contextLabel,
+            reason: 'disabled',
+            grace_ms: ORPHAN_RECOVERY_GRACE_MS
+        };
+    }
+
+    const startedAt = Date.now();
+    let lastSnapshot = null;
+
+    while (Date.now() - startedAt <= ORPHAN_RECOVERY_GRACE_MS) {
+        const [groundTruthRes, reconcileRes, openTradesRes] = await Promise.all([
+            api('/api/bot/ground-truth'),
+            api('/api/reconcile'),
+            api('/api/trades/open?mode=live')
+        ]);
+
+        if (!(groundTruthRes.ok && reconcileRes.ok && openTradesRes.ok)) {
+            return {
+                attempted: true,
+                context: contextLabel,
+                settled: false,
+                reason: 'snapshot_unavailable',
+                elapsed_ms: Date.now() - startedAt,
+                status_codes: {
+                    ground_truth: groundTruthRes.status,
+                    reconcile: reconcileRes.status,
+                    open_trades: openTradesRes.status
+                }
+            };
+        }
+
+        const counts = summarizeReconcileCounts(reconcileRes.data, openTradesRes.data?.count || 0);
+        const groundTruthFlat = groundTruthRes.data?.is_flat === true;
+        const reconcileFlat = counts.orphaned === 0
+            && counts.phantom === 0
+            && counts.qtyMismatch === 0
+            && counts.openLive === 0;
+
+        lastSnapshot = {
+            ts: new Date().toISOString(),
+            ground_truth_flat: groundTruthFlat,
+            reconcile_flat: reconcileFlat,
+            counts
+        };
+
+        if (groundTruthFlat && reconcileFlat) {
+            return {
+                attempted: true,
+                context: contextLabel,
+                settled: true,
+                elapsed_ms: Date.now() - startedAt,
+                final_snapshot: lastSnapshot
+            };
+        }
+
+        await sleep(ORPHAN_RECOVERY_POLL_MS);
+    }
+
+    return {
+        attempted: true,
+        context: contextLabel,
+        settled: false,
+        reason: 'grace_timeout',
         elapsed_ms: Date.now() - startedAt,
         final_snapshot: lastSnapshot
     };
@@ -989,9 +1121,18 @@ async function main() {
     log(`REQUIRED_CONSECUTIVE_CLEAN_RUNS=${REQUIRED_CONSECUTIVE_CLEAN_RUNS}`);
     log(`ALLOW_UNSTABLE_EXECUTE_START=${ALLOW_UNSTABLE_EXECUTE_START}`);
 
+    let profileManifest = null;
     if (APPLY_PROFILE) {
         log('Applying short_horizon_v1 profile overrides');
-        applyShortHorizonProfile();
+        profileManifest = applyShortHorizonProfile();
+        lastAppliedProfileManifest = profileManifest;
+        log('Applied profile manifest', {
+            profile: profileManifest.profile,
+            version: profileManifest.version,
+            checksum: profileManifest.checksum,
+            changed_count: profileManifest.changed_count,
+            dry_run: profileManifest.dry_run
+        });
     }
 
     const baseline = await ensureBaseline();
@@ -1041,11 +1182,18 @@ async function main() {
     }
 
     const liveBalance = Number(baseline.balance);
-    if (isLiveMode && Number.isFinite(liveBalance) && liveBalance < MIN_EXECUTE_LIVE_BALANCE_USD) {
-        throw new Error(
-            `live balance $${liveBalance.toFixed(2)} below execute threshold ` +
-            `$${MIN_EXECUTE_LIVE_BALANCE_USD.toFixed(2)}; refusing --execute-start`
-        );
+    if (isLiveMode) {
+        if (!Number.isFinite(liveBalance)) {
+            throw new Error('live balance unavailable/non-finite; refusing --execute-start');
+        }
+        const thresholds = getExecuteBalanceThreshold(baseline.livePreflight?.details || {});
+        if (liveBalance < thresholds.effectiveThreshold) {
+            throw new Error(
+                `live balance $${liveBalance.toFixed(2)} below execute threshold ` +
+                `$${thresholds.effectiveThreshold.toFixed(2)} ` +
+                `(static=$${thresholds.staticThreshold.toFixed(2)}, policy=$${thresholds.policyThreshold.toFixed(2)}); refusing --execute-start`
+            );
+        }
     }
 
     await startBot(baseline.token);
@@ -1054,9 +1202,17 @@ async function main() {
     const sessionDeadlineMs = Date.now() + SESSION_SECONDS * 1000;
     const outcome = await monitorSession(sessionDeadlineMs);
 
+    const postTradeMode = baseline.trade_mode || toTradeMode(baseline.status?.mode);
+    const postRecentPath = postTradeMode
+        ? `/api/trades/recent?limit=500&mode=${postTradeMode}`
+        : '/api/trades/recent?limit=500';
+    const postOpenPath = postTradeMode
+        ? `/api/trades/open?mode=${postTradeMode}`
+        : '/api/trades/open';
+
     const [postRecentRes, postOpenRes, postReconcileRes] = await Promise.all([
-        api('/api/trades/recent?limit=500&mode=live'),
-        api('/api/trades/open?mode=live'),
+        api(postRecentPath),
+        api(postOpenPath),
         api('/api/reconcile')
     ]);
     assert(postRecentRes.ok, 'post-session trades/recent endpoint unavailable');
@@ -1089,32 +1245,27 @@ async function main() {
     };
 
     const diagnosticsSinceMs = Number(baseline.startTimestampSec || Math.floor(Date.now() / 1000)) * 1000;
-    const [postSignalTypesRes, postRejectionSummaryRes, postFunnelRes, postFiltersRes, postAllowlistShadowRes] = await Promise.all([
-        api('/api/signals/types'),
-        api(`/api/rejections/summary?since_ms=${diagnosticsSinceMs}&limit=100`),
-        api('/api/signals/funnel'),
-        api('/api/signals/filters'),
-        api('/api/signals/allowlist-shadow?limit=50')
-    ]);
-
-    assert(postSignalTypesRes.ok, 'post-session signals/types endpoint unavailable');
-    assert(postRejectionSummaryRes.ok, 'post-session rejections/summary endpoint unavailable');
-    assert(postFunnelRes.ok, 'post-session signals/funnel endpoint unavailable');
-    assert(postFiltersRes.ok, 'post-session signals/filters endpoint unavailable');
-    assert(postAllowlistShadowRes.ok, 'post-session signals/allowlist-shadow endpoint unavailable');
+    const postBundleRes = await api(
+        `/api/session/diagnostics-bundle?force_gate=true&rejection_since_ms=${diagnosticsSinceMs}&rejection_limit=100`
+    );
+    assert(postBundleRes.ok, 'post-session diagnostics bundle endpoint unavailable');
 
     const postDiagnostics = summarizeDiagnosticsWindow({
-        signalTypes: postSignalTypesRes.data,
-        rejectionSummary: postRejectionSummaryRes.data,
-        funnel: postFunnelRes.data,
-        filters: postFiltersRes.data,
-        allowlistShadow: postAllowlistShadowRes.data
+        signalTypes: postBundleRes.data?.diagnostics?.signal_types,
+        rejectionSummary: postBundleRes.data?.diagnostics?.rejection_summary,
+        funnel: postBundleRes.data?.diagnostics?.funnel,
+        filters: postBundleRes.data?.diagnostics?.filters,
+        allowlistShadow: postBundleRes.data?.diagnostics?.allowlist_shadow
     });
 
     outcome.diagnostics = {
         window_start_ms: diagnosticsSinceMs,
         baseline: baseline.diagnostics,
         post: postDiagnostics,
+        parameter_audit: {
+            baseline: baseline.parameter_audit || null,
+            post: postBundleRes.data?.parameter_audit || null
+        },
         delta: {
             scored: (postDiagnostics.signal_types.total_scored || 0) - (baseline.diagnostics?.signal_types?.total_scored || 0),
             actionable: (postDiagnostics.signal_types.total_actionable || 0) - (baseline.diagnostics?.signal_types?.total_actionable || 0),
@@ -1148,6 +1299,25 @@ async function main() {
 
             throw new Error('--execute-start run entered zero trades');
         }
+
+        // Exchange and DB snapshots can lag by a few seconds after flatten; give
+        // ground-truth a bounded settle window before declaring non-flat failure.
+        if (outcome.ground_truth_flat !== true || outcome.conversion.reconcile_flat !== true) {
+            const flatnessSettle = await settleFinalFlatness('post_execute_assertions');
+            outcome.final_flatness_settle = flatnessSettle;
+            if (flatnessSettle?.settled && flatnessSettle.final_snapshot) {
+                outcome.ground_truth_flat = flatnessSettle.final_snapshot.ground_truth_flat === true;
+                outcome.conversion.reconcile_flat = flatnessSettle.final_snapshot.reconcile_flat === true;
+                outcome.conversion.open_live_post_count = Number(flatnessSettle.final_snapshot.counts?.openLive || 0);
+                outcome.conversion.reconcile = {
+                    orphaned: Number(flatnessSettle.final_snapshot.counts?.orphaned || 0),
+                    phantom: Number(flatnessSettle.final_snapshot.counts?.phantom || 0),
+                    qtyMismatch: Number(flatnessSettle.final_snapshot.counts?.qtyMismatch || 0)
+                };
+            }
+            log('Post-execute flatness settle result', flatnessSettle || null);
+        }
+
         assert(outcome.conversion.completed_exit_count > 0, '--execute-start run exited zero trades');
         assert(outcome.ground_truth_flat === true, '--execute-start run ended non-flat according to ground-truth');
         assert(outcome.conversion.reconcile_flat === true, '--execute-start run ended with reconcile drift or open live positions');
@@ -1171,6 +1341,7 @@ async function main() {
         poll_seconds: POLL_SECONDS,
         max_live_open: MAX_LIVE_OPEN,
         applied_profile: APPLY_PROFILE,
+        profile_manifest: profileManifest,
         outcome
     };
 }
@@ -1202,6 +1373,7 @@ main().then((result) => {
         poll_seconds: POLL_SECONDS,
         max_live_open: MAX_LIVE_OPEN,
         applied_profile: APPLY_PROFILE,
+        profile_manifest: lastAppliedProfileManifest,
         error: error.message,
         failed_at: new Date().toISOString()
     };

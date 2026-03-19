@@ -830,6 +830,18 @@ test('capped harness source classifies zero-trade execute windows as non-session
         'Expected sparse-signal zero_actionable_signals failures to be treated as non-session-quality');
 });
 
+test('manual close source pre-cancels exits and retries insufficient funds', () => {
+    const serverSource = fs.readFileSync(
+        path.join(__dirname, '../server/prediction-proxy.js'), 'utf8');
+
+    assert(serverSource.includes('const cancelSameOutcomeExitOrders = async (marketId, outcomeLower) => {'),
+        'Expected manual close route to define same-outcome exit pre-cancel helper');
+    assert(serverSource.includes('const preCancelled = await cancelSameOutcomeExitOrders(trade.gemini_market_id, desiredOutcome);'),
+        'Expected manual close route to pre-cancel same-outcome exit orders before sell');
+    assert(serverSource.includes('const isInsufficientFunds = /InsufficientFunds/i.test(msg);'),
+        'Expected manual close route to detect InsufficientFunds and retry safely');
+});
+
 // ===== Wait for async tests then Summary =====
 Promise.all(asyncTests).then(() => {
     // Cleanup

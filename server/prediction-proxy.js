@@ -2233,6 +2233,32 @@ app.post('/api/trade/live', async (req, res) => {
             if (o?.id != null) ids.push(String(o.id));
             return [...new Set(ids.filter(Boolean))];
         };
+        const cancelSameOutcomeExitOrders = async (marketId, outcomeLower) => {
+            let cancelled = 0;
+            try {
+                const openOrders = await geminiClient.getOpenOrders();
+                const exitOrders = (openOrders || []).filter(order =>
+                    order.symbol === marketId &&
+                    String(order.side || '').toLowerCase() === 'sell' &&
+                    String(order.outcome || '').toLowerCase() === outcomeLower
+                );
+
+                for (const exitOrder of exitOrders) {
+                    for (const cancelId of candidateOrderIds(exitOrder)) {
+                        try {
+                            await geminiClient.cancelOrder(cancelId);
+                            cancelled += 1;
+                            break;
+                        } catch (cancelErr) {
+                            logger.debug(`Manual close pre-cancel failed (${cancelId}): ${cancelErr.message}`);
+                        }
+                    }
+                }
+            } catch (orderErr) {
+                logger.debug(`Manual close pre-cancel lookup failed: ${orderErr.message}`);
+            }
+            return cancelled;
+        };
 
         // Clean up stale same-symbol manual entry orders left by earlier retries.
         let postPreCleanOrders = null;
@@ -2952,6 +2978,20 @@ app.post('/api/bot/close-position/:tradeId', async (req, res) => {
                 let heldQty = Number(exchangePos.quantityOnHold || 0);
                 let contracts = Math.max(0, Math.floor(totalQty - heldQty));
 
+                // Always clear same-symbol same-outcome resting exits first, then refresh.
+                // This avoids false InsufficientFunds when quantity is temporarily reserved.
+                const preCancelled = await cancelSameOutcomeExitOrders(trade.gemini_market_id, desiredOutcome);
+                if (preCancelled > 0) {
+                    await new Promise(resolve => setTimeout(resolve, closeRetryBackoffMs));
+                    const refreshedPositions = await geminiClient.getPositions();
+                    exchangePos = (refreshedPositions || []).find(p =>
+                        p.symbol === trade.gemini_market_id && String(p.outcome || '').toLowerCase() === desiredOutcome
+                    ) || (refreshedPositions || []).find(p => p.symbol === trade.gemini_market_id);
+                    totalQty = Number(exchangePos?.totalQuantity || 0);
+                    heldQty = Number(exchangePos?.quantityOnHold || 0);
+                    contracts = Math.max(0, Math.floor(totalQty - heldQty));
+                }
+
                 if (contracts <= 0) {
                     for (let attempt = 1; attempt <= closeRetryMaxAttempts; attempt++) {
                         try {
@@ -3028,13 +3068,45 @@ app.post('/api/bot/close-position/:tradeId', async (req, res) => {
                 }
                 exitPrice = Math.max(0.01, Math.min(0.99, priceFromBook));
 
-                const exitOrder = await geminiClient.placeOrder({
-                    symbol: trade.gemini_market_id,
-                    side: 'sell',
-                    amount: contracts,
-                    price: exitPrice.toFixed(2),
-                    direction: trade.direction
-                });
+                let exitOrder = null;
+                const sellAttempts = 2;
+                for (let attempt = 1; attempt <= sellAttempts; attempt++) {
+                    try {
+                        exitOrder = await geminiClient.placeOrder({
+                            symbol: trade.gemini_market_id,
+                            side: 'sell',
+                            amount: contracts,
+                            price: exitPrice.toFixed(2),
+                            direction: trade.direction
+                        });
+                        break;
+                    } catch (sellErr) {
+                        const msg = String(sellErr?.message || '');
+                        const isInsufficientFunds = /InsufficientFunds/i.test(msg);
+                        if (!isInsufficientFunds || attempt >= sellAttempts) {
+                            throw sellErr;
+                        }
+
+                        await cancelSameOutcomeExitOrders(trade.gemini_market_id, desiredOutcome);
+                        await new Promise(resolve => setTimeout(resolve, closeRetryBackoffMs * attempt));
+
+                        const refreshedPositions = await geminiClient.getPositions();
+                        exchangePos = (refreshedPositions || []).find(p =>
+                            p.symbol === trade.gemini_market_id && String(p.outcome || '').toLowerCase() === desiredOutcome
+                        ) || (refreshedPositions || []).find(p => p.symbol === trade.gemini_market_id);
+
+                        if (!exchangePos) {
+                            break;
+                        }
+
+                        totalQty = Number(exchangePos.totalQuantity || 0);
+                        heldQty = Number(exchangePos.quantityOnHold || 0);
+                        contracts = Math.max(0, Math.floor(totalQty - heldQty));
+                        if (contracts <= 0) {
+                            break;
+                        }
+                    }
+                }
 
                 const filled = Number(exitOrder?.filledQuantity || 0);
                 const fullyFilled = String(exitOrder?.orderStatus || '').toLowerCase() === 'filled' || filled >= contracts;

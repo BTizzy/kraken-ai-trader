@@ -75,9 +75,10 @@ const GAME_CONFIG = {
     // TRADING FEES (POLYMARKET ACTUAL)
     // ============================================
     fees: {
-        // Kraken spot fee structure (2026)
-        takerFee: 0.004,             // 0.4% taker fee (as decimal)
-        makerFee: 0.0,               // 0% maker fee
+        // Gemini ActiveTrader fee structure (2026) — USE LIMIT ORDERS
+        // Old Kraken taker rate (0.4%) was killing all profits
+        takerFee: 0.002,             // 0.2% taker fee (Gemini ActiveTrader base)
+        makerFee: 0.002,             // 0.2% maker fee (Gemini ActiveTrader base) — aim for this
         slippage: {
             low: 0.0005,             // 0.05% for liquid markets
             medium: 0.001,           // 0.1% for average markets

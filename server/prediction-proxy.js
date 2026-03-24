@@ -713,7 +713,7 @@ const rateLimiter = new RateLimiter();
 
 const polyClient = new PolymarketClient({ rateLimiter });
 const kalshiClient = new KalshiClient({ rateLimiter });
-const geminiMode = process.env.GEMINI_MODE || 'paper'; // 'paper' | 'live' | 'sandbox'
+const geminiMode = process.env.GEMINI_MODE || 'paper';
 const tradingProfile = process.env.TRADING_PROFILE || 'standard';
 const dataOnlyMode = process.env.DATA_ONLY === 'true'; // Collect price data without trading
 const autonomous15mSession = process.env.AUTONOMOUS_15M_SESSION === 'true';
@@ -748,7 +748,18 @@ const DEFAULT_LIVE_USD_RESERVE = 5;
 const LIVE_USD_RESERVE = Math.max(0, Number(process.env.LIVE_USD_RESERVE || DEFAULT_LIVE_USD_RESERVE));
 const DEFAULT_LIVE_MIN_TRADABLE_BALANCE = 2;
 const LIVE_MIN_TRADABLE_BALANCE = Math.max(0.01, Number(process.env.LIVE_MIN_TRADABLE_BALANCE || DEFAULT_LIVE_MIN_TRADABLE_BALANCE));
+const DEFAULT_LIVE_START_MIN_BALANCE_USD = 0.03; // Lowered for validation campaign (was LIVE_USD_RESERVE + LIVE_MIN_TRADABLE_BALANCE = 7)
+const LIVE_START_MIN_BALANCE_USD = Math.max(
+    0,
+    Number(process.env.LIVE_START_MIN_BALANCE_USD || DEFAULT_LIVE_START_MIN_BALANCE_USD)
+);
 const LIVE_PREFLIGHT_TTL_MS = Math.max(1000, Number(process.env.LIVE_PREFLIGHT_TTL_MS || 300000));
+const ALLOW_MICRO_LIVE_BOOTSTRAP = String(process.env.ALLOW_MICRO_LIVE_BOOTSTRAP || '').toLowerCase() === 'true';
+const MICRO_LIVE_START_MIN_BALANCE_USD = Math.max(
+    0.01,
+    Number(process.env.MICRO_LIVE_START_MIN_BALANCE_USD || 0.1)
+);
+const MICRO_LIVE_REQUIRE_CANARY = String(process.env.MICRO_LIVE_REQUIRE_CANARY || 'true').toLowerCase() !== 'false';
 const AUTONOMOUS_SOURCE_TTX_FILTER = autonomous15mSession && process.env.AUTONOMOUS_SOURCE_TTX_FILTER !== 'false';
 const ALLOW_LIVE_CAPITAL_RISK = String(process.env.ALLOW_LIVE_CAPITAL_RISK || '').toLowerCase() === 'true';
 const GEMINI_REAL_FETCH_INTERVAL_MS = Math.max(
@@ -1107,10 +1118,22 @@ async function runLivePreflightCheck(options = {}) {
         return { ...livePreflightState };
     }
 
+    const canaryEnabled = !!tradingEngine?.liveCanaryMode;
+    const microBootstrapAllowed = ALLOW_MICRO_LIVE_BOOTSTRAP && (!MICRO_LIVE_REQUIRE_CANARY || canaryEnabled);
+    const requiredStartBalanceUsd = microBootstrapAllowed
+        ? Math.min(LIVE_START_MIN_BALANCE_USD, MICRO_LIVE_START_MIN_BALANCE_USD)
+        : LIVE_START_MIN_BALANCE_USD;
+
     const details = {
         mode: geminiMode,
         balance: null,
         tradable_balance: null,
+        live_start_min_balance_usd: requiredStartBalanceUsd,
+        live_start_min_balance_default_usd: LIVE_START_MIN_BALANCE_USD,
+        micro_live_bootstrap_allowed: microBootstrapAllowed,
+        micro_live_start_min_balance_usd: MICRO_LIVE_START_MIN_BALANCE_USD,
+        micro_live_require_canary: MICRO_LIVE_REQUIRE_CANARY,
+        live_canary_mode: canaryEnabled,
         live_usd_reserve: LIVE_USD_RESERVE,
         live_min_tradable_balance: LIVE_MIN_TRADABLE_BALANCE,
         positions: 0,
@@ -1159,10 +1182,16 @@ async function runLivePreflightCheck(options = {}) {
             details.tradable_balance != null &&
             Number.isFinite(Number(details.tradable_balance)) &&
             Number(details.tradable_balance) >= effectiveMinTradableUsd;
+        const hasMinimumStartBalance =
+            details.balance != null &&
+            Number.isFinite(Number(details.balance)) &&
+            Number(details.balance) >= requiredStartBalanceUsd;
         const gateAllowed = gate ? !!gate.allowed : false;
 
-        const valid = hasTradableBalance && cleanReconcile && cleanOrders && gateAllowed;
-        const reason = !hasTradableBalance
+        const valid = hasMinimumStartBalance && hasTradableBalance && cleanReconcile && cleanOrders && gateAllowed;
+        const reason = !hasMinimumStartBalance
+            ? `live_start_balance_too_low:${Number(details.balance || 0).toFixed(2)}<${requiredStartBalanceUsd.toFixed(2)}`
+            : !hasTradableBalance
             ? 'balance_below_reserve_floor'
             : !cleanReconcile
                 ? 'reconciliation_not_clean'
@@ -1250,6 +1279,140 @@ function buildRuntimeFairValueCandidates(options = {}) {
             ttx_seconds: parseGemiExpirySeconds(sig.marketId),
             source: 'runtime_actionable'
         }));
+}
+
+let latestDryFairValueSnapshot = {
+    generated_at: null,
+    minNetEdge: null,
+    minTtxSeconds: null,
+    maxTtxSeconds: null,
+    scanned: 0,
+    runtimeCandidates: [],
+    deepCandidates: [],
+    candidates: [],
+    deribitEnrichedCount: 0,
+    deribitCoverageRatio: 0,
+    sessionUniverse: {
+        enabled: false,
+        total_contracts_seen: 0,
+        eligible_contracts: 0,
+        dropped_contracts: 0,
+        synced_paper_markets: 0,
+        by_reason: {},
+        generated_at: null
+    }
+};
+const DRY_SIGNAL_SNAPSHOT_TTL_MS = Math.max(1000, Number(process.env.DRY_SIGNAL_SNAPSHOT_TTL_MS || 15000));
+
+async function buildDryFairValueSnapshot(options = {}) {
+    const minNetEdge = Math.max(0, Number(options.minNetEdge ?? 0.01));
+    const minTtxSeconds = Math.max(0, Number(options.minTtxSeconds ?? 600));
+    const maxTtxSeconds = Math.max(minTtxSeconds, Number(options.maxTtxSeconds ?? 3600));
+    const forceRefresh = options.forceRefresh === true;
+    const now = Date.now();
+
+    if (!forceRefresh && latestDryFairValueSnapshot.generated_at) {
+        const snapshotAgeMs = now - new Date(latestDryFairValueSnapshot.generated_at).getTime();
+        const sameThresholds = latestDryFairValueSnapshot.minNetEdge === minNetEdge
+            && latestDryFairValueSnapshot.minTtxSeconds === minTtxSeconds
+            && latestDryFairValueSnapshot.maxTtxSeconds === maxTtxSeconds;
+        if (sameThresholds && Number.isFinite(snapshotAgeMs) && snapshotAgeMs < DRY_SIGNAL_SNAPSHOT_TTL_MS) {
+            return latestDryFairValueSnapshot;
+        }
+    }
+
+    await fetchSpotPrices();
+    if (geminiClient.useRealPrices) {
+        await geminiClient.refreshRealData();
+    }
+
+    const runtimeCandidates = buildRuntimeFairValueCandidates({
+        minNetEdge,
+        minTtxSeconds,
+        maxTtxSeconds
+    });
+    const contracts = buildDeepFairValueContracts({ minTtxSeconds, maxTtxSeconds });
+    const deribitByMarketId = new Map();
+    const deribitTasks = contracts
+        .map((contract) => {
+            const ttx = parseGemiExpirySeconds(contract.marketId);
+            if (ttx == null || ttx <= 0 || ttx > 3600 || !contract.asset) return null;
+            return { contract, ttx };
+        })
+        .filter(Boolean)
+        .map(({ contract, ttx }) =>
+            deribitClient
+                .getOptionsSpread(contract.asset, ttx * 1000)
+                .then((spread) => ({ marketId: contract.marketId, mid: spread?.mid }))
+        );
+    const deribitResults = await Promise.allSettled(deribitTasks);
+    for (const result of deribitResults) {
+        if (result.status !== 'fulfilled') continue;
+        const mid = result.value?.mid;
+        const marketId = result.value?.marketId;
+        if (marketId && Number.isFinite(mid)) {
+            deribitByMarketId.set(marketId, mid);
+        }
+    }
+
+    const analyzed = await signalDetector.fairValueEngine.analyzeAll(
+        contracts,
+        kalshiClient,
+        (contract) => ({
+            category: 'crypto',
+            deribit: deribitByMarketId.get(contract.marketId) ?? null
+        })
+    );
+    const deepCandidates = analyzed
+        .filter(sig => sig && sig.direction && (sig.netEdge || 0) >= minNetEdge)
+        .map(sig => ({
+            marketId: sig.marketId,
+            title: sig.eventTitle,
+            category: 'crypto',
+            signalType: 'deep_fair_value',
+            pricingModel: sig.pricingModel,
+            direction: sig.direction,
+            netEdge: sig.netEdge,
+            edge: sig.edge,
+            confidence: sig.confidence,
+            score: Math.min(100, Math.round((sig.netEdge || 0) * 1000)),
+            gemini_bid: sig.geminiBid,
+            gemini_ask: sig.geminiAsk,
+            fairValue: sig.fairValue,
+            deribit_fair_value: sig.models?.deribit?.fairValue ?? null,
+            deribit_weight: (sig.models?.ensemble?.components || []).find(c => c.model === 'DERIBIT')?.weight ?? null,
+            model_components: sig.models?.ensemble?.components || [],
+            ttx_seconds: parseGemiExpirySeconds(sig.marketId),
+            source: 'deep_scan'
+        }));
+
+    const candidateMap = new Map();
+    for (const candidate of [...runtimeCandidates, ...deepCandidates]) {
+        const existing = candidateMap.get(candidate.marketId);
+        if (!existing || Number(candidate.netEdge || 0) > Number(existing.netEdge || 0)) {
+            candidateMap.set(candidate.marketId, candidate);
+        }
+    }
+
+    const candidates = Array.from(candidateMap.values()).sort((a, b) => (b.netEdge || 0) - (a.netEdge || 0));
+    const deribitEnrichedCount = candidates.filter(c => c.deribit_fair_value !== null && c.deribit_fair_value !== undefined).length;
+    const deribitCoverageRatio = candidates.length > 0 ? Number((deribitEnrichedCount / candidates.length).toFixed(4)) : 0;
+
+    latestDryFairValueSnapshot = {
+        generated_at: new Date().toISOString(),
+        minNetEdge,
+        minTtxSeconds,
+        maxTtxSeconds,
+        scanned: contracts.length,
+        runtimeCandidates,
+        deepCandidates,
+        candidates,
+        deribitEnrichedCount,
+        deribitCoverageRatio,
+        sessionUniverse: geminiClient.getSessionUniverseStats()
+    };
+
+    return latestDryFairValueSnapshot;
 }
 
 function buildDeepFairValueContracts(options = {}) {
@@ -1348,6 +1511,7 @@ async function buildSessionCheckpointSummary(options = {}) {
         ? Number(sessionPolicy.max_ttx_seconds)
         : 3600;
 
+    const drySignalSnapshot = options.drySignalSnapshot || null;
     const actionableSignals = latestActionable || [];
     const shortTtxActionable = actionableSignals.filter(sig => {
         if (!sig || !sig.marketId || !String(sig.marketId).startsWith('GEMI-')) return false;
@@ -1355,12 +1519,22 @@ async function buildSessionCheckpointSummary(options = {}) {
         if (ttx == null) return false;
         return ttx >= minTtxSeconds && ttx <= maxTtxSeconds;
     });
-    const runtimeFairValueCandidates = buildRuntimeFairValueCandidates({
+    let runtimeFairValueCandidates = buildRuntimeFairValueCandidates({
         minNetEdge,
         minTtxSeconds,
         maxTtxSeconds
     });
-    const sessionUniverse = geminiClient.getSessionUniverseStats();
+    let sessionUniverse = geminiClient.getSessionUniverseStats();
+
+    if (!botState.running && actionableSignals.length === 0 && runtimeFairValueCandidates.length === 0) {
+        const fallbackSnapshot = drySignalSnapshot || await buildDryFairValueSnapshot({
+            minNetEdge,
+            minTtxSeconds,
+            maxTtxSeconds
+        });
+        runtimeFairValueCandidates = fallbackSnapshot.candidates || [];
+        sessionUniverse = fallbackSnapshot.sessionUniverse || sessionUniverse;
+    }
 
     const sessionStartSec = sessionPolicy.session_start_time_ms
         ? Math.floor(Number(sessionPolicy.session_start_time_ms) / 1000)
@@ -1481,6 +1655,7 @@ async function buildSessionReadinessSummary(options = {}) {
         ? preflight.details.gate
         : (forceGate ? await tradingEngine.evaluatePreTradeSafetyGate(true) : gateFromStatus);
 
+    const drySignalSnapshot = options.drySignalSnapshot || null;
     const actionableSignals = latestActionable || [];
     const shortTtxActionable = actionableSignals.filter(sig => {
         if (!sig || !sig.marketId || !String(sig.marketId).startsWith('GEMI-')) return false;
@@ -1489,12 +1664,22 @@ async function buildSessionReadinessSummary(options = {}) {
         return ttx >= minTtxSeconds && ttx <= maxTtxSeconds;
     });
 
-    const runtimeFairValueCandidates = buildRuntimeFairValueCandidates({
+    let runtimeFairValueCandidates = buildRuntimeFairValueCandidates({
         minNetEdge,
         minTtxSeconds,
         maxTtxSeconds
     });
-    const sessionUniverse = geminiClient.getSessionUniverseStats();
+    let sessionUniverse = geminiClient.getSessionUniverseStats();
+
+    if (!botState.running && actionableSignals.length === 0 && runtimeFairValueCandidates.length === 0) {
+        const fallbackSnapshot = drySignalSnapshot || await buildDryFairValueSnapshot({
+            minNetEdge,
+            minTtxSeconds,
+            maxTtxSeconds
+        });
+        runtimeFairValueCandidates = fallbackSnapshot.candidates || [];
+        sessionUniverse = fallbackSnapshot.sessionUniverse || sessionUniverse;
+    }
 
     const liveWalletBalance = Number(status?.wallet?.balance);
     const hasLiveBalance = !isLiveOrSandboxMode() || (Number.isFinite(liveWalletBalance) && liveWalletBalance > 0);
@@ -1747,20 +1932,35 @@ async function buildDiagnosticsBundle(options = {}) {
     const rejectionSinceMs = Number(options.rejectionSinceMs || (Date.now() - 15 * 60 * 1000));
     const rejectionLimit = Math.max(1, Math.min(200, Number(options.rejectionLimit || 100)));
 
+    let drySignalSnapshot = null;
+    if (!botState.running) {
+        try {
+            drySignalSnapshot = await buildDryFairValueSnapshot({
+                minNetEdge,
+                minTtxSeconds: tradingEngine.getStatus()?.session_policy?.min_ttx_seconds,
+                maxTtxSeconds: tradingEngine.getStatus()?.session_policy?.max_ttx_seconds
+            });
+        } catch (error) {
+            logger.debug('Dry diagnostics signal snapshot: ' + error.message);
+        }
+    }
+
     const [wallet, checkpoint, readiness, reconcile] = await Promise.all([
         getDisplayWallet(),
         buildSessionCheckpointSummary({
             minActionable,
             minRuntimeFairValue,
             minNetEdge,
-            forceGate
+            forceGate,
+            drySignalSnapshot
         }),
         buildSessionReadinessSummary({
             minActionable,
             minRuntimeFairValue,
             minNetEdge,
             forcePreflight,
-            forceGate
+            forceGate,
+            drySignalSnapshot
         }),
         tradingEngine.reconcilePositions()
     ]);
@@ -1807,7 +2007,7 @@ async function buildDiagnosticsBundle(options = {}) {
             funnel: {
                 snapshot_at: new Date().toISOString(),
                 autonomous_allowed_signal_types: Array.from(autonomousAllowedSignalTypes),
-                session_universe: geminiClient.getSessionUniverseStats(),
+                session_universe: drySignalSnapshot?.sessionUniverse || geminiClient.getSessionUniverseStats(),
                 funnel: latestSignalFunnel
             },
             filters: {
@@ -2253,82 +2453,13 @@ app.get('/api/signals/deep-fv', async (req, res) => {
         const minTtxSeconds = Math.max(0, parseInt(String(minTtxRaw), 10));
         const maxTtxSeconds = Math.max(minTtxSeconds, parseInt(String(maxTtxRaw), 10));
 
-        await fetchSpotPrices();
-        if (geminiClient.useRealPrices) {
-            await geminiClient.refreshRealData();
-        }
-
-        const runtimeCandidates = buildRuntimeFairValueCandidates({
+        const snapshot = await buildDryFairValueSnapshot({
             minNetEdge,
             minTtxSeconds,
-            maxTtxSeconds
+            maxTtxSeconds,
+            forceRefresh: true
         });
-        const contracts = buildDeepFairValueContracts({ minTtxSeconds, maxTtxSeconds });
-        const deribitByMarketId = new Map();
-        const deribitTasks = contracts
-            .map((contract) => {
-                const ttx = parseGemiExpirySeconds(contract.marketId);
-                if (ttx == null || ttx <= 0 || ttx > 3600 || !contract.asset) return null;
-                return { contract, ttx };
-            })
-            .filter(Boolean)
-            .map(({ contract, ttx }) =>
-                deribitClient
-                    .getOptionsSpread(contract.asset, ttx * 1000)
-                    .then((spread) => ({ marketId: contract.marketId, mid: spread?.mid }))
-            );
-        const deribitResults = await Promise.allSettled(deribitTasks);
-        for (const result of deribitResults) {
-            if (result.status !== 'fulfilled') continue;
-            const mid = result.value?.mid;
-            const marketId = result.value?.marketId;
-            if (marketId && Number.isFinite(mid)) {
-                deribitByMarketId.set(marketId, mid);
-            }
-        }
-
-        const analyzed = await signalDetector.fairValueEngine.analyzeAll(
-            contracts,
-            kalshiClient,
-            (contract) => ({
-                category: 'crypto',
-                deribit: deribitByMarketId.get(contract.marketId) ?? null
-            })
-        );
-        const deepCandidates = analyzed
-            .filter(sig => sig && sig.direction && (sig.netEdge || 0) >= minNetEdge)
-            .map(sig => ({
-                marketId: sig.marketId,
-                title: sig.eventTitle,
-                category: 'crypto',
-                signalType: 'deep_fair_value',
-                pricingModel: sig.pricingModel,
-                direction: sig.direction,
-                netEdge: sig.netEdge,
-                edge: sig.edge,
-                confidence: sig.confidence,
-                score: Math.min(100, Math.round((sig.netEdge || 0) * 1000)),
-                gemini_bid: sig.geminiBid,
-                gemini_ask: sig.geminiAsk,
-                fairValue: sig.fairValue,
-                deribit_fair_value: sig.models?.deribit?.fairValue ?? null,
-                deribit_weight: (sig.models?.ensemble?.components || []).find(c => c.model === 'DERIBIT')?.weight ?? null,
-                model_components: sig.models?.ensemble?.components || [],
-                ttx_seconds: parseGemiExpirySeconds(sig.marketId),
-                source: 'deep_scan'
-            }));
-
-        const candidateMap = new Map();
-        for (const candidate of [...runtimeCandidates, ...deepCandidates]) {
-            const existing = candidateMap.get(candidate.marketId);
-            if (!existing || Number(candidate.netEdge || 0) > Number(existing.netEdge || 0)) {
-                candidateMap.set(candidate.marketId, candidate);
-            }
-        }
-
-        const candidates = Array.from(candidateMap.values());
-        candidates.sort((a, b) => (b.netEdge || 0) - (a.netEdge || 0));
-        const top = candidates.slice(0, limit);
+        const top = (snapshot.candidates || []).slice(0, limit);
         const deribitEnrichedCount = top.filter(c => c.deribit_fair_value !== null && c.deribit_fair_value !== undefined).length;
         const deribitCoverageRatio = top.length > 0 ? Number((deribitEnrichedCount / top.length).toFixed(4)) : 0;
 
@@ -2336,9 +2467,9 @@ app.get('/api/signals/deep-fv', async (req, res) => {
             minNetEdge,
             minTtxSeconds,
             maxTtxSeconds,
-            scanned: contracts.length,
-            runtimeCount: runtimeCandidates.length,
-            deepScanCount: deepCandidates.length,
+            scanned: snapshot.scanned,
+            runtimeCount: snapshot.runtimeCandidates.length,
+            deepScanCount: snapshot.deepCandidates.length,
             count: top.length,
             deribitEnrichedCount,
             deribitCoverageRatio,

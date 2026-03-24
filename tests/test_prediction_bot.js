@@ -279,6 +279,7 @@ console.log('\n💰 Testing PaperTradingEngine...');
 
 const GeminiClient = require('../lib/gemini_client');
 const PaperTradingEngine = require('../lib/paper_trading_engine');
+const noDataMinedRulesPath = path.join(__dirname, '../data/does_not_exist_data_mined_rules.json');
 
 const gemini = new GeminiClient({ mode: 'paper' });
 gemini.updatePaperMarket('GEMI-TEST2602190200-HI50000', 0.50, { title: 'Test Market', volume: 5000 });
@@ -286,8 +287,11 @@ gemini.updatePaperMarket('GEMI-TEST2602190200-HI50000', 0.50, { title: 'Test Mar
 // Reset wallet for clean test
 db.db.prepare('UPDATE paper_wallet SET balance = 500, total_trades = 0, winning_trades = 0, losing_trades = 0, total_pnl = 0').run();
 
-const engine = new PaperTradingEngine(db, gemini);
-const shortRunEngine = new PaperTradingEngine(db, gemini, { tradingProfile: 'short-run' });
+const engine = new PaperTradingEngine(db, gemini, { dataMinedRulesPath: noDataMinedRulesPath });
+const shortRunEngine = new PaperTradingEngine(db, gemini, {
+    tradingProfile: 'short-run',
+    dataMinedRulesPath: noDataMinedRulesPath
+});
 const paperSessionEngine = new PaperTradingEngine(db, gemini, {
     tradingProfile: 'short-run',
     autonomous15mSession: true,
@@ -295,7 +299,8 @@ const paperSessionEngine = new PaperTradingEngine(db, gemini, {
     sessionMinTtxSeconds: 600,
     sessionMaxTtxSeconds: 3600,
     sessionEntryBufferSeconds: 120,
-    sessionForceExitBufferSeconds: 60
+    sessionForceExitBufferSeconds: 60,
+    dataMinedRulesPath: noDataMinedRulesPath
 });
 const liveModeGemini = new GeminiClient({ mode: 'live' });
 const sessionEngine = new PaperTradingEngine(db, liveModeGemini, {
@@ -305,7 +310,8 @@ const sessionEngine = new PaperTradingEngine(db, liveModeGemini, {
     sessionMinTtxSeconds: 600,
     sessionMaxTtxSeconds: 3600,
     sessionEntryBufferSeconds: 120,
-    sessionForceExitBufferSeconds: 60
+    sessionForceExitBufferSeconds: 60,
+    dataMinedRulesPath: noDataMinedRulesPath
 });
 const relaxedSessionEngine = new PaperTradingEngine(db, liveModeGemini, {
     tradingProfile: 'short-run',
@@ -315,7 +321,8 @@ const relaxedSessionEngine = new PaperTradingEngine(db, liveModeGemini, {
     sessionMaxTtxSeconds: 3600,
     sessionEntryBufferSeconds: 120,
     sessionForceExitBufferSeconds: 60,
-    sessionRequiredRemainingCapSeconds: 180
+    sessionRequiredRemainingCapSeconds: 180,
+    dataMinedRulesPath: noDataMinedRulesPath
 });
 
 function makeFutureGemiSymbol(asset = 'BTC', strike = '50000', minutesAhead = 20) {
@@ -433,7 +440,8 @@ test('Signal entry policy applies short medium and long TTX buckets', () => {
         longTtxEntryThreshold: 47,
         shortTtxMinEdgeLive: 0.09,
         mediumTtxMinEdgeLive: 0.06,
-        longTtxMinEdgeLive: 0.04
+        longTtxMinEdgeLive: 0.04,
+        dataMinedRulesPath: noDataMinedRulesPath
     });
 
     const shortPolicy = bucketedEngine.getSignalEntryPolicy({
@@ -468,7 +476,8 @@ test('Engine status exposes TTX policy thresholds', () => {
         longTtxEntryThreshold: 46,
         shortTtxMinEdgeLive: 0.08,
         mediumTtxMinEdgeLive: 0.055,
-        longTtxMinEdgeLive: 0.04
+        longTtxMinEdgeLive: 0.04,
+        dataMinedRulesPath: noDataMinedRulesPath
     });
 
     const status = bucketedEngine.getStatus();
@@ -539,7 +548,8 @@ test('Autonomous 15m session rejects non fair-value signals', async () => {
     const autonomousEngine = new PaperTradingEngine(db, gemini, {
         autonomous15mSession: true,
         sessionMinTtxSeconds: 600,
-        sessionMaxTtxSeconds: 3600
+        sessionMaxTtxSeconds: 3600,
+        dataMinedRulesPath: noDataMinedRulesPath
     });
 
     const entry = await autonomousEngine.enterPosition({
@@ -591,6 +601,114 @@ test('Monitor positions', async () => {
     const exits = await engine.monitorPositions();
     // May or may not exit depending on exact paper prices
     assert(Array.isArray(exits), 'Should return array');
+});
+
+test('Live pre-expiry exit defers on one-sided losing book', async () => {
+    const liveGeminiForExit = new GeminiClient({ mode: 'live' });
+    const liveExitEngine = new PaperTradingEngine(db, liveGeminiForExit, {
+        tradingProfile: 'short-run',
+        dataMinedRulesPath: noDataMinedRulesPath
+    });
+    const marketId = makeFutureGemiSymbol('BTC', '50100', 2);
+    const tradeId = db.insertTrade({
+        timestamp: Math.floor(Date.now() / 1000) - 30,
+        gemini_market_id: marketId,
+        market_title: 'Live Exit Deferral Test',
+        category: 'crypto',
+        direction: 'YES',
+        entry_price: 0.40,
+        position_size: 2,
+        opportunity_score: 70,
+        take_profit_price: 0.48,
+        stop_loss_price: 0.10,
+        mode: 'live'
+    });
+
+    liveGeminiForExit.realClient = {
+        getBestPrices: () => ({ bid: 0.18, ask: 0.36, hasTwoSidedBook: false })
+    };
+    liveGeminiForExit.getPositions = async () => ([{
+        symbol: marketId,
+        outcome: 'yes',
+        totalQuantity: 5,
+        quantityOnHold: 0,
+        prices: {
+            sell: { yes: 0.18 },
+            buy: { yes: 0.20 }
+        }
+    }]);
+
+    const exits = await liveExitEngine.monitorPositions();
+    assert(exits.length === 0, `Expected deferred administrative exit, got ${JSON.stringify(exits)}`);
+
+    const stillOpen = db.getOpenTrades().find(t => t.id === tradeId);
+    assert(stillOpen, 'Trade should remain open when pre-expiry exit is deferred');
+
+    db.closeTrade(tradeId, 0.40, 0, 30, 'test_cleanup');
+});
+
+test('Missing TP and SL do not default to take profit', async () => {
+    const marketId = makeFutureGemiSymbol('BTC', '50300', 20);
+    gemini.updatePaperMarket(marketId, 0.55, { title: 'Null TP/SL Test', volume: 5000 });
+
+    const tradeId = db.insertTrade({
+        timestamp: Math.floor(Date.now() / 1000) - 15,
+        gemini_market_id: marketId,
+        market_title: 'Null TP/SL Test',
+        category: 'crypto',
+        direction: 'YES',
+        entry_price: 0.50,
+        position_size: 2,
+        opportunity_score: 55,
+        take_profit_price: null,
+        stop_loss_price: null,
+        mode: 'paper'
+    });
+
+    const exits = await engine.monitorPositions();
+    const unexpectedExit = exits.find(exit => exit.tradeId === tradeId);
+    assert(!unexpectedExit, `Trade with null TP/SL should stay open, got ${JSON.stringify(unexpectedExit)}`);
+
+    const stillOpen = db.getOpenTrades().find(t => t.id === tradeId);
+    assert(stillOpen, 'Trade with null TP/SL should remain open');
+
+    db.closeTrade(tradeId, 0.50, 0, 15, 'test_cleanup');
+});
+
+test('Expired live trade reconciles flat when exchange position is gone', async () => {
+    const liveGeminiForSettlement = new GeminiClient({ mode: 'live' });
+    const liveSettlementEngine = new PaperTradingEngine(db, liveGeminiForSettlement, {
+        dataMinedRulesPath: noDataMinedRulesPath
+    });
+    const marketId = makeFutureGemiSymbol('BTC', '50200', -2);
+    const tradeId = db.insertTrade({
+        timestamp: Math.floor(Date.now() / 1000) - 120,
+        gemini_market_id: marketId,
+        market_title: 'Expired Live Settlement Test',
+        category: 'crypto',
+        direction: 'YES',
+        entry_price: 0.42,
+        position_size: 2,
+        opportunity_score: 65,
+        take_profit_price: 0.50,
+        stop_loss_price: 0.32,
+        mode: 'live'
+    });
+
+    liveGeminiForSettlement.getPositions = async () => ([]);
+
+    const exits = await liveSettlementEngine.monitorPositions();
+    const settlementExit = exits.find(exit => exit.tradeId === tradeId);
+    assert(settlementExit, 'Expected expired live trade to be processed');
+    assert(settlementExit.reason === 'reconcile_no_exchange', `Expected reconcile_no_exchange, got ${settlementExit.reason}`);
+
+    const closedTrade = db.db.prepare(
+        'SELECT is_open, exit_reason, pnl, exit_price FROM prediction_trades WHERE id = ?'
+    ).get(tradeId);
+    assert(closedTrade.is_open === 0, 'Expired live trade should be closed');
+    assert(closedTrade.exit_reason === 'reconcile_no_exchange', `Expected reconcile_no_exchange, got ${closedTrade.exit_reason}`);
+    assert(Number(closedTrade.pnl) === 0, `Expected flat pnl, got ${closedTrade.pnl}`);
+    assert(Number(closedTrade.exit_price) === 0.42, `Expected flat exit at entry price, got ${closedTrade.exit_price}`);
 });
 
 // ===== Client Tests =====
@@ -741,7 +859,9 @@ test('stopBot source no longer contains fire-and-forget emergencyExitAll', () =>
 test('resetSessionState clears stale autonomous session timeout state', async () => {
     const timedOutEngine = new PaperTradingEngine(db, gemini, {
         autonomous15mSession: true,
-        sessionTimeoutMs: 60000
+        sessionTimeoutMs: 60000,
+        sessionForceExitBufferSeconds: 30,
+        dataMinedRulesPath: noDataMinedRulesPath
     });
 
     timedOutEngine.markSessionStart(0, 100);

@@ -20,11 +20,11 @@ const PROFILE_VERSION = 1;
 const PROFILE_JSON_PREFIX = 'SESSION_PROFILE_JSON:';
 
 const OVERRIDES = {
-    entry_threshold: 45,
+    entry_threshold: 30,
     max_position_size: 10.0,
     live_max_position_size: 1.0,
     stop_loss_width: 0.06,
-    min_edge_live: 0.06,
+    min_edge_live: 0.01,
     hold_to_settlement: 0,
     max_hold_time: 480,
     pre_expiry_exit_seconds: 180

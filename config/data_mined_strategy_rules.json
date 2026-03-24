@@ -1,0 +1,16 @@
+{
+  "min_entry_score_recommended": 65,
+  "direction_bias": "prefer_no",
+  "avoid_spread_buckets": [
+    ">=10c",
+    "3-6c"
+  ],
+  "avoid_score_buckets": [
+    "55-65",
+    "<45"
+  ],
+  "avoid_categories": [
+    "Bitcoin"
+  ],
+  "suspend_live_entries": true
+}

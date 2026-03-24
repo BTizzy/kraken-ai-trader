@@ -5,15 +5,30 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const { PROFILE_JSON_PREFIX } = require('./activate_session_profile');
 
-const API_BASE = process.env.API_BASE || `http://localhost:${process.env.PREDICTION_PORT || 3003}`;
+function readFlagValue(name) {
+    const idx = process.argv.indexOf(name);
+    if (idx === -1) return null;
+    return process.argv[idx + 1] || null;
+}
+
+function readFlagNumber(name, fallback) {
+    const raw = readFlagValue(name);
+    if (raw == null) return fallback;
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : fallback;
+}
+
+const API_BASE = readFlagValue('--api-base') || process.env.API_BASE || `http://localhost:${process.env.PREDICTION_PORT || 3003}`;
 const EXECUTE_START = process.argv.includes('--execute-start');
 const APPLY_PROFILE = process.argv.includes('--apply-profile');
+const ALLOW_LIVE_CAPITAL_RISK_FLAG = process.argv.includes('--allow-live-capital-risk');
 const EMIT_RESULT_JSON = String(process.env.EMIT_RESULT_JSON || '').toLowerCase() === 'true';
-const SESSION_SECONDS = Math.max(60, Number(process.env.SESSION_SECONDS || 900));
-const POLL_SECONDS = Math.max(5, Number(process.env.POLL_SECONDS || 15));
-const MAX_LIVE_OPEN = Math.max(1, Number(process.env.MAX_LIVE_OPEN || 1));
+const SESSION_SECONDS = Math.max(60, readFlagNumber('--session-seconds', Number(process.env.SESSION_SECONDS || 900)));
+const POLL_SECONDS = Math.max(5, readFlagNumber('--poll-seconds', Number(process.env.POLL_SECONDS || 15)));
+const MAX_LIVE_OPEN = Math.max(1, readFlagNumber('--max-live-open', Number(process.env.MAX_LIVE_OPEN || 1)));
 const DRIFT_CONFIRM_TICKS = Math.max(1, Number(process.env.DRIFT_CONFIRM_TICKS || 2));
 const DRIFT_SETTLE_WAIT_MS = Math.max(0, Number(process.env.DRIFT_SETTLE_WAIT_MS || 10000));
 const ORPHAN_RECOVERY_GRACE_MS = Math.max(0, Number(process.env.ORPHAN_RECOVERY_GRACE_MS || 8000));
@@ -25,7 +40,8 @@ const DEFAULT_MIN_EXECUTE_LIVE_BALANCE_USD = 0;
 const MIN_EXECUTE_LIVE_BALANCE_USD = Math.max(0, Number(process.env.MIN_EXECUTE_LIVE_BALANCE_USD || DEFAULT_MIN_EXECUTE_LIVE_BALANCE_USD));
 const API_TIMEOUT_MS = Math.max(1000, Number(process.env.API_TIMEOUT_MS || 15000));
 const API_MAX_RETRIES = Math.max(0, Number(process.env.API_MAX_RETRIES || 2));
-const ALLOW_LIVE_CAPITAL_RISK = String(process.env.ALLOW_LIVE_CAPITAL_RISK || '').toLowerCase() === 'true';
+const ALLOW_LIVE_CAPITAL_RISK = ALLOW_LIVE_CAPITAL_RISK_FLAG
+    || String(process.env.ALLOW_LIVE_CAPITAL_RISK || '').toLowerCase() === 'true';
 const STABILITY_RESULTS_DIR = process.env.STABILITY_RESULTS_DIR || path.join(__dirname, '..', 'test-results');
 const STABILITY_LOOKBACK_FILES = Math.max(1, Number(process.env.STABILITY_LOOKBACK_FILES || 20));
 const REQUIRED_CONSECUTIVE_CLEAN_RUNS = Math.max(1, Number(process.env.REQUIRED_CONSECUTIVE_CLEAN_RUNS || 3));

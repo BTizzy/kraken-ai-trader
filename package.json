@@ -5,7 +5,9 @@
   "scripts": {
     "prediction": "node server/prediction-proxy.js",
     "test:prediction": "node tests/test_prediction_bot.js",
-    "start": "node server/prediction-proxy.js"
+    "start": "node server/prediction-proxy.js",
+    "test": "node tests/run_all_tests.js",
+    "test:unit": "node tests/test_trade_calculations.js"
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2",

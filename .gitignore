@@ -1,40 +1,36 @@
-# Do not commit API keys
-.env
-*.env
-*.pem
-*private_key*
+# Dependencies
+node_modules/
 
-# OS files
-.DS_Store
-Thumbs.db
+# Build outputs
+bot/build/
+bot/*.o
+bot/*.exe
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
+# Data and databases
+*.db
+data/*.db
+*.sqlite
 
 # Logs
 *.log
-npm-debug.log*
-
-# Experiment artifacts and generated data
 logs/
-data/*.json
-data/market_data.db
 
-# Build artifacts
-bot/build/
+# Environment variables
+.env
+.env.local
 
-# Local storage backup
-localStorage.json
+# OS generated files
+.DS_Store
+Thumbs.db
 
-# Node modules (use package-lock.json to restore)
-node_modules/
+# IDE / Editor files
+.vscode/
+.idea/
+*.swp
 
-# SQLite databases (too large, regenerate on startup via migrateSchema)
-data/prediction_markets.db
-data/prediction_markets.db-wal
-data/prediction_markets.db-shm
-*.db.bak*
-data/*.db*
+# Temporary files
+*.tmp
+tmp/
+
+# Large or runtime files
+price_history.db
